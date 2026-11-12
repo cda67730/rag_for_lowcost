@@ -240,9 +240,17 @@ function runChat_(req, opts) {
   // 4. P06 檢索
   const focus = str_(tri.focus) || d.text;
   const poolSize = Math.max(Number(C.rerank_pool || 12), Number(C.top_k || 6));
-  const sd = searchDetail_(qvec, caseText, exp.concepts, null, poolSize);
+  // 知識圖譜（可關閉）：依問題找節點 → 段落加分或只用這些段落；節點定義放進回答 prompt 當背景
+  let kg = null;
+  if (truthy_(C.enable_kg)) {
+    kg = kgMatch_(caseText + '\n' + focus, exp.concepts, C);
+    const kgMode = String(C.kg_mode || 'hybrid');
+    T('知識圖譜', { mode: kgMode, nodes: kg.nodes.map(n => (n.hop ? '↳ ' : '') + n.name + '（' + n.type + '）'), chunks: Object.keys(kg.chunks).length, note: kg.note }, 'json');
+    if (kgMode === 'only' && !Object.keys(kg.chunks).length) T('P06 檢索', '圖譜 only 模式但沒有對到任何段落 → 視為沒有可用知識');
+  }
+  const sd = searchDetail_(qvec, caseText, exp.concepts, null, poolSize, kg);
   metrics.top = sd.cands.length ? sd.cands[0].score : 0;
-  T('P06 檢索', { minScore: sd.minScore, topK: sd.topK, total: sd.total, cands: sd.cands }, 'retrieval');
+  T('P06 檢索', { minScore: sd.minScore, topK: sd.topK, total: sd.total, cands: sd.cands, kgMode: sd.kgMode }, 'retrieval');
   const rr = rerankSelect_(focus, caseText, sd.hits, C);
   const hits = rr.hits;
   evalHits = hits.map(h => ({ id: h.id, docId: h.docId, ref: h.ref, title: h.title, text: h.text }));
@@ -278,8 +286,8 @@ function runChat_(req, opts) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const fb = fbNote; fbNote = null;
     const prompt = mode === 'full'
-      ? assemble_(sysPrompt, skillText, tri, caseText, hits, ctxHistory, ref, refWho, fb, focus, fallback)
-      : assembleContinue_(sysPrompt, skillText, tri, prevTeacher, d.text, hits, ctxHistory, ref, refWho, intent, fb, focus, fallback);
+      ? assemble_(sysPrompt, skillText, tri, caseText, hits, ctxHistory, ref, refWho, fb, focus, fallback, kg)
+      : assembleContinue_(sysPrompt, skillText, tri, prevTeacher, d.text, hits, ctxHistory, ref, refWho, intent, fb, focus, fallback, kg);
     if (attempt === 0) T('P07 Prompt 組裝', { summary: (mode === 'full' ? '完整回答' : '延續回覆') + '｜固定 system prompt ' + sysPrompt.length + ' 字｜Skill ' + skillText.length + ' 字｜知識 ' + hits.length + ' 段｜歷史 ' + ctxHistory.length + ' 則｜共 ' + prompt.length + ' 字', prompt: prompt }, 'prompt');
     stabAt_('A1');
     let raw;
@@ -432,7 +440,7 @@ function continueOptions_() {
 }
 
 /** 延續回覆：已經給過完整建議，這次只回應新的內容或使用者要的那件事 */
-function assembleContinue_(sys, skillText, tri, prevTeacher, latest, hits, history, ref, refWho, intent, feedback, focus, fallback) {
+function assembleContinue_(sys, skillText, tri, prevTeacher, latest, hits, history, ref, refWho, intent, feedback, focus, fallback, kg) {
   const R = roles_();
   const forbiddenWords = forbidden_().filter(f => !f.regex).map(f => f.rule);
   const hist = history.map(h => (h.role === 'teacher' ? R.user + '：' : '助手：') + h.text).join('\n');
@@ -440,6 +448,7 @@ function assembleContinue_(sys, skillText, tri, prevTeacher, latest, hits, histo
   return [
     '【1 固定 system prompt】\n' + sys,
     '【2 主題 Skill】\n' + skillText,
+    kgPromptText_(kg) ? '【知識圖譜背景】（與問題相關的概念與做法方向，只能當理解背景，不能當出處）\n' + kgPromptText_(kg) : '',
     '【3 對話到目前為止】\n' + (hist || '（無）'),
     '【4 ' + R.user + '這次說的】（' + intent + '）\n' + latest + (focus ? '\n' + R.user + '想要的：' + focus : ''),
     fallback
@@ -456,7 +465,7 @@ function assembleContinue_(sys, skillText, tri, prevTeacher, latest, hits, histo
   ].filter(Boolean).join('\n\n');
 }
 
-function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, feedback, focus, fallback) {
+function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, feedback, focus, fallback, kg) {
   const R = roles_();
   const forbiddenWords = forbidden_().filter(f => !f.regex).map(f => f.rule);
   const hist = history.map(h => (h.role === 'teacher' ? R.user + '：' : '助手：') + h.text).join('\n');
@@ -464,6 +473,7 @@ function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, fe
   return [
     '【1 固定 system prompt】\n' + sys,
     '【2 主題 Skill】\n' + skillText,
+    kgPromptText_(kg) ? '【知識圖譜背景】（與問題相關的概念與做法方向，只能當理解背景，不能當出處）\n' + kgPromptText_(kg) : '',
     '【3 情境資訊】\n分流結果：' + JSON.stringify(tri) + '\n' + R.user + '原話：\n' + caseText +
       (focus ? '\n\n【' + R.user + '這次想要的】' + focus + '\n回答要先直接回應這一點；策略要具體到這個' + R.subject + '與情境（做什麼、什麼時候、怎麼說），不要只寫一般原則。' : ''),
     fallback

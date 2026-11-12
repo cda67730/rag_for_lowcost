@@ -8,7 +8,7 @@
  *  - 專家在後台審核候選：核可（新增節點）、合併到既有節點、略過
  *  - 關係檢查：ontology 沒有限制哪種節點能接哪種關係，所以用圖譜現有關係歸納出常見接法，少見的接法只提醒、不擋
  *  - 覆蓋度：每個節點有幾段文件以它為主要標籤、幾段已核可、幾段是具體做法
- * 目前回答流程不讀圖譜（之後第 3 步才接）。
+ *  - 回答流程（enable_kg）：依問題比對節點（名稱、同義說法），沿關係擴一層，標到這些節點的段落加分（hybrid）或只用這些段落（only）；節點定義與實務要點放進 prompt 當背景
  */
 
 const KG_FROM_IMPORT = '知識圖譜匯入', KG_FROM_PROPOSAL = '文件提案';
@@ -481,4 +481,53 @@ function kgOntologyTtl_(defs, meta) {
     'kg:context a owl:DatatypeProperty ; rdfs:label ' + q('情境') + ' ; rdfs:domain kg:Article ; rdfs:range rdf:langString .',
     'kg:proposedNode a owl:DatatypeProperty ; rdfs:label ' + q('建議新增節點') + ' ; rdfs:domain kg:Article ; rdfs:range xsd:string .', '');
   return L.join('\n');
+}
+
+// ---------- 回答流程用：依問題找節點、找出相關段落 ----------
+const KG_REL_ORDER = ['hasStrategy', 'appliedIn', 'theoreticalBasisFor', 'supports', 'informs', 'influences', 'correspondsTo', 'regulates', 'precedes', 'relatedTo'];
+/**
+ * text：去識別化後的個案描述＋焦點；concepts：同義詞擴充出的概念
+ * 回傳 { nodes:[{id,name,type,def,tips,hop}], chunks:{段落ID: 'direct'|'sub'|'hop'}, note }
+ */
+function kgMatch_(text, concepts, C) {
+  if (!kgHasGraph_()) return { nodes: [], chunks: {}, note: '尚未匯入圖譜' };
+  const maxN = Math.max(1, Number(C.kg_max_nodes || 3));
+  const hay = String(text || '') + '\n' + (concepts || []).join('\n');
+  const nodes = kgNodes_(); const byId = {}; nodes.forEach(r => byId[String(r['節點ID'])] = r);
+  // 1. 直接命中：名稱或同義說法出現在問題裡（長的優先，避免「情緒」蓋過「情緒調節」）
+  const direct = [];
+  nodes.forEach(r => {
+    if (String(r['類型']) === KG_TOP_TYPE) return;
+    const names = [String(r['名稱'])].concat(String(r['同義說法'] || '').split(/[、,，]/)).map(x => x.trim()).filter(x => x.length >= 2);
+    const hit = names.find(n => hay.indexOf(n) >= 0);
+    if (hit) direct.push({ id: String(r['節點ID']), hit: hit });
+  });
+  direct.sort((a, b) => b.hit.length - a.hit.length);
+  const picked = {}; direct.slice(0, maxN).forEach(x => picked[x.id] = 0);
+  // 2. 沿關係擴一層（不走 hasPart 的階層），每個直接命中的節點最多帶 3 個鄰居
+  let edges = []; try { edges = rows_('kgEdges'); } catch (e) {}
+  Object.keys(picked).forEach(id => {
+    const nb = edges.filter(e => String(e['主詞']) === id || String(e['受詞']) === id).filter(e => e['關係'] !== 'hasPart')
+      .sort((a, b) => KG_REL_ORDER.indexOf(String(a['關係'])) - KG_REL_ORDER.indexOf(String(b['關係'])))
+      .map(e => String(e['主詞']) === id ? String(e['受詞']) : String(e['主詞'])).filter(n => byId[n] && picked[n] == null);
+    Array.from(new Set(nb)).slice(0, 3).forEach(n => picked[n] = 1);
+  });
+  const out = Object.keys(picked).map(id => { const r = byId[id]; return { id: id, name: String(r['名稱']), type: String(r['類型']), def: String(r['定義'] || '').slice(0, 200), tips: String(r['實務要點'] || '').slice(0, 300), hop: picked[id] }; });
+  // 3. 標到這些節點的段落
+  const chunks = {};
+  if (out.length) {
+    let links = []; try { links = rows_('kgLinks'); } catch (e) {}
+    links.forEach(l => {
+      const n = String(l['節點ID']); if (picked[n] == null) return;
+      const w = picked[n] === 0 ? (String(l['標籤']) === KG_TAG_SUB ? 'sub' : 'direct') : 'hop';
+      const cur = chunks[String(l['段落ID'])];
+      if (!cur || ['direct', 'sub', 'hop'].indexOf(w) < ['direct', 'sub', 'hop'].indexOf(cur)) chunks[String(l['段落ID'])] = w;
+    });
+  }
+  return { nodes: out, chunks: chunks, note: out.length ? '' : '問題裡沒有對到任何節點' };
+}
+/** 給回答 prompt 的圖譜背景 */
+function kgPromptText_(kg) {
+  if (!kg || !kg.nodes.length) return '';
+  return kg.nodes.map(n => '- ' + n.name + (n.type ? '（' + n.type + '）' : '') + (n.def ? '：' + n.def : '') + (n.tips ? '\n  實務要點：' + n.tips : '')).join('\n');
 }

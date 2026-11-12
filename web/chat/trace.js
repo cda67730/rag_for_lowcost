@@ -57,14 +57,14 @@
   }
   function retrieval(d, used) {
     used = used || [];
-    const head = `<div class="tv-muted">知識庫 ${esc(d.total)} 段已核可｜門檻 ${esc(d.minScore)}｜最多取 ${esc(d.topK)} 段｜列出前 ${d.cands.length} 名</div>`;
+    const head = `<div class="tv-muted">知識庫 ${esc(d.total)} 段${d.kgMode === "only" ? "（圖譜 only，只算標到節點的）" : "已核可"}｜門檻 ${esc(d.minScore)}｜最多取 ${esc(d.topK)} 段｜列出前 ${d.cands.length} 名</div>`;
     if (!d.cands.length) return head + "<div>知識庫沒有已核可的段落</div>";
     return head + d.cands.map((c) => {
       const w = Math.max(0, Math.min(1, c.score)) * 100, m = Math.max(0, Math.min(1, d.minScore)) * 100;
       const tag = used.indexOf(c.ref) >= 0 ? '<span class="tv-tag tv-ok">被引用</span>' : c.pass ? '<span class="tv-tag tv-info">候選</span>' : '<span class="tv-tag tv-muted">未達門檻</span>';
       return `<div class="tv-cand ${c.pass ? "" : "off"}">
         <div class="tv-cand-h"><b>#${c.rank}</b>${c.ref ? `<b>${esc(c.ref)}</b>` : ""}<span class="t" title="${esc(c.title)}">${esc(c.title)}${c.page ? " p." + esc(c.page) : ""}</span>${c.type ? `<span class="tv-tag tv-muted">${esc(c.type)}</span>` : ""}${tag}<b>${esc(c.score)}</b></div>
-        <div class="tv-bar" title="向量 ${esc(c.vec)} + 關鍵字 ${esc(c.kw)}×0.01"><i style="width:${w}%"></i><u style="left:${m}%"></u></div>
+        ${c.kg ? `<span class="tv-tag tv-info">圖譜:${esc(c.kg)}</span>` : ""}<div class="tv-bar" title="向量 ${esc(c.vec)} + 關鍵字 ${esc(c.kw)}×0.01${c.kg ? " + 圖譜加分" : ""}"><i style="width:${w}%"></i><u style="left:${m}%"></u></div>
         <details><summary>看段落內容（${esc(c.id)}）</summary><p>${esc(c.text)}…</p></details></div>`;
     }).join("");
   }
