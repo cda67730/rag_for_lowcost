@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+:root{--ink:#1d2733;--muted:#5e6b78;--line:#dce2e8;--bg:#f6f8fa;--accent:#1e7f7d;--soft:#e2f2f1;--warn:#a86a12;--err:#b23a3a;--ok:#2e7d4f}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:14px;color:var(--ink);background:#fff}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 12px;position:sticky;top:0;background:#fff;z-index:2}
+nav button{border:0;background:none;padding:12px 14px;font:inherit;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent}
+nav button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+nav .me{margin-left:auto;align-self:center;color:var(--muted);font-size:12px}
+section{padding:16px 20px;display:none}
+section.on{display:block}
+h3{margin:0 0 10px;font-size:16px}
+label{display:block;font-weight:600;margin:10px 0 4px}
+.note{color:var(--muted);font-size:12px;font-weight:400}
+input[type=text],input[type=number],select,textarea{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px}
+textarea{resize:vertical}
+button.btn{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
+button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:260px 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.list{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:640px}
+.item{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.item.on{background:var(--soft)}
+.item small{color:var(--muted);display:block}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{background:var(--bg);font-weight:600;position:sticky;top:0}
+.pill{display:inline-block;font-size:12px;border-radius:999px;padding:0 8px;border:1px solid var(--line)}
+.pill.已核可{color:var(--ok);border-color:var(--ok)} .pill.待審核{color:var(--warn);border-color:var(--warn)} .pill.停用{color:var(--muted)}
+.msg{margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--bg);white-space:pre-wrap}
+.msg.t{background:#e8eef8;margin-left:15%}
+.trace{font-size:12px;border:1px solid var(--line);border-radius:10px;max-height:640px;overflow:auto}
+.trace div{padding:6px 10px;border-bottom:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.trace b{color:var(--accent)}
+#toast{position:fixed;bottom:14px;right:14px;background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;display:none}
+.chunk{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0;white-space:pre-wrap;font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:10px 0 14px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:12px}
+.kpi small{display:block;color:var(--muted);font-size:11px}
+.cols{display:grid;grid-template-columns:1fr 300px;gap:14px}
+.box{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.box h4{margin:0 0 6px;font-size:13px}
+.box li{margin:3px 0;font-size:13px}
+.box li a{cursor:pointer;color:var(--ink)}
+tr.click{cursor:pointer} tr.click:hover{background:var(--bg)} tr.sel{background:var(--soft)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.t-answer{color:var(--ok)} .t-followup{color:var(--accent)} .t-referral{color:var(--err)} .t-conservative{color:var(--warn)} .t-out_of_scope{color:var(--muted)}
+.bad{color:var(--err);font-weight:600}
+.side{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100%;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.1);z-index:5;display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;transition:transform .2s,visibility 0s .2s}
+.side.open{transform:none;visibility:visible;transition:transform .2s}
+.side-h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.side-tabs{display:flex;gap:4px;padding:6px 14px 0;border-bottom:1px solid var(--line)}
+.side-tabs button{border:0;background:none;padding:6px 10px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
+.side-tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.side-b{flex:1;overflow:auto;padding:12px 14px}
+.conv .msg{font-size:13px}
+.conv .msg.cur{outline:2px solid var(--accent)}
+.res-命中{color:var(--ok);font-weight:600} .res-未達門檻{color:var(--warn);font-weight:600} .res-沒找到{color:var(--err);font-weight:600}
+.cand-ok{color:var(--ok);font-weight:600}
+.fl{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:0 18px;max-width:900px}
+.fn{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fff;cursor:pointer;position:relative}
+.fn:hover{border-color:var(--accent)} .fn.sel{outline:2px solid var(--accent)}
+.fn.ai{border-left:4px solid #7F77DD} .fn.code{border-left:4px solid #B4B2A9} .fn.dec{border-left:4px solid #EF9F27} .fn.io{background:var(--bg)}
+.fn.off{border-style:dashed;color:var(--muted);background:var(--bg)}
+.fn b{font-size:14px} .fn .cfg{font-size:12px;color:var(--ink);margin-top:2px} .fn .met{font-size:12px;color:var(--muted);margin-top:2px}
+.fn .badge{position:absolute;right:8px;top:8px;font-size:11px;background:var(--soft);color:var(--accent);border-radius:999px;padding:0 8px}
+.fn.hit{box-shadow:0 0 0 2px #7F77DD inset} .fx.hit{box-shadow:0 0 0 2px #D85A30 inset}
+.fx{border:1px solid #F0997B;background:#FAECE7;border-radius:10px;padding:8px 12px;font-size:13px;color:#712B13;cursor:pointer;align-self:center}
+.fx.dim{opacity:.45}
+.farr{height:18px;margin-left:26px;border-left:1.5px solid #B4B2A9}
+.fside{grid-column:2;display:flex;align-items:center}
+.fside .ln{flex:0 0 18px;border-top:1.5px solid #F0997B;margin-left:-18px}
+.bad2{color:var(--err);font-weight:600}
+@media (max-width:760px){.fl{grid-template-columns:1fr}.fside{grid-column:1;margin:4px 0 0 20px}}
+.ov{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;font-size:13px}
+.ov a{border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--ink);text-decoration:none;background:#fff}
+.ov a:hover{border-color:var(--accent)} .ov .arr{color:var(--muted)} .ov .offc{color:var(--muted);text-decoration:line-through}
+.setwrap{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:start}
+.setnav{position:sticky;top:52px;display:flex;flex-direction:column;gap:2px}
+.setnav a{padding:6px 10px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:13px}
+.setnav a:hover{background:var(--bg)} .setnav a.on{background:var(--soft);color:var(--accent);font-weight:600}
+.sec{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px;scroll-margin-top:60px}
+.sec>h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sec>h4 label{margin:0;font-weight:400;font-size:13px}
+.sec.off .fld{color:var(--muted)} .sec.off .fld input,.sec.off .fld select,.sec.off .fld textarea{background:var(--bg)}
+.fld{padding:8px 0;border-top:1px solid var(--line)} .fld:first-of-type{border-top:0}
+.fld>label{margin:0 0 4px} .fld .key{font-size:11px;color:#9aa5b1;font-weight:400;margin-left:6px}
+.fld details summary{cursor:pointer;color:var(--accent);font-size:13px;margin-top:2px}
+.fld.dirty>label::after{content:'已修改';font-size:11px;color:var(--warn);margin-left:8px;font-weight:400}
+.savebar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:flex-end;align-items:center;gap:12px;z-index:2}
+@media (max-width:760px){.setwrap{grid-template-columns:1fr}.setnav{position:static;flex-direction:row;flex-wrap:wrap}}
+.cand{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+.cand .q{font-size:12px;color:var(--muted);background:var(--bg);border-radius:6px;padding:6px 8px;margin:6px 0;white-space:pre-wrap}
+.zero{color:var(--err)} .nodechip.sub{background:var(--bg);color:var(--muted)} .warn{color:var(--warn);font-size:12px;margin-top:4px} .nodechip{display:inline-block;font-size:12px;background:var(--soft);color:var(--accent);border-radius:999px;padding:0 8px;margin:2px 4px 0 0}
+</style>
+</head>
+<body>
+<nav>
+  <button data-t="bot" class="on">機器人設定</button>
+  <button data-t="flow">流程控制台</button>
+  <button data-t="skill">Skill</button>
+  <button data-t="kb">知識庫</button>
+  <button data-t="kg">知識圖譜</button>
+  <button data-t="test">測試對話</button>
+  <button data-t="logs">對話紀錄</button>
+  <button data-t="qa">問題統計</button>
+  <button data-t="eval">命中率測試</button>
+  <button data-t="auto">自動評測</button>
+  <button data-t="other">其他設定</button>
+  <span class="me" id="me">載入中…</span>
+  <button class="btn" id="logout" style="align-self:center;margin-left:8px;padding:4px 10px;font-size:12px" hidden>登出</button>
+</nav>
+
+<section id="bot" class="on">
+  <h3>機器人設定 <span class="note">修改後按儲存，約 1 分鐘內生效</span></h3>
+  <div id="ovBar" class="ov"></div>
+  <div class="box" id="modelBox">
+    <div class="row" style="justify-content:space-between"><h4 style="margin:0">可用模型 <span class="note" id="modelSum">讀取中…</span></h4>
+      <div class="row"><button class="btn" data-preset="g3" style="padding:4px 10px;font-size:12px">套用 Gemini 3 組合</button><button class="btn" data-preset="oa" style="padding:4px 10px;font-size:12px">套用 OpenAI 組合</button><button class="btn" data-preset="g25" style="padding:4px 10px;font-size:12px">還原 2.5 組合</button><button class="btn" id="modelList" style="padding:4px 10px;font-size:12px">看清單</button><button class="btn" id="modelRefresh" style="padding:4px 10px;font-size:12px">重新讀取</button></div></div>
+    <p class="note" style="margin:4px 0 0">清單直接向 Gemini／OpenAI 查詢金鑰能用的模型；各步驟的模型在下方對應區塊選，選好可按「測試」。Gemini 3 以上會自動改用官方建議的參數。
+    Gemini 3 組合：分流與重排用 3.1 Flash-Lite（快、省），回答用 3.8 Flash，檢查用 3.6 Flash。OpenAI 組合：分流與重排用 GPT-6 Luna，回答與檢查用 GPT-6.1 Terra（同系列幻覺率最低）。套用後會直接儲存，可再逐一測試。向量模型不在組合內，要換需重新上傳文件。用 OpenAI 要先在指令碼屬性加 OPENAI_API_KEY。</p>
+    <div id="modelTable" hidden style="margin-top:8px;max-height:360px;overflow:auto"></div>
+  </div>
+  <div class="setwrap">
+    <div class="setnav" id="setNav"></div>
+    <div id="settings"></div>
+  </div>
+  <div class="savebar"><span class="note" id="dirtyN"></span><button class="btn pri" id="saveSettings">儲存設定</button></div>
+</section>
+
+<section id="skill">
+  <div class="grid2">
+    <div>
+      <div class="row" style="justify-content:space-between"><h3>Skill 清單</h3><button class="btn" id="newSkill">＋ 新增</button></div>
+      <div class="list" id="skillList"></div>
+    </div>
+    <div id="skillEdit">
+      <h3 id="skTitle">選擇左邊的 Skill，或新增一個</h3>
+      <div class="grid3">
+        <div><label>名稱</label><input type="text" id="skName"></div>
+        <div><label>對應主題 <span class="note">逗號分隔，分流器會用這些主題</span></label><input type="text" id="skTags" list="topicList"><datalist id="topicList"></datalist></div>
+        <div><label>載入方式</label>
+          <div class="row"><label style="font-weight:400"><input type="checkbox" id="skAlways"> 一律載入</label><label style="font-weight:400"><input type="checkbox" id="skEnabled" checked> 啟用</label></div></div>
+      </div>
+      <label>內容 <span class="note">寫「怎麼回答」：何時使用、回答框架、追問清單、輸出、禁止說法。不要寫專業知識本身</span></label>
+      <textarea id="skContent" rows="18"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn pri" id="saveSkill">儲存為新版本</button>
+        <select id="skHist" style="width:auto"><option value="">查看歷史版本…</option></select>
+        <span class="note" id="skMeta"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="kb">
+  <h3>上傳文件 <span class="note">上傳後狀態為「待審核」，專家核可後才會被用來回答</span></h3>
+  <div class="grid3">
+    <div><label>標題</label><input type="text" id="dTitle" placeholder="例：轉銜時段行為支持指引"></div>
+    <div><label>出處</label><input type="text" id="dSource" placeholder="作者（年份）、出版單位、網址"></div>
+    <div><label>證據等級</label><select id="dEv"><option>法規</option><option>官方指引</option><option>系統性回顧</option><option>實證研究</option><option>專家意見</option><option>實務經驗</option><option>教材</option></select></div>
+  </div>
+  <label>檔案 <span class="note">PDF、Word（.docx）、TXT、Markdown；PDF 建議 30 頁以內，太長請拆開上傳</span></label>
+  <input type="file" id="dFile" accept=".pdf,.docx,.txt,.md">
+  <label>或直接貼上文字</label>
+  <textarea id="dText" rows="4" placeholder="貼上文字時不需選檔案"></textarea>
+  <p class="row"><button class="btn pri" id="upload">上傳並切段</button><span class="note" id="upStatus"></span></p>
+  <div class="row" style="justify-content:space-between;margin-top:18px"><h3 style="margin:0">文件清單</h3>
+    <div class="row"><span class="note" id="vecStatus"></span><button class="btn" id="vecRepair" title="找出向量損壞（無法被檢索）的段落並重新產生向量">檢查並修復向量</button></div></div>
+  <div class="list"><table><thead><tr><th>標題</th><th>出處</th><th>等級</th><th>段落</th><th>狀態</th><th>上傳</th><th>操作</th></tr></thead><tbody id="docRows"></tbody></table></div>
+  <div id="chunkView"></div>
+</section>
+
+<section id="test">
+  <div class="grid2" style="grid-template-columns:1fr 1fr">
+    <div>
+      <div class="row" style="justify-content:space-between"><h3>測試對話 <span class="note">不需邀請碼，會寫入對話紀錄（Session：admin-test）</span></h3><button class="btn" id="resetTest">開新對話</button></div>
+      <div id="tMsgs" style="min-height:300px"></div>
+      <textarea id="tIn" rows="3" placeholder="輸入老師可能會問的問題…"></textarea>
+      <p><button class="btn pri" id="tSend">送出</button></p>
+    </div>
+    <div><h3>流程紀錄</h3><div class="trace" id="tTrace"><div class="note">送出後顯示每個元件做了什麼</div></div></div>
+  </div>
+</section>
+
+<section id="logs">
+  <div class="row">
+    <h3 style="margin:0">對話紀錄與指標</h3>
+    <select id="lDays" style="width:auto"><option value="1">今天起 24 小時</option><option value="7" selected>最近 7 天</option><option value="30">最近 30 天</option><option value="0">全部</option></select>
+    <select id="lSchool" style="width:auto"><option value="">全部園所</option></select>
+    <select id="lType" style="width:auto"><option value="">全部類型</option><option value="answer">回答</option><option value="ai_fallback">AI 補足</option><option value="continue">延續</option><option value="followup">追問</option><option value="referral">緊急轉介</option><option value="conservative">保守回答</option><option value="out_of_scope">超出範圍</option></select>
+    <input type="text" id="lQ" placeholder="搜尋老師訊息" style="width:180px">
+    <label style="font-weight:400;margin:0"><input type="checkbox" id="lTest"> 含後台測試</label>
+    <button class="btn" id="lLoad">重新整理</button>
+  </div>
+  <div class="kpis" id="lKpis"></div>
+  <div class="cols">
+    <div class="list" style="max-height:520px"><table><thead><tr><th>時間</th><th>園所</th><th>輪</th><th>老師訊息（去識別化）</th><th>類型</th><th>檢索</th><th>最高分</th><th>引用</th><th>回饋</th><th>秒</th></tr></thead><tbody id="lRows"><tr><td colspan="10" class="note">載入中…</td></tr></tbody></table></div>
+    <div>
+      <div class="box"><h4>知識缺口 <span class="note">檢索沒命中或只能保守回答的問題，請專家補資料</span></h4><ol id="lGaps" style="padding-left:18px;margin:0"></ol></div>
+      <div class="box"><h4>常被引用的文件</h4><ol id="lDocs" style="padding-left:18px;margin:0"></ol></div>
+      <div class="box"><h4>格式穩定度 <span class="note">模型回的 JSON 有沒有照格式；只記錄，不影響回答</span></h4><div id="lStab" style="font-size:13px"></div></div>
+      <div class="box note" style="font-size:12px;line-height:1.6"><b>指標怎麼算</b><br>
+        檢索命中率＝走到檢索的回合中，至少有 1 段超過門檻的比例<br>
+        引用率＝回答實際引用的段數 ÷ 檢索採用的段數（越高代表找到的資料越對題）<br>
+        平均最高分＝每回合第一名段落的相似度平均，可用來調整「min_score」門檻<br>
+        真正的命中率要用「命中率測試」分頁，以專家標好的題目來量</div>
+    </div>
+  </div>
+</section>
+
+<section id="qa">
+  <div class="row" style="justify-content:space-between">
+    <h3 style="margin:0">問題統計 <span class="note">知識不足 → 交給專家補文件；L5 發現的問題 → 調整 Skill、提示詞或檢查標準</span></h3>
+    <div class="row">
+      <select id="qDays" style="width:auto"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="90">最近 90 天</option><option value="0">全部</option></select>
+      <label style="font-weight:400;margin:0"><input type="checkbox" id="qTest"> 含後台測試</label>
+      <button class="btn" id="qLoad">重新整理</button>
+    </div>
+  </div>
+  <div class="kpis" id="qKpis"></div>
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+    <div class="box">
+      <div class="row" style="justify-content:space-between"><h4 style="margin:0">知識不足</h4><button class="btn" id="qCsv" style="padding:3px 10px;font-size:12px">下載問題清單 CSV</button></div>
+      <div id="qGap" style="font-size:13px"></div>
+    </div>
+    <div class="box">
+      <h4>L5 發現的問題</h4>
+      <div id="qL5" style="font-size:13px"></div>
+    </div>
+  </div>
+  <p class="note">只統計更新後的新對話。點時間可以打開該回合的完整流程。</p>
+</section>
+
+<section id="auto">
+  <h3>自動評測 <span class="note">AI 出題 → 跑完整問答流程 → 另一個模型評分 → 專家抽查。分數適合看「改了之後進步或退步」，對外數字以專家題與真實提問為準。評測不寫入對話紀錄。</span></h3>
+  <div class="kpis" id="aBankK"></div>
+  <div class="grid2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+    <div class="box">
+      <h4>1. 建立題庫</h4>
+      <p class="note" id="aModels"></p>
+      <div class="row"><label style="margin:0;font-weight:400">從已核可段落抽</label><input type="number" id="aGenN" value="60" min="6" max="600" style="width:80px"><span class="note">段出題</span><button class="btn pri" id="aGen">AI 出題</button></div>
+      <div class="row" style="margin-top:6px"><label style="margin:0;font-weight:400">特殊題</label><input type="number" id="aSpN" value="6" min="2" max="20" style="width:70px"><span class="note">題（應轉介、超出範圍、知識庫沒有）</span><button class="btn" id="aSp">AI 出特殊題</button></div>
+      <div class="row" style="margin-top:6px"><label style="margin:0;font-weight:400">從對話紀錄取真實提問</label><input type="number" id="aLogN" value="30" min="1" max="200" style="width:70px"><span class="note">題</span><button class="btn" id="aLog">匯入</button></div>
+      <label style="margin-top:8px">專家題 <span class="note">一行一題</span></label><textarea id="aExp" rows="3" placeholder="個案A 每次換活動就躲到桌子底下，要怎麼帶他回來？"></textarea>
+      <div class="row"><button class="btn" id="aExpAdd">加入專家題</button><span class="note" id="aBankStatus" style="white-space:pre-wrap"></span></div>
+    </div>
+    <div class="box">
+      <h4>2. 執行評測</h4>
+      <div class="row"><label style="margin:0;font-weight:400">題目來源</label><select id="aSrc" style="width:auto"><option value="">全部啟用的題目</option><option>AI 出題</option><option>真實提問</option><option>專家</option></select></div>
+      <div class="row" style="margin-top:6px"><label style="margin:0;font-weight:400">最多</label><input type="number" id="aMax" value="40" min="1" max="500" style="width:80px"><span class="note">題，每題跑</span><select id="aRep" style="width:auto"><option value="1">1 次</option><option value="2">2 次</option><option value="3" selected>3 次（可看一致性）</option></select></div>
+      <p class="note">每題約 15–30 秒，會呼叫回答流程與評分模型（產生費用）。執行期間不要關閉頁面；中斷後已完成的結果會保留。</p>
+      <div class="row"><button class="btn pri" id="aRun">開始評測</button><button class="btn" id="aStop" hidden>停止</button><span class="note" id="aRunStatus"></span></div>
+    </div>
+  </div>
+  <div class="box">
+    <div class="row" style="justify-content:space-between"><h4 style="margin:0">3. 結果</h4><div class="row"><select id="aRuns" style="width:auto;max-width:420px"></select><button class="btn" id="aRunsLoad" style="padding:3px 10px;font-size:12px">重新整理</button></div></div>
+    <div class="kpis" id="aK"></div>
+    <div id="aBreak" style="font-size:13px"></div>
+  </div>
+  <div class="box">
+    <h4>4. 專家抽查 <span class="note" id="aAgree"></span></h4>
+    <p class="note">系統挑出約一成隨機題目，加上分數低、安全未通過或評分失敗的題目。請判斷 AI 評審的評分是否合理：同意越多，AI 自動評分越可信。</p>
+    <div id="aReview" style="font-size:13px"></div>
+  </div>
+  <details class="box"><summary style="cursor:pointer;font-weight:600">題庫清單 <span class="note" id="aBankN"></span></summary><div class="list" style="max-height:420px;margin-top:8px"><table><thead><tr><th>來源</th><th>類型</th><th>題目</th><th>應包含重點／應轉介</th><th>啟用</th></tr></thead><tbody id="aBank"></tbody></table></div></details>
+</section>
+
+<section id="eval">
+  <h3>命中率測試 <span class="note">專家寫下「老師可能會這樣問」＋「應該找到哪份文件」，系統逐題檢索，看有沒有找到</span></h3>
+  <div class="grid3" style="grid-template-columns:2fr 1.2fr 1fr auto;align-items:end">
+    <div><label>測試問題</label><input type="text" id="eQ" placeholder="例：收玩具時孩子一直丟東西，怎麼辦？"></div>
+    <div><label>應命中文件</label><select id="eDoc"></select></div>
+    <div><label>備註</label><input type="text" id="eNote" placeholder="例：轉銜時段"></div>
+    <div><button class="btn" id="eAdd">＋ 加入</button></div>
+  </div>
+  <p class="row"><button class="btn pri" id="eRun">執行測試</button><span class="note" id="eStatus">一個文件應命中多份時，可以直接在試算表「檢索測試」的「應命中文件ID」用逗號分隔</span></p>
+  <div class="kpis" id="eKpis"></div>
+  <div class="list" style="max-height:480px"><table><thead><tr><th>測試問題</th><th>應命中</th><th>結果</th><th>名次</th><th>最高分</th><th>說明</th><th></th></tr></thead><tbody id="eRows"></tbody></table></div>
+</section>
+
+<section id="other">
+  <h3>其他設定</h3>
+  <p>以下對照表直接在試算表裡編輯即可，修改後約 1 分鐘生效：</p>
+  <ul>
+    <li><b>同義詞</b>：老師口語對應到專業概念，用來擴充檢索（例：暴衝 → 攻擊行為）</li>
+    <li><b>禁止用語</b>：回答中不能出現的詞（P08 規則檢查）</li>
+    <li><b>轉介資源</b>：七類需要專人的情況，各自該找誰、怎麼聯絡（各縣市可在地化）</li>
+    <li><b>邀請碼</b>：每所園所一組，啟用欄改 FALSE 即停用</li>
+    <li><b>管理員</b>：可以開啟這個後台的 Google 帳號 email</li>
+    <li><b>對話紀錄、回饋</b>：每次問答的完整流程與老師的回饋</li>
+  </ul>
+  <p><a id="sheetLink" target="_blank">開啟試算表</a></p>
+</section>
+
+<aside class="side" id="side" aria-hidden="true">
+  <div class="side-h"><div><b id="sTitle">回合明細</b><div class="note" id="sSub"></div></div><button class="btn" id="sClose">✕ 關閉</button></div>
+  <div class="side-tabs"><button data-st="trace" class="on">流程</button><button data-st="conv">整段對話</button><button data-st="raw">回答原文</button></div>
+  <div class="side-b" id="sBody"></div>
+</aside>
+
+<section id="flow">
+  <div class="row" style="justify-content:space-between">
+    <h3 style="margin:0">流程控制台 <span class="note">依目前設定畫出問答流程；點任一步可以直接修改。數據取自對話紀錄（最多最近 500 回合）。</span></h3>
+    <div class="row">
+      <select id="fDays" style="width:auto"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="0">全部</option></select>
+      <label style="font-weight:400;margin:0"><input type="checkbox" id="fTest"> 含後台測試</label>
+      <button class="btn" id="fLoad">重新整理</button>
+    </div>
+  </div>
+  <div class="box" style="margin-top:10px">
+    <div class="row"><input type="text" id="fQ" placeholder="輸入一題試跑，會在流程上標出實際走過的路與每一步耗時" style="flex:1;min-width:240px"><button class="btn pri" id="fRun">試跑</button><button class="btn" id="fClear">清除標示</button></div>
+    <div id="fRes" class="note" style="margin-top:6px;white-space:pre-wrap"></div>
+  </div>
+  <div class="row" style="gap:14px;font-size:12px;margin:6px 0 10px" class="note"><span><span style="display:inline-block;width:10px;height:10px;background:#7F77DD;border-radius:2px"></span> 呼叫 AI</span><span><span style="display:inline-block;width:10px;height:10px;background:#B4B2A9;border-radius:2px"></span> 程式處理</span><span><span style="display:inline-block;width:10px;height:10px;background:#EF9F27;border-radius:2px"></span> 判斷</span><span><span style="display:inline-block;width:10px;height:10px;background:#F0997B;border-radius:2px"></span> 提前結束或降級</span><span class="note">虛線＝已關閉</span></div>
+  <div class="fl" id="fl"></div>
+</section>
+
+<aside class="side" id="fside" aria-hidden="true">
+  <div class="side-h"><div><b id="fsTitle">步驟設定</b><div class="note" id="fsSub"></div></div><button class="btn" id="fsClose">✕ 關閉</button></div>
+  <div class="side-b" id="fsBody"></div>
+</aside>
+
+<section id="kg">
+  <h3>知識圖譜 <span class="note">圖譜只當「架構」：決定有哪些主題、彼此關係；回答內容仍然來自上傳並核可的文件。目前回答流程尚未使用圖譜。</span></h3>
+  <div id="kgStats" class="kpis"></div>
+  <div class="box">
+    <h4>匯入／更新圖譜</h4>
+    <p class="note">上傳 knowledge-graph.json。只會取代先前「知識圖譜匯入」的節點與關係；專家從文件提案核可的節點會保留，節點的同義說法、停用狀態也會保留。</p>
+    <div class="row"><input type="file" id="kgFile" accept=".json,application/json" style="width:auto"><button class="btn pri" id="kgImport">匯入</button><span class="note" id="kgImpStatus"></span></div>
+  </div>
+  <div class="box">
+    <h4>依現有文件產生知識圖譜與 Ontology</h4>
+    <p class="note">AI 讀取所有「已核可」文件的段落，抽出概念、整理成主軸／子分類階層與關係，產生 knowledge-graph.json 與 ontology.ttl 供下載。<b>不會改動系統裡現有的圖譜</b>；專家看過、修改後，再用上方「匯入」匯入。</p>
+    <div class="row"><button class="btn" id="kgGen">產生圖譜檔案</button><span class="note" id="kgGenStatus"></span></div>
+    <div id="kgGenWarn" hidden style="margin-top:8px;border:1px solid var(--warn);border-radius:8px;padding:10px 12px;background:#fdf6ea">
+      <b>產生前請確認</b>
+      <ul id="kgGenInfo" style="margin:6px 0;padding-left:18px;font-size:13px"></ul>
+      <div class="row"><button class="btn pri" id="kgGenGo">我了解，開始產生</button><button class="btn" id="kgGenCancel">取消</button></div>
+    </div>
+    <div id="kgGenOut" hidden style="margin-top:8px"></div>
+  </div>
+  <div class="box">
+    <h4>新節點候選（待審核 <span id="kgCandN">0</span>）</h4>
+    <p class="note">上傳文件時，AI 發現段落內容在現有節點裡找不到合適位置，就會提出候選。多份文件都提到的排前面。核可＝新增節點並掛上這些段落；合併＝把名稱加到既有節點的同義說法；略過＝不處理。</p>
+    <div id="kgCands"></div>
+  </div>
+  <div class="box">
+    <h4>節點覆蓋度 <span class="note">主要＝以這個節點為主要標籤的段數；核可＝其中已核可的段數；做法＝已核可且屬於具體做法／案例／溝通範例的段數；次要＝隱含運用這個節點的段數（不算覆蓋）</span></h4>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="kgQ" placeholder="搜尋節點名稱或分類" style="max-width:260px">
+      <select id="kgF" style="width:auto"><option value="">全部節點</option><option value="none">還沒有已核可內容</option><option value="noact">沒有具體做法</option><option value="has">已有內容</option><option value="prop">文件提案新增</option></select>
+      <span class="note" id="kgCount"></span>
+    </div>
+    <div class="list" style="max-height:520px"><table><thead><tr><th>節點</th><th>類型</th><th>分類路徑</th><th class="num">主要</th><th class="num">核可</th><th class="num">做法</th><th class="num">次要</th></tr></thead><tbody id="kgRows"></tbody></table></div>
+  </div>
+  <div class="box">
+    <h4>標註文件</h4>
+    <label style="font-weight:400"><input type="checkbox" id="kgAuto"> 上傳文件時就標註</label>
+    <p class="note">建議先關閉：累積一定數量的文件後，再一次標註。這樣可以先看完所有新節點候選、調整好圖譜，標註只做一次，用詞也比較一致。關閉時上傳的文件不受影響，之後隨時可以補標。</p>
+    <div class="row"><button class="btn pri" id="kgMapAll">標註所有未標註文件</button><span class="note" id="kgTodo"></span></div>
+    <div class="row" style="margin-top:8px"><select id="kgDoc" style="max-width:360px"></select><button class="btn" id="kgMap">只標這份</button></div>
+    <p class="note" id="kgMapStatus" style="white-space:pre-wrap"></p>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<!-- 網頁版登入 -->
+<div id="login" style="position:fixed;inset:0;background:#f6f8fa;z-index:20;display:none;align-items:center;justify-content:center">
+  <form id="loginForm" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px;width:min(360px,92vw)">
+    <h3>AI 助手後台登入</h3>
+    <label for="lgUser">帳號</label><input type="text" id="lgUser" autocomplete="username">
+    <label for="lgPass">密碼</label><input type="password" id="lgPass" autocomplete="current-password" style="width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px">
+    <p id="lgErr" style="color:#b23a3a;font-size:13px;min-height:1em"></p>
+    <button class="btn pri" id="lgBtn" type="submit" style="width:100%">登入</button>
+  </form>
+</div>
+<script>const WEB_MODE = <?!= webMode ? 'true' : 'false' ?>;</script>
+<?!= include('TraceView'); ?>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// 網頁版：每個動作都帶通行證，經 adminCall 驗證；試算表視窗版：直接呼叫（以 Google 帳號判斷）
+let TOKEN = ''; try { TOKEN = sessionStorage.getItem('adm-token') || ''; } catch (e) {}
+const callRaw = (fn, ...args) => new Promise((ok, no) => google.script.run.withSuccessHandler(ok).withFailureHandler(e => no(e))[fn](...args));
+const run = (fn, ...args) => (WEB_MODE ? callRaw('adminCall', TOKEN, fn, args) : callRaw(fn, ...args)).catch(e => {
+  if (WEB_MODE && /請先登入/.test(e.message || '')) showLogin('登入已過期，請重新登入');
+  throw e;
+});
+function showLogin(msg) { $('login').style.display = 'flex'; $('lgErr').textContent = msg || ''; $('lgUser').focus(); }
+const toast = (t, ms) => { const e = $('toast'); e.textContent = t; e.style.display = 'block'; clearTimeout(e._t); e._t = setTimeout(() => e.style.display = 'none', ms || 2500); };
+let D = null, curSkill = null;
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button,section').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $(b.dataset.t).classList.add('on');
+});
+
+async function load() {
+  if (WEB_MODE && !TOKEN) return showLogin();
+  try { D = await run('adminLoad'); } catch (e) { if (WEB_MODE && /請先登入/.test(e.message || '')) return; $('me').textContent = ''; document.body.innerHTML = '<p style="padding:20px;color:#b23a3a">' + esc(e.message) + '</p>'; return; }
+  $('login').style.display = 'none'; $('logout').hidden = !WEB_MODE;
+  $('me').textContent = D.me; $('sheetLink').href = D.sheetUrl;
+  renderSettings(); renderSkills(); renderDocs(); loadModels();
+  renderEvalDocs();
+  $('topicList').innerHTML = D.topics.map(t => `<option value="${esc(t)}">`).join('');
+}
+
+// ---------- 設定 ----------
+const LONG = ['system_prompt', 'welcome', 'continue_prompt', 'continue_options', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_prompt', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
+// 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
+const SECTIONS = [
+  { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
+  { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'triage_rules', 'followup_prompt', 'max_followups'] },
+  { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
+  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_rules', 'knowledge_only', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
+  { id: 'check', title: 'L5 檢查', toggle: 'enable_llm_check', keys: ['enable_relevance_check', 'model_check', 'check_prompt'] },
+  { id: 'msgs', title: '固定訊息', keys: ['msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
+  { id: 'evalm', title: '自動評測', keys: ['model_eval_gen', 'model_eval_judge'] },
+  { id: 'adv', title: '進階', keys: ['model_embed', 'embed_dim', 'chunk_size', 'chunk_overlap', 'enable_node_mapping', 'hourly_limit'], rest: true },
+];
+const LABELS = {
+  bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
+  enable_triage: '啟用 L4 分流', model_triage: '分流模型', triage_rules: '分流規則', followup_prompt: '追問方式', max_followups: '最多追問次數',
+  top_k: '採用段數', min_score: '相似度門檻', enable_rerank: 'AI 重新排序', model_rerank: '重排模型', rerank_pool: '重排候選段數',
+  quota_min_actionable: '至少保留的具體做法段數', quota_max_principle: '原則／背景最多段數',
+  model_answer: '回答模型', temperature: '溫度', answer_rules: '回答規則', knowledge_only: '只用知識庫回答', full_answer_rounds: '完整回答輪數',
+  continue_prompt: '延續回覆方式', continue_options: '延續回覆選項',
+  enable_llm_check: '啟用 L5 依據與轉介檢查', enable_relevance_check: '回應度檢查', model_check: '檢查模型', check_prompt: '檢查標準',
+  msg_no_knowledge: '查不到資料時', msg_check_failed: '檢查沒通過時', msg_ai_fallback: 'AI 補足時的提示', msg_out_of_scope: '超出服務範圍時',
+  model_eval_gen: '評測出題模型', model_eval_judge: '評測評分模型',
+  model_embed: '向量模型', embed_dim: '向量維度', chunk_size: '切段長度（字）', chunk_overlap: '切段重疊（字）', enable_node_mapping: '上傳時標註知識圖譜', hourly_limit: '每個邀請碼每小時上限',
+};
+const isBoolV = v => v === true || v === false || String(v).toUpperCase() === 'TRUE' || String(v).toUpperCase() === 'FALSE';
+function fieldHtml(s, i) {
+  const v = s.value, lab = `<label>${esc(LABELS[s.key] || s.key)}<span class="key">${esc(s.key)}</span><br><span class="note">${esc(s.note)}</span></label>`;
+  const mk = /^model_/.test(s.key) ? (s.key === 'model_embed' ? 'embed' : 'gen') : '';
+  let input;
+  if (mk) input = `<div class="row" style="flex-wrap:nowrap"><select data-i="${i}" data-model="${mk}" data-orig="${esc(v)}"><option value="${esc(v)}">${esc(v)}</option></select><button class="btn" type="button" data-ping="${i}" style="white-space:nowrap">測試</button></div><div class="note" data-pr="${i}"></div>`;
+  else if (LONG.includes(s.key)) {
+    const ta = `<textarea data-i="${i}" rows="${s.key === 'system_prompt' ? 14 : /rules|prompt/.test(s.key) ? 8 : 3}">${esc(v)}</textarea>`;
+    input = /rules|prompt|options/.test(s.key) ? `<details><summary>編輯文字（${String(v).length} 字）</summary>${ta}</details>` : ta;
+  }
+  else if (isBoolV(v)) input = `<label style="font-weight:400;margin:0"><input type="checkbox" data-i="${i}" ${String(v).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>`;
+  else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill)/.test(s.key) ? '100%' : '220px'}">`;
+  return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}</div>`;
+}
+function renderSettings() {
+  const idx = {}; D.settings.forEach((s, i) => idx[s.key] = i);
+  const used = {}; SECTIONS.forEach(sec => { (sec.toggle ? [sec.toggle] : []).concat(sec.keys).forEach(k => used[k] = true); });
+  $('settings').innerHTML = SECTIONS.map(sec => {
+    const keys = sec.keys.concat(sec.rest ? D.settings.map(s => s.key).filter(k => !used[k]) : []).filter(k => idx[k] != null);
+    const t = sec.toggle && idx[sec.toggle] != null ? D.settings[idx[sec.toggle]] : null;
+    const head = t ? `<label title="${esc(t.note)}"><input type="checkbox" data-i="${idx[sec.toggle]}" data-toggle="${sec.id}" ${String(t.value).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>` : '';
+    const body = keys.map(k => fieldHtml(D.settings[idx[k]], idx[k])).join('');
+    const inner = `<h4>${esc(sec.title)}${head}</h4>${t ? `<div class="note" style="margin-bottom:4px">${esc(t.note)}</div>` : ''}${body}`;
+    return `<div class="sec" id="sec-${sec.id}">${sec.id === 'adv' ? `<details><summary style="cursor:pointer;font-weight:600">進階 <span class="note">很少需要改；換向量模型或切段方式要重新上傳文件</span></summary>${inner.replace('<h4>進階</h4>', '')}</details>` : inner}</div>`;
+  }).join('');
+  $('setNav').innerHTML = SECTIONS.map(sec => `<a data-go="${sec.id}">${esc(sec.title)}</a>`).join('');
+  $('setNav').querySelectorAll('a').forEach(a => a.onclick = () => goSec(a.dataset.go));
+  fillModelSelects(); refreshOverview(); markDirty();
+}
+function goSec(id) {
+  const el = $('sec-' + id); if (!el) return;
+  const d = el.querySelector('details'); if (d) d.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('setNav').querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.go === id));
+}
+// 目前設定總覽：各步驟的開關與模型，跟著畫面上的值即時更新，點了跳到該區
+function curVal(key) {
+  const i = D.settings.findIndex(s => s.key === key); if (i < 0) return null;
+  const el = $('settings').querySelector(`[data-i="${i}"]`); if (!el) return D.settings[i].value;
+  return el.type === 'checkbox' ? el.checked : el.value;
+}
+const onv = k => { const v = curVal(k); return v == null ? true : v === true || String(v).toUpperCase() === 'TRUE'; };
+const shortM = m => String(m || '').replace(/^gemini-/, '').replace(/-preview$/, '');
+function refreshOverview() {
+  const chip = (id, on, txt) => `<a data-go="${id}"${on ? '' : ' class="offc"'}>${txt}</a>`;
+  $('ovBar').innerHTML = '<span class="note">目前流程：</span>' + [
+    chip('triage', onv('enable_triage'), 'L4 分流 ' + (onv('enable_triage') ? shortM(curVal('model_triage')) : '關')),
+    chip('retrieval', true, '檢索 ' + (curVal('top_k') || '') + ' 段・門檻 ' + (curVal('min_score') || '') + '｜重排 ' + (onv('enable_rerank') ? shortM(curVal('model_rerank')) : '關')),
+    chip('answer', true, '回答 ' + shortM(curVal('model_answer')) + (onv('knowledge_only') ? '・只用知識庫' : '・可 AI 補足')),
+    chip('check', onv('enable_llm_check') || onv('enable_relevance_check'), 'L5 ' + (onv('enable_llm_check') ? '依據' : '') + (onv('enable_llm_check') && onv('enable_relevance_check') ? '＋' : '') + (onv('enable_relevance_check') ? '回應度' : '') + (onv('enable_llm_check') || onv('enable_relevance_check') ? ' ' + shortM(curVal('model_check')) : '關')),
+  ].join('<span class="arr">→</span>');
+  $('ovBar').querySelectorAll('a').forEach(a => a.onclick = () => goSec(a.dataset.go));
+  SECTIONS.filter(s => s.toggle).forEach(s => { const el = $('sec-' + s.id); if (el) el.classList.toggle('off', !onv(s.toggle)); });
+}
+function markDirty() {
+  let n = 0;
+  $('settings').querySelectorAll('[data-i]').forEach(el => {
+    const s = D.settings[+el.dataset.i]; const v = el.type === 'checkbox' ? el.checked : el.value;
+    const orig = el.type === 'checkbox' ? String(s.value).toUpperCase() === 'TRUE' : String(s.value == null ? '' : s.value);
+    const d = el.type === 'checkbox' ? v !== orig : String(v) !== orig;
+    if (d) n++;
+    const f = el.closest('.fld'); if (f) f.classList.toggle('dirty', d);
+  });
+  $('dirtyN').textContent = n ? `已修改 ${n} 項，尚未儲存` : '';
+}
+$('settings').addEventListener('input', () => { refreshOverview(); markDirty(); });
+$('settings').addEventListener('change', () => { refreshOverview(); markDirty(); });
+// ---------- 模型清單 ----------
+let MODELS = null;
+const mLabel = m => m.id + (m.name && m.name !== m.id ? '｜' + m.name : '');
+function fillModelSelects(root) {
+  if (!MODELS) return;
+  (root || $('settings')).querySelectorAll('select[data-model]').forEach(sel => {
+    const cur = sel.value, list = sel.dataset.model === 'embed' ? MODELS.embed : MODELS.gen;
+    const has = list.some(m => m.id === cur) || (cur === '' && /^model_eval_/.test(D.settings[+sel.dataset.i].key));
+    const groups = {};
+    list.forEach(m => { const v = modelVer_(m.id); const g = m.provider === 'openai' ? 'OpenAI' : v >= 3 ? 'Gemini ' + Math.floor(v) + ' 系列' : v ? 'Gemini ' + v : '其他'; (groups[g] = groups[g] || []).push(m); });
+    sel.innerHTML = (/^model_eval_/.test(D.settings[+sel.dataset.i].key) ? `<option value="" ${cur === '' ? 'selected' : ''}>（留空：用檢查模型）</option>` : '') + (has ? '' : `<option value="${esc(cur)}">${esc(cur)}（目前設定，清單中沒有）</option>`) +
+      Object.keys(groups).map(g => `<optgroup label="${esc(g)}">${groups[g].map(m => `<option value="${esc(m.id)}" ${m.id === cur ? 'selected' : ''}>${esc(mLabel(m))}${/preview|exp/.test(m.id) ? '（預覽）' : ''}</option>`).join('')}</optgroup>`).join('');
+  });
+}
+function modelVer_(id) { const m = String(id || '').match(/gemini-(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 0; }
+async function loadModels(force) {
+  $('modelSum').textContent = '讀取中…';
+  try {
+    MODELS = await run('adminModels', !!force);
+    const gN = MODELS.gen.length - MODELS.oa;
+    $('modelSum').textContent = `Gemini：文字生成 ${gN} 個（3 以上 ${MODELS.v3} 個）｜OpenAI：文字生成 ${MODELS.oa} 個｜向量共 ${MODELS.embed.length} 個` + (MODELS.errors.length ? `｜${MODELS.errors.join('；')}` : '');
+    fillModelSelects();
+    const row = m => `<tr><td>${esc(m.id)}</td><td>${esc(m.name || (m.provider === 'openai' ? 'OpenAI' : ''))}</td><td class="num">${m.input ? Math.round(m.input / 1000) + 'K' : ''}</td><td class="note">${esc(m.desc)}</td></tr>`;
+    $('modelTable').innerHTML = `<table><thead><tr><th>文字生成模型 ID</th><th>名稱</th><th class="num">輸入上限</th><th>說明</th></tr></thead><tbody>${MODELS.gen.map(row).join('')}</tbody></table>` +
+      `<table style="margin-top:8px"><thead><tr><th>向量模型 ID</th><th>名稱</th><th class="num">輸入上限</th><th>說明</th></tr></thead><tbody>${MODELS.embed.map(row).join('')}</tbody></table>`;
+  } catch (e) { $('modelSum').textContent = '讀取失敗：' + e.message; }
+}
+const PRESETS = {
+  g3: { model_triage: 'gemini-3.1-flash-lite', model_rerank: 'gemini-3.1-flash-lite', model_answer: 'gemini-3.8-flash', model_check: 'gemini-3.6-flash' },
+  oa: { model_triage: 'gpt-6-luna', model_rerank: 'gpt-6-luna', model_answer: 'gpt-6.1-terra', model_check: 'gpt-6.1-terra' },
+  g25: { model_triage: 'gemini-2.5-flash', model_rerank: 'gemini-2.5-flash-lite', model_answer: 'gemini-2.5-flash', model_check: 'gemini-2.5-flash' },
+};
+document.querySelectorAll('[data-preset]').forEach(b => b.onclick = async () => {
+  const p = PRESETS[b.dataset.preset];
+  const missing = MODELS ? Object.values(p).filter(id => !MODELS.gen.some(m => m.id === id)) : [];
+  if (missing.length) return toast('這把金鑰看不到：' + Array.from(new Set(missing)).join('、') + '，請先按「看清單」確認', 6000);
+  b.disabled = true;
+  try {
+    await run('adminSaveSettings', Object.keys(p).map(k => ({ key: k, value: p[k] })));
+    D.settings.forEach(s => { if (p[s.key]) s.value = p[s.key]; }); renderSettings();
+    toast('已套用並儲存：' + Object.keys(p).map(k => k.replace('model_', '') + '＝' + p[k]).join('、'), 5000);
+  } catch (e) { toast('套用失敗：' + e.message, 5000); } finally { b.disabled = false; }
+});
+$('modelRefresh').onclick = () => loadModels(true);
+$('modelList').onclick = () => { $('modelTable').hidden = !$('modelTable').hidden; $('modelList').textContent = $('modelTable').hidden ? '看清單' : '收起'; };
+async function pingHandler(e) {
+  const root = e.currentTarget;
+  const b = e.target.closest('[data-ping]'); if (!b) return;
+  const sel = root.querySelector(`select[data-i="${b.dataset.ping}"]`), out = root.querySelector(`[data-pr="${b.dataset.ping}"]`);
+  b.disabled = true; out.textContent = '測試中…';
+  try { const r = await run('adminPingModel', sel.value, sel.dataset.model); out.innerHTML = `<span style="color:var(--ok)">可以用</span>，${(r.ms / 1000).toFixed(1)} 秒｜${esc(r.reply)}`; }
+  catch (er) { out.innerHTML = `<span class="bad">不能用</span>：${esc(er.message)}`; } finally { b.disabled = false; }
+}
+$('settings').addEventListener('click', pingHandler);
+$('fsBody').addEventListener('click', pingHandler);
+$('settings').addEventListener('change', e => {
+  const sel = e.target.closest('select[data-model="embed"]'); if (!sel) return;
+  const out = $('settings').querySelector(`[data-pr="${sel.dataset.i}"]`);
+  out.innerHTML = sel.value !== sel.dataset.orig ? '<span class="bad">注意：換向量模型後，已上傳的文件都要重新上傳，否則檢索會失準。</span>' : '';
+});
+
+$('saveSettings').onclick = async () => {
+  const list = [...$('settings').querySelectorAll('[data-i]')].map(el => {
+    const s = D.settings[+el.dataset.i];
+    let value = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type !== 'checkbox' && value !== '' && !isNaN(value) && !LONG.includes(s.key) && !/^model_/.test(s.key)) value = Number(value);
+    return { key: s.key, value };
+  });
+  $('saveSettings').disabled = true;
+  try { await run('adminSaveSettings', list); list.forEach(x => { const s = D.settings.find(y => y.key === x.key); if (s) s.value = x.value; }); markDirty(); toast('已儲存設定'); } catch (e) { toast('儲存失敗：' + e.message, 5000); }
+  finally { $('saveSettings').disabled = false; }
+};
+
+// ---------- Skill ----------
+function renderSkills() {
+  $('skillList').innerHTML = D.skills.map((s, i) => `<div class="item ${curSkill === i ? 'on' : ''}" data-i="${i}"><b>${esc(s.name)}</b> ${s.enabled ? '' : '<span class="pill 停用">停用</span>'}${s.always ? ' <span class="pill">一律載入</span>' : ''}<small>v${esc(s.version)}｜${esc(s.tags || '（無主題）')}</small></div>`).join('');
+  $('skillList').querySelectorAll('.item').forEach(el => el.onclick = () => editSkill(+el.dataset.i));
+}
+function fillSkill(s) {
+  $('skName').value = s.name || ''; $('skTags').value = s.tags || ''; $('skAlways').checked = !!s.always;
+  $('skEnabled').checked = s.enabled !== false; $('skContent').value = s.content || '';
+}
+async function editSkill(i) {
+  curSkill = i; const s = D.skills[i]; renderSkills(); fillSkill(s);
+  $('skTitle').textContent = '編輯：' + s.name; $('skMeta').textContent = `目前 v${s.version}｜${s.by || ''} ${s.at || ''}`;
+  $('skHist').innerHTML = '<option value="">查看歷史版本…</option>';
+  try { const h = await run('adminSkillHistory', s.id); $('skHist').innerHTML = '<option value="">查看歷史版本…</option>' + h.map((x, j) => `<option value="${j}">v${x.version}｜${esc(x.by)} ${esc(x.at)}</option>`).join(''); $('skHist')._h = h; } catch (e) {}
+}
+$('skHist').onchange = () => { const h = $('skHist')._h; const j = $('skHist').value; if (j === '' || !h) return; fillSkill(Object.assign({}, h[+j], { enabled: $('skEnabled').checked })); toast('已載入 v' + h[+j].version + '，按「儲存為新版本」即可還原'); };
+$('newSkill').onclick = () => { curSkill = null; renderSkills(); fillSkill({ enabled: true, content: '何時使用：\n回答框架：\n先追問：\n輸出：\n禁止：' }); $('skTitle').textContent = '新增 Skill'; $('skMeta').textContent = ''; };
+$('saveSkill').onclick = async () => {
+  const s = { id: curSkill == null ? '' : D.skills[curSkill].id, name: $('skName').value.trim(), tags: $('skTags').value.trim(), always: $('skAlways').checked, enabled: $('skEnabled').checked, content: $('skContent').value };
+  $('saveSkill').disabled = true;
+  try { const r = await run('adminSaveSkill', s); toast('已儲存為 v' + r.version); D = await run('adminLoad'); curSkill = D.skills.findIndex(x => x.id === r.id); renderSkills(); editSkill(curSkill); }
+  catch (e) { toast('儲存失敗：' + e.message, 5000); } finally { $('saveSkill').disabled = false; }
+};
+
+// ---------- 知識庫 ----------
+function renderDocs() {
+  $('docRows').innerHTML = D.docs.map(d => `<tr><td>${esc(d.title)}<br><span class="note">${esc(d.file)}</span></td><td>${esc(d.source)}</td><td>${esc(d.evidence)}</td><td>${esc(d.chunks)}</td><td><span class="pill ${esc(d.status)}">${esc(d.status)}</span></td><td class="note">${esc(d.by)}<br>${esc(d.at)}</td>
+    <td><div class="row"><button class="btn" data-a="view" data-id="${esc(d.id)}">看段落</button>${d.status !== '已核可' ? `<button class="btn pri" data-a="已核可" data-id="${esc(d.id)}">核可</button>` : ''}${d.status !== '停用' ? `<button class="btn" data-a="停用" data-id="${esc(d.id)}">停用</button>` : `<button class="btn" data-a="待審核" data-id="${esc(d.id)}">恢復待審</button>`}</div></td></tr>`).join('') || '<tr><td colspan="7" class="note">還沒有文件</td></tr>';
+  $('docRows').querySelectorAll('button').forEach(b => b.onclick = () => docAction(b.dataset.a, b.dataset.id, b));
+}
+async function docAction(a, id, b) {
+  b.disabled = true;
+  try {
+    if (a === 'view') {
+      const cs = await run('adminDocChunks', id); const d = D.docs.find(x => x.id === id);
+      const TYPES = ['具體做法', '案例', '溝通範例', '原則／背景', '轉介資訊'];
+      const untyped = cs.filter(c => !c.type).length;
+      $('chunkView').innerHTML = `<h3 style="margin-top:18px">段落：${esc(d.title)}（${cs.length} 段）</h3>` +
+        `<p class="row note">段落類型用來限制「原則／背景」的比例，讓回答以具體做法為主。${untyped ? `<button class="btn" id="classifyDoc">AI 補分類（${untyped} 段未分類）</button>` : ''}</p>` +
+        cs.map(c => `<div class="chunk"><span class="note">#${c.n}${c.page ? '｜第' + esc(c.page) + '頁' : ''}｜${esc(c.status)}｜類型 <select data-ct="${esc(c.id)}" style="width:auto;padding:2px 6px"><option value="">未分類</option>${TYPES.map(t => `<option ${t === c.type ? 'selected' : ''}>${t}</option>`).join('')}</select></span>${(c.nodes || []).length ? '\n' + c.nodes.map(n => `<span class="nodechip${n.indexOf('：') >= 0 ? ' sub' : ''}">${esc(n)}</span>`).join('') : ''}${c.meta ? `\n<span class="note">${esc(c.meta)}</span>` : ''}\n${esc(c.text)}</div>`).join('');
+      $('chunkView').querySelectorAll('[data-ct]').forEach(sel => sel.onchange = async () => { try { await run('adminSetChunkType', sel.dataset.ct, sel.value); toast('已更新類型'); } catch (e) { toast(e.message, 4000); } });
+      const cb = $('classifyDoc'); if (cb) cb.onclick = async () => { cb.disabled = true; cb.textContent = '分類中…'; try { const r = await run('adminClassifyDoc', id); toast(`已分類 ${r.done}／${r.total} 段`); docAction('view', id, b); } catch (e) { toast(e.message, 4000); cb.disabled = false; } };
+      $('chunkView').scrollIntoView();
+    } else { await run('adminSetDocStatus', id, a); toast('已設為「' + a + '」'); D = await run('adminLoad'); renderDocs(); }
+  } catch (e) { toast('失敗：' + e.message, 5000); } finally { b.disabled = false; }
+}
+$('upload').onclick = async () => {
+  const f = $('dFile').files[0], text = $('dText').value.trim(), title = $('dTitle').value.trim();
+  if (!title) return toast('請填寫標題');
+  if (!f && !text) return toast('請選擇檔案或貼上文字');
+  if (f && f.size > 20 * 1024 * 1024) return toast('檔案超過 20 MB，請拆開上傳', 4000);
+  $('upload').disabled = true; $('upStatus').textContent = f ? '讀取檔案、轉文字、切段與向量化中，PDF 可能需要 1–3 分鐘…' : '切段與向量化中…';
+  try {
+    const p = { title, source: $('dSource').value.trim(), evidence: $('dEv').value, text: f ? '' : text };
+    if (f) { p.fileName = f.name; p.mimeType = f.type; p.base64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); }); }
+    const r = await run('adminUploadDoc', p);
+    const g = r.graph; const gt = !g ? '' : g.error ? `\n節點對應失敗：${g.error}（可到「知識圖譜」分頁補做）` : g.skipped ? '' : `\n已標註知識圖譜節點 ${g.links} 筆（主要 ${g.main}）${g.candidates ? `，提出 ${g.candidates} 個新節點候選` : ''}${g.candidateHits ? `，${g.candidateHits} 次呼應既有候選` : ''}（到「知識圖譜」分頁審核）。`;
+    $('upStatus').textContent = `完成：切成 ${r.chunks} 段，狀態為「待審核」。請檢查段落後按「核可」。` + gt; $('upStatus').style.whiteSpace = 'pre-wrap';
+    $('dFile').value = ''; $('dText').value = ''; $('dTitle').value = ''; $('dSource').value = '';
+    D = await run('adminLoad'); renderDocs();
+  } catch (e) { $('upStatus').textContent = '上傳失敗：' + e.message; } finally { $('upload').disabled = false; }
+};
+
+$('vecRepair').onclick = async () => {
+  $('vecRepair').disabled = true; $('vecStatus').textContent = '檢查中…';
+  try { const r = await run('adminRepairVectors'); $('vecStatus').textContent = r.bad ? `共 ${r.total} 段，${r.bad} 段向量損壞，已修復 ${r.fixed} 段` : `共 ${r.total} 段，向量都正常`; }
+  catch (e) { $('vecStatus').textContent = '失敗：' + e.message; } finally { $('vecRepair').disabled = false; }
+};
+
+// ---------- 測試對話 ----------
+let T = { history: [], nameMap: {}, followups: 0, answered: 0, turn: 0, session: 'admin-test-' + Date.now() };
+function restore(s) { let o = String(s == null ? '' : s); Object.entries(T.nameMap).forEach(([n, l]) => o = o.split(l).join(n)); return o; }
+function tMsg(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; $('tMsgs').appendChild(d); d.scrollIntoView({ block: 'nearest' }); }
+function renderReply(r) {
+  if (r.type === 'followup') return esc(restore(r.empathy)) + '\n' + r.questions.map((q, i) => (i + 1) + '. ' + esc(restore(q))).join('\n');
+  if (r.type === 'referral') { const f = r.referral; return `<b>需要馬上找專人（${esc(f.category)}・${esc(f.level)}）</b>\n${esc(restore(f.reason))}\n該找誰：${esc(f.who)} ${esc(f.contact)}\n現在要做：${esc(f.now)}`; }
+  if (r.type === 'continue') {
+    const a = r.answer; let h = (a.notice ? '<b style="color:var(--warn)">' + esc(a.notice) + '</b>\n' : '') + esc(restore(a.reply));
+    if ((a.strategies || []).length) h += '\n\n<b>可以再試試</b>\n' + a.strategies.map((s, i) => `${i + 1}. ${esc(restore(s.title))}：${esc(restore(s.how))} [${(s.refs || []).join(',')}]`).join('\n');
+    if (a.parent_message) h += '\n\n<b>給家長的訊息草稿</b>\n' + esc(restore(a.parent_message));
+    if ((a.observe || []).length) h += '\n\n<b>觀察重點</b>\n' + a.observe.map(o => '・' + esc(restore(o))).join('\n');
+    if (a.referral) h += '\n\n<b>需要時找專人</b>\n' + esc(restore(a.referral));
+    if ((a.options || []).length) h += '\n\n' + a.options.map(o => `<button class="btn opt" data-opt="${esc(o)}">${esc(o)}</button>`).join(' ');
+    return h;
+  }
+  if (r.type !== 'answer' && r.type !== 'ai_fallback') return esc(r.message || '');
+  const a = r.answer; let h = (a.notice ? '<b style="color:#a86a12">⚠ ' + esc(a.notice) + '</b>\n\n' : '') + esc(restore(a.empathy)) + '\n\n<b>看見與理解</b>\n' + esc(restore(a.understanding)) + '\n\n<b>現在可以試試</b>\n' +
+    (a.strategies || []).map((s, i) => `${i + 1}. ${esc(restore(s.title))}：${esc(restore(s.how))} [${(s.refs || []).join(',')}]`).join('\n');
+  if (a.parent_message) h += '\n\n<b>給家長的訊息草稿</b>\n' + esc(restore(a.parent_message));
+  if ((a.observe || []).length) h += '\n\n<b>接下來觀察</b>\n' + a.observe.map(o => '・' + esc(restore(o))).join('\n');
+  if (a.teacher_care) h += '\n\n<b>也照顧你自己</b>\n' + esc(restore(a.teacher_care));
+  if (a.referral) h += '\n\n<b>需要時找專人</b>\n' + esc(restore(a.referral));
+  if ((r.sources || []).length) h += '\n\n<span class="note">出處：' + r.sources.map(s => esc(s.ref + ' ' + s.title + (s.page ? ' p.' + s.page : ''))).join('｜') + '</span>';
+  return h;
+}
+function botSummary(r) {
+  const a = r.answer || {};
+  if (r.type === 'answer' || r.type === 'ai_fallback') return [a.empathy, '建議：' + (a.strategies || []).map(s => s.title).join('、')].filter(Boolean).join(' ');
+  if (r.type === 'continue') return [a.reply, (a.strategies || []).length ? '新建議：' + a.strategies.map(s => s.title).join('、') : '', a.parent_message ? '（已提供家長訊息）' : ''].filter(Boolean).join(' ');
+  if (r.type === 'followup') return r.questions.join(' ');
+  return r.message || '';
+}
+$('tMsgs').addEventListener('click', e => { const b = e.target.closest('[data-opt]'); if (b) { $('tIn').value = b.dataset.opt; $('tSend').click(); } });
+$('tSend').onclick = async () => {
+  const m = $('tIn').value.trim(); if (!m) return;
+  tMsg('t', esc(m)); $('tIn').value = ''; $('tSend').disabled = true; $('tTrace').innerHTML = '<div class="note">處理中…</div>';
+  try {
+    T.turn = (T.turn || 0) + 1;
+    const r = await run('adminTestChat', { message: m, history: T.history, nameMap: T.nameMap, followups: T.followups, answered: T.answered, turn: T.turn, session: T.session });
+    T.nameMap = r.nameMap || T.nameMap;
+    if (r.newCase) { T.history = []; T.followups = 0; }
+    if (r.answered != null) T.answered = r.answered;
+    T.history.push({ role: 'teacher', text: r.deidText });
+    if (r.type === 'followup') T.followups++;
+    T.history.push({ role: 'bot', text: botSummary(r) });
+    tMsg('', renderReply(r));
+    $('tTrace').innerHTML = '<div style="padding:10px;border:0">' + TraceView.render(r) + '</div>';
+  } catch (e) { tMsg('', '<span style="color:#b23a3a">錯誤：' + esc(e.message) + '</span>'); $('tTrace').innerHTML = ''; }
+  finally { $('tSend').disabled = false; }
+};
+$('resetTest').onclick = () => { T = { history: [], nameMap: {}, followups: 0, answered: 0, turn: 0, session: 'admin-test-' + Date.now() }; $('tMsgs').innerHTML = ''; $('tTrace').innerHTML = ''; };
+
+// ---------- 對話紀錄 ----------
+const TN = { answer: '回答', ai_fallback: 'AI 補足', continue: '延續', followup: '追問', referral: '緊急轉介', conservative: '保守回答', out_of_scope: '超出範圍' };
+let L = null, logsLoaded = false;
+const k = (v, label, sub, cls) => `<div class="kpi"><b class="${cls || ''}">${v == null ? '—' : esc(v)}</b><span>${esc(label)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+async function loadLogs() {
+  $('lLoad').disabled = true; $('lRows').innerHTML = '<tr><td colspan="10" class="note">載入中…</td></tr>';
+  try {
+    L = await run('adminLogs', { days: +$('lDays').value, school: $('lSchool').value, type: $('lType').value, q: $('lQ').value.trim(), includeTest: $('lTest').checked });
+    logsLoaded = true;
+    const cur = $('lSchool').value;
+    $('lSchool').innerHTML = '<option value="">全部園所</option>' + L.schools.map(s => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('');
+    const s = L.stats, bt = s.byType;
+    $('lKpis').innerHTML = k(s.turns, '回合數', s.sessions + ' 段對話') +
+      k(s.hitRate == null ? null : s.hitRate + '%', '檢索命中率', s.retrievalTurns + ' 回合有檢索', s.hitRate != null && s.hitRate < 70 ? 'bad' : '') +
+      k(s.citeRate == null ? null : s.citeRate + '%', '引用率', '引用段數 ÷ 採用段數') +
+      k(s.avgTop, '平均最高分', '門檻 ' + (D.settings.find(x => x.key === 'min_score') || {}).value) +
+      k(s.upRate == null ? null : s.upRate + '%', '👍 比例', s.ups + ' 👍／' + s.downs + ' 👎') +
+      k(s.copied, '複製家長訊息') +
+      k(s.rewriteRate == null ? null : s.rewriteRate + '%', '重寫比例', '第一版沒通過檢查') +
+      k(s.avgMs == null ? null : (s.avgMs / 1000).toFixed(1) + ' 秒', '平均耗時') +
+      k((bt.answer || 0) + '／' + (bt.followup || 0), '回答／追問') +
+      k((bt.referral || 0) + '／' + (bt.conservative || 0), '緊急轉介／保守', '', (bt.conservative || 0) ? 'bad' : '');
+    $('lRows').innerHTML = L.rows.map(r => `<tr class="click" data-row="${r.row}"><td class="note">${esc(r.time.slice(5))}</td><td>${esc(r.school)}</td><td class="num">${esc(r.turn)}</td><td>${esc(r.msg)}</td>
+      <td class="t-${esc(r.type)}">${esc(TN[r.type] || r.type)}${r.referral ? '<br><span class="note">' + esc(r.referral) + '</span>' : ''}</td>
+      <td class="num ${r.retrieved === 0 ? 'bad' : ''}">${r.retrieved == null ? '—' : r.retrieved}</td><td class="num">${r.top == null ? '—' : r.top}</td><td class="num">${r.cited == null ? '—' : r.cited}</td>
+      <td>${r.fb === 'up' ? '👍' : r.fb === 'down' ? '👎' : ''}${r.copied ? ' 📋' : ''}</td><td class="num">${r.ms ? (r.ms / 1000).toFixed(1) : ''}</td></tr>`).join('') || '<tr><td colspan="10" class="note">這段期間沒有紀錄</td></tr>';
+    $('lRows').querySelectorAll('tr.click').forEach(tr => tr.onclick = () => openDetail(+tr.dataset.row));
+    $('lGaps').innerHTML = L.gaps.map(g => `<li><a data-row="${g.row}">${esc(g.msg)}</a> <span class="note">${esc(g.time.slice(5))}${g.top != null ? '｜最高 ' + g.top : ''}</span></li>`).join('') || '<li class="note">目前沒有</li>';
+    $('lGaps').querySelectorAll('a').forEach(a => a.onclick = () => openDetail(+a.dataset.row));
+    const S = L.stability || {}; const pc = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '—';
+    const list = (o, sfx) => Object.keys(o).sort((a, b) => o[b] - o[a]).map(x => `<li>${esc(x)} <span class="note">${o[x]}${sfx || ' 次'}</span></li>`).join('') || '<li class="note">沒有</li>';
+    $('lStab').innerHTML = !S.turns ? '<p class="note">還沒有紀錄（更新後的新對話才會記錄）</p>' :
+      `<p style="margin:0 0 6px">有格式問題的回合：<b>${pc(S.withIssue, S.turns)}</b> <span class="note">（${S.withIssue}／${S.turns}）</span></p>` +
+      `<b>依回答模型</b><ul style="margin:2px 0 6px;padding-left:18px">${Object.keys(S.byModel).map(m => { const x = S.byModel[m]; return `<li>${esc(m || '（未記錄）')}：${pc(x.withIssue, x.turns)} 有問題，回答本身 ${pc(x.a1, x.turns)} <span class="note">${x.turns} 回合</span></li>`; }).join('')}</ul>` +
+      `<b>問題類型</b><ul style="margin:2px 0 6px;padding-left:18px">${list(S.byKind)}</ul>` +
+      `<b>出在哪一步</b><ul style="margin:2px 0 6px;padding-left:18px">${list(S.byStep)}</ul>` +
+      `<b>重寫原因</b> <span class="note">第一版沒通過的項目</span><ul style="margin:2px 0 6px;padding-left:18px">${list(S.rewriteWhy)}</ul>` +
+      (S.recent.length ? `<b>最近的例子</b><ul style="margin:2px 0 0;padding-left:18px">${S.recent.slice(0, 8).map(r => `<li><a data-row="${r.row}">${esc(r.time.slice(5))}</a> <span class="note">${esc(r.ev.map(e => e.at + ' ' + e.kind + (e.note ? '：' + e.note : '')).join('｜'))}</span></li>`).join('')}</ul>` : '');
+    $('lStab').querySelectorAll('a[data-row]').forEach(a => a.onclick = () => openDetail(+a.dataset.row));
+    $('lDocs').innerHTML = L.topDocs.map(d => `<li>${esc(d.title)} <span class="note">${d.n} 次</span></li>`).join('') || '<li class="note">目前沒有</li>';
+  } catch (e) { $('lRows').innerHTML = `<tr><td colspan="10" style="color:#b23a3a">${esc(e.message)}</td></tr>`; }
+  finally { $('lLoad').disabled = false; }
+}
+['lDays', 'lSchool', 'lType', 'lTest'].forEach(id => $(id).onchange = loadLogs);
+$('lQ').onkeydown = e => { if (e.key === 'Enter') loadLogs(); };
+$('lLoad').onclick = loadLogs;
+document.querySelector('nav button[data-t="logs"]').addEventListener('click', () => { if (!logsLoaded) loadLogs(); });
+// ---------- 流程控制台 ----------
+let F = null, FT = null, FSel = null;
+const sv = key => { const s = (D && D.settings || []).find(x => x.key === key); return s ? s.value : null; };
+const son = key => { const v = sv(key); return v == null || v === '' ? true : v === true || String(v).toUpperCase() === 'TRUE'; };
+const sm = key => shortM(sv(key));
+const pc1 = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+const secs = ms => ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒';
+const FNODES = [
+  { id: 'input', title: '使用者訊息', kind: 'io', cfg: () => '', met: () => F ? `${F.turns} 回合` : '' },
+  { id: 'deid', title: 'P03 去識別化', kind: 'code', keys: [], cfg: () => '人名換成代稱', met: () => stepMs('deid') },
+  { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'triage_rules', 'followup_prompt', 'model_embed'],
+    cfg: () => son('enable_triage') ? `分流 ${sm('model_triage')}｜向量 ${sm('model_embed')}` : `已關閉：只算向量（${sm('model_embed')}），主題用關鍵字`,
+    met: () => stepMs('triage'),
+    exit: { title: '轉介／拒答／追問', on: () => son('enable_triage'), met: () => F ? `轉介 ${F.types.referral || 0}｜拒答 ${F.types.out_of_scope || 0}｜追問 ${F.types.followup || 0}` : '', hit: r => ['referral', 'out_of_scope', 'followup'].indexOf(r.type) >= 0 } },
+  { id: 'state', title: 'P04 狀態機', kind: 'code', keys: ['max_followups', 'full_answer_rounds'], cfg: () => `最多追問 ${sv('max_followups')} 次｜前 ${sv('full_answer_rounds')} 輪完整回答，之後延續回覆`, met: () => '' },
+  { id: 'skill', title: 'P05 載入 Skill', kind: 'code', keys: ['default_skill'], cfg: () => (F ? `啟用 ${F.skills} 個（一律載入 ${F.skillsAlways}）｜` : '') + `預設：${sv('default_skill') || '不套用'}`, met: () => '' },
+  { id: 'retrieve', title: 'P06 檢索', kind: 'code', keys: ['top_k', 'min_score', 'rerank_pool'], cfg: () => `取 ${sv('top_k')} 段｜門檻 ${sv('min_score')}｜候選 ${sv('rerank_pool')} 段` + (F ? `｜知識 ${F.chunks} 段、同義詞 ${F.synonyms}` : ''),
+    met: () => F ? `有找到 ${pc1(F.retrieval.hit, F.retrieval.n)}｜平均最高分 ${F.retrieval.topN ? (F.retrieval.top / F.retrieval.topN).toFixed(2) : '—'}｜${stepMs('retrieve')}` : '' },
+  { id: 'rerank', title: '重排與配額', kind: 'ai', toggle: 'enable_rerank', keys: ['enable_rerank', 'model_rerank', 'quota_min_actionable', 'quota_max_principle'],
+    cfg: () => son('enable_rerank') ? `${sm('model_rerank')}｜具體做法至少 ${sv('quota_min_actionable')}、原則最多 ${sv('quota_max_principle')}` : '已關閉：照向量順序',
+    met: () => F ? `有排序 ${pc1(F.rerank.used, F.rerank.n)}` + (F.rerank.failed ? `｜<span class="bad2">失敗 ${F.rerank.failed}</span>` : '') + `｜${stepMs('rerank')}` : '' },
+  { id: 'gap', title: '知識足夠嗎？', kind: 'dec', keys: ['knowledge_only', 'msg_no_knowledge', 'msg_ai_fallback'], cfg: () => son('knowledge_only') ? '不足 → 保守回答' : '不足 → AI 補足並標示',
+    met: () => '', exit: { title: '知識不足', on: () => true, met: () => F ? `${F.gap.n} 次（${pc1(F.gap.n, F.retrieval.n)}）｜保守 ${F.gap.byOutcome['保守回答'] || 0}、AI 補足 ${F.gap.byOutcome['AI 補足'] || 0}` : '', hit: r => !!(r.quality && r.quality.gap) } },
+  { id: 'answer', title: 'P07 組裝＋A1 產生回答', kind: 'ai', keys: ['model_answer', 'temperature', 'system_prompt', 'answer_rules', 'continue_prompt', 'continue_options', 'full_answer_rounds'],
+    cfg: () => `${sm('model_answer')}`, met: () => F ? `重寫 ${pc1(F.answer.rewrite, F.answer.n)}｜格式問題 ${pc1(F.answer.format, F.answer.n)}｜${stepMs('answer')}` : '' },
+  { id: 'check', title: '檢查：P08 禁用詞、P09 出處、L5', kind: 'ai', toggle: 'enable_llm_check', keys: ['enable_llm_check', 'enable_relevance_check', 'model_check', 'check_prompt', 'msg_check_failed'],
+    cfg: () => `依據 ${son('enable_llm_check') ? '開' : '關'}｜回應度 ${son('enable_relevance_check') ? '開' : '關'}` + (son('enable_llm_check') || son('enable_relevance_check') ? `｜${sm('model_check')}` : '') + (F ? `｜禁止用語 ${F.forbidden}` : ''),
+    met: () => F ? `L5 發現問題 ${pc1(F.check.l5, F.check.n)}｜嚴重 ${F.check.severe}｜${stepMs('check')}` : '',
+    exit: { title: '重寫一次，仍不過 → 保守', on: () => true, met: () => F ? `最後保守 ${F.check.conservative}` : '', hit: r => !!r.rewritten } },
+  { id: 'final', title: '回覆＋寫入紀錄', kind: 'io', cfg: () => '', met: () => F ? `平均總耗時 ${secs(F.avgMs)}` : '' },
+];
+function stepMs(k) { const s = F && F.steps[k]; return s && s.avg != null ? '平均 ' + secs(s.avg) : ''; }
+function renderFlow() {
+  const hit = FT ? FT.hit : {};
+  $('fl').innerHTML = FNODES.map((n, i) => {
+    const off = n.toggle && !son(n.toggle);
+    const node = `<div class="fn ${n.kind}${off ? ' off' : ''}${hit[n.id] ? ' hit' : ''}${FSel === n.id ? ' sel' : ''}" data-n="${n.id}">${hit[n.id] != null && hit[n.id] !== true ? `<span class="badge">+${secs(hit[n.id])}</span>` : ''}<b>${esc(n.title)}</b>${n.cfg() ? `<div class="cfg">${esc(n.cfg())}</div>` : ''}${n.met() ? `<div class="met">${n.met()}</div>` : ''}</div>`;
+    const ex = n.exit ? `<div class="fside"><span class="ln"></span><div class="fx${n.exit.on() ? '' : ' dim'}${FT && FT.exits[n.id] ? ' hit' : ''}" data-n="${n.id}"><b>${esc(n.exit.title)}</b>${n.exit.met() ? `<div style="font-size:12px">${esc(n.exit.met())}</div>` : ''}</div></div>` : '<div></div>';
+    const arr = i < FNODES.length - 1 ? '<div class="farr"></div><div></div>' : '';
+    return node + ex + arr;
+  }).join('');
+  $('fl').querySelectorAll('[data-n]').forEach(el => el.onclick = () => openFlowNode(el.dataset.n));
+}
+async function loadFlow() {
+  $('fLoad').disabled = true;
+  try { F = await run('adminFlowStats', { days: +$('fDays').value, includeTest: $('fTest').checked }); renderFlow(); }
+  catch (e) { $('fl').innerHTML = `<p class="bad">${esc(e.message)}</p>`; } finally { $('fLoad').disabled = false; }
+}
+function openFlowNode(id) {
+  const n = FNODES.find(x => x.id === id); if (!n) return; FSel = id; renderFlow();
+  $('fsTitle').textContent = n.title; $('fsSub').textContent = n.cfg();
+  const idx = {}; D.settings.forEach((s, i) => idx[s.key] = i);
+  const keys = (n.keys || []).filter(k => idx[k] != null);
+  let h = keys.length ? `<div id="fsFields">${keys.map(k => fieldHtml(D.settings[idx[k]], idx[k])).join('')}</div><div class="row" style="margin-top:10px"><button class="btn pri" id="fsSave">儲存這些設定</button><span class="note" id="fsMsg"></span></div>`
+    : '<p class="note">這一步沒有可調的設定。</p>';
+  if (id === 'skill') h += '<p class="note">Skill 內容請到「Skill」分頁編輯。</p>';
+  if (id === 'check') h += '<p class="note">禁止用語在試算表的「禁止用語」工作表。</p>';
+  if (id === 'triage') h += '<p class="note">轉介對象在試算表的「轉介資源」工作表。</p>';
+  if (FT && FT.byNode[id] && FT.byNode[id].length) h += `<h4 style="margin-top:16px">這次試跑</h4>` + FT.byNode[id].map(t => `<div class="box" style="padding:8px 10px;margin:6px 0"><b style="font-size:13px">${esc(t.step)}</b> <span class="note">+${secs(t.d)}</span><pre style="white-space:pre-wrap;font-size:12px;margin:4px 0 0;max-height:260px;overflow:auto">${esc(typeof t.detail === 'string' ? t.detail : JSON.stringify(t.detail, null, 1)).slice(0, 4000)}</pre></div>`).join('');
+  $('fsBody').innerHTML = h;
+  fillModelSelects($('fsBody'));
+  const save = $('fsSave');
+  if (save) save.onclick = async () => {
+    const list = []; $('fsBody').querySelectorAll('[data-i]').forEach(el => { const s = D.settings[+el.dataset.i]; let v = el.type === 'checkbox' ? el.checked : el.value; if (el.type !== 'checkbox' && !/^model_/.test(s.key) && !LONG.includes(s.key) && v !== '' && !isNaN(Number(v))) v = Number(v); list.push({ key: s.key, value: v }); });
+    save.disabled = true;
+    try { await run('adminSaveSettings', list); list.forEach(x => { const s = D.settings.find(y => y.key === x.key); if (s) s.value = x.value; }); renderSettings(); renderFlow(); $('fsSub').textContent = n.cfg(); $('fsMsg').textContent = '已儲存，約 1 分鐘內生效'; }
+    catch (e) { $('fsMsg').textContent = '失敗：' + e.message; } finally { save.disabled = false; }
+  };
+  $('fside').classList.add('open'); $('fside').setAttribute('aria-hidden', 'false');
+}
+$('fsClose').onclick = () => { $('fside').classList.remove('open'); $('fside').setAttribute('aria-hidden', 'true'); FSel = null; renderFlow(); };
+$('fRun').onclick = async () => {
+  const q = $('fQ').value.trim(); if (!q) return toast('請輸入題目');
+  $('fRun').disabled = true; $('fRes').textContent = '試跑中…';
+  try {
+    const r = await run('adminTestChat', { message: q, history: [], nameMap: {}, followups: 0, answered: 0, session: 'admin-test-flow-' + Date.now() });
+    const hit = { input: true, final: true }, byNode = {}, exits = {}; let prev = 0;
+    (r.trace || []).forEach(t => {
+      const s = String(t.step); const d = Math.max(0, (t.ms || 0) - prev); prev = t.ms || prev;
+      const k = /^P03/.test(s) ? 'deid' : /^L4/.test(s) ? 'triage' : /^P04/.test(s) ? 'state' : /^P05/.test(s) ? 'skill' : /^P06/.test(s) ? 'retrieve' : /^重新排序/.test(s) ? 'rerank' : /^P07|^A1/.test(s) ? 'answer' : /^檢查/.test(s) ? 'check' : /^P10/.test(s) ? 'final' : '';
+      if (!k) return; hit[k] = (typeof hit[k] === 'number' ? hit[k] : 0) + d; (byNode[k] = byNode[k] || []).push(Object.assign({ d: d }, t));
+    });
+    if (hit.retrieve != null) hit.gap = true;
+    FNODES.forEach(n => { if (n.exit && n.exit.hit(r)) exits[n.id] = true; });
+    if (exits.gap) (byNode.gap = byNode.gap || []).push({ step: '知識不足', d: 0, detail: r.quality.gap });
+    FT = { hit: hit, byNode: byNode, exits: exits };
+    const a = r.answer;
+    $('fRes').textContent = `結果：${TN[r.type] || r.type}｜總耗時 ${secs(r.ms)}${r.quality && r.quality.gap ? '｜知識不足：' + r.quality.gap.kind : ''}\n` +
+      String(a ? (a.empathy || a.reply || '') + (a.strategies && a.strategies.length ? '\n建議：' + a.strategies.map(s => s.title).join('、') : '') : (r.message || '')).slice(0, 400);
+    renderFlow();
+  } catch (e) { $('fRes').textContent = '失敗：' + e.message; } finally { $('fRun').disabled = false; }
+};
+$('fClear').onclick = () => { FT = null; $('fRes').textContent = ''; renderFlow(); };
+['fDays', 'fTest'].forEach(id => $(id).onchange = loadFlow);
+$('fLoad').onclick = loadFlow;
+document.querySelector('nav button[data-t="flow"]').addEventListener('click', () => { renderFlow(); if (!F) loadFlow(); });
+
+// ---------- 自動評測 ----------
+let AB = null, AStop = false;
+async function loadBank() {
+  try {
+    AB = await run('adminEvalBank');
+    const bs = AB.bySource, bt = AB.byType;
+    $('aBankK').innerHTML = k(AB.on, '啟用的題目', '共 ' + AB.total + ' 題') + k(bs['AI 出題'] || 0, 'AI 出題') + k(bs['真實提問'] || 0, '真實提問') + k(bs['專家'] || 0, '專家題') +
+      k((bt['應轉介'] || 0) + '／' + (bt['超出範圍'] || 0) + '／' + (bt['知識庫沒有'] || 0), '轉介／超出範圍／沒有');
+    $('aModels').innerHTML = `出題：<b>${esc(AB.genModel)}</b>｜評分：<b>${esc(AB.judgeModel)}</b>｜回答：<b>${esc(AB.answerModel)}</b>` +
+      (AB.judgeModel === AB.answerModel ? '<br><span class="bad">評分和回答用同一個模型，容易互相放水；建議到「機器人設定 → 自動評測」改用另一家的模型。</span>' : '') +
+      `<br>已核可文件 ${AB.docs} 份、${AB.chunks} 段。`;
+    $('aBankN').textContent = `（${AB.total} 題，顯示最新 500 題）`;
+    $('aBank').innerHTML = AB.qs.map(x => `<tr><td class="note">${esc(x.source)}</td><td class="note">${esc(x.type)}</td><td>${esc(x.q)}</td><td class="note">${esc(x.points || x.referral)}</td><td><input type="checkbox" data-q="${esc(x.id)}" ${x.on ? 'checked' : ''}></td></tr>`).join('') || '<tr><td colspan="5" class="note">還沒有題目</td></tr>';
+    $('aBank').querySelectorAll('[data-q]').forEach(c => c.onchange = async () => { try { await run('adminEvalSetQ', c.dataset.q, c.checked); } catch (e) { toast(e.message, 4000); c.checked = !c.checked; } });
+  } catch (e) { $('aBankK').innerHTML = `<p class="bad">${esc(e.message)}</p>`; }
+}
+const aBusy = (b, on) => { b.disabled = on; };
+$('aGen').onclick = async () => {
+  const b = $('aGen'); aBusy(b, true); let added = 0;
+  try {
+    const plan = await run('adminEvalGenPlan', +$('aGenN').value);
+    if (!plan.picked) throw new Error('沒有已核可的段落');
+    for (let i = 0; i < plan.batches; i++) {
+      $('aBankStatus').textContent = `出題中 ${i + 1}／${plan.batches}…（已出 ${added} 題）`;
+      try { const r = await run('adminEvalGenBatch', plan.ids.slice(i * 6, i * 6 + 6)); added += r.added; } catch (e) { }
+    }
+    $('aBankStatus').textContent = `完成：新增 ${added} 題`; loadBank();
+  } catch (e) { $('aBankStatus').textContent = '失敗：' + e.message; } finally { aBusy(b, false); }
+};
+$('aSp').onclick = async () => { const b = $('aSp'); aBusy(b, true); $('aBankStatus').textContent = '出題中…';
+  try { const r = await run('adminEvalGenSpecial', +$('aSpN').value); $('aBankStatus').textContent = `新增 ${r.added} 題特殊題`; loadBank(); } catch (e) { $('aBankStatus').textContent = '失敗：' + e.message; } finally { aBusy(b, false); } };
+$('aLog').onclick = async () => { const b = $('aLog'); aBusy(b, true);
+  try { const r = await run('adminEvalImportLogs', +$('aLogN').value); $('aBankStatus').textContent = `匯入 ${r.added} 題真實提問`; loadBank(); } catch (e) { $('aBankStatus').textContent = '失敗：' + e.message; } finally { aBusy(b, false); } };
+$('aExpAdd').onclick = async () => { const b = $('aExpAdd'); aBusy(b, true);
+  try { const r = await run('adminEvalAddExpert', $('aExp').value); $('aExp').value = ''; $('aBankStatus').textContent = `加入 ${r.added} 題專家題`; loadBank(); } catch (e) { $('aBankStatus').textContent = '失敗：' + e.message; } finally { aBusy(b, false); } };
+$('aStop').onclick = () => { AStop = true; $('aStop').disabled = true; };
+$('aRun').onclick = async () => {
+  const b = $('aRun'); aBusy(b, true); AStop = false; $('aStop').hidden = false; $('aStop').disabled = false;
+  try {
+    const st = await run('adminEvalRunStart', { source: $('aSrc').value, max: +$('aMax').value, repeats: +$('aRep').value });
+    if (!st.jobs.length) throw new Error('沒有可評測的題目');
+    let done = 0, fail = 0;
+    for (const j of st.jobs) {
+      if (AStop) break;
+      $('aRunStatus').textContent = `評測中 ${done + 1}／${st.jobs.length}（${st.questions} 題 × ${st.repeats} 次）${fail ? `，失敗 ${fail}` : ''}…`;
+      try { await run('adminEvalRunOne', st.run, j.q, j.k); } catch (e) { fail++; }
+      done++;
+    }
+    $('aRunStatus').textContent = (AStop ? '已停止：' : '完成：') + `${done} 筆` + (fail ? `，失敗 ${fail} 筆` : '');
+    await loadRuns(st.run);
+  } catch (e) { $('aRunStatus').textContent = '失敗：' + e.message; } finally { aBusy(b, false); $('aStop').hidden = true; }
+};
+async function loadRuns(select) {
+  try {
+    const rs = await run('adminEvalRuns');
+    $('aRuns').innerHTML = rs.map(r => `<option value="${esc(r.run)}">${esc(r.time)}｜${r.n} 筆｜回答 ${esc(r.model)}｜評分 ${esc(r.judge)}</option>`).join('') || '<option value="">還沒有評測結果</option>';
+    if (select) $('aRuns').value = select;
+    if ($('aRuns').value) loadSummary($('aRuns').value);
+  } catch (e) { toast(e.message, 4000); }
+}
+const P = v => v == null ? '—' : v + '%';
+const P1 = v => v == null ? '—' : Math.round(v * 100) + '%';
+async function loadSummary(runId) {
+  $('aK').innerHTML = '<p class="note">載入中…</p>';
+  try {
+    const S = await run('adminEvalSummary', runId); const a = S.all;
+    $('aK').innerHTML =
+      k(P(a.retrieval.hit), '1. 找對段落', `文件層級 ${P(a.retrieval.docHit)}｜MRR ${a.retrieval.mrr == null ? '—' : a.retrieval.mrr}｜${a.retrieval.n} 題有標準段落`) +
+      k(P(a.relevance.score), '2. 對題', `涵蓋重點 ${P1(a.relevance.coverage)}`) +
+      k(P1(a.grounded.score), '3. 依據', '策略能在引用段落找到的比例') +
+      k(P(a.safety.pass), '4. 安全', `未通過 ${a.safety.fail}｜注意 ${a.safety.warn}`, a.safety.fail ? 'bad' : '') +
+      k(a.consistency ? P(a.consistency.sameType) : P(a.format.issues == null ? null : Math.round((100 - a.format.issues) * 10) / 10), '5. 穩定',
+        (a.consistency ? `多次回應類型一致｜對題分數差 ${a.consistency.relSpread == null ? '—' : a.consistency.relSpread}｜` : '') + `格式問題 ${P(a.format.issues)}${a.format.errors ? `｜執行失敗 ${a.format.errors}` : ''}`);
+    const tbl = (o, title) => `<b>${title}</b><div class="list" style="margin:4px 0 10px"><table><thead><tr><th></th><th class="num">筆數</th><th class="num">找對段落</th><th class="num">對題</th><th class="num">涵蓋</th><th class="num">依據</th><th class="num">安全</th></tr></thead><tbody>${Object.keys(o).map(x => { const v = o[x]; return `<tr><td>${esc(x)}</td><td class="num">${v.n}</td><td class="num">${P(v.retrieval.hit)}</td><td class="num">${P(v.relevance.score)}</td><td class="num">${P1(v.relevance.coverage)}</td><td class="num">${P1(v.grounded.score)}</td><td class="num">${P(v.safety.pass)}</td></tr>`; }).join('')}</tbody></table></div>`;
+    $('aBreak').innerHTML = `<p class="note">回答模型 ${esc(S.models.answer || '')}｜評分模型 ${esc(S.models.judge || '')}</p>` + tbl(S.byType, '依題目類型') + tbl(S.bySource, '依題目來源');
+    $('aAgree').textContent = S.agreement.reviewed ? `已抽查 ${S.agreement.reviewed} 題，同意 AI 評分 ${S.agreement.agree}%｜待抽查 ${S.agreement.pending}` : `待抽查 ${S.agreement.pending} 題`;
+    $('aReview').innerHTML = S.review.map(x => `<div class="cand" data-row="${x.row}">
+      <div class="row" style="justify-content:space-between"><b>${esc(x.q)}</b><span class="note">${esc(x.source)}｜${esc(x.type)}｜${esc(TN[x.resp] || x.resp)}</span></div>
+      <div class="note">找對段落：${esc(x.hit || '—')}｜對題：${x.rel == null ? '—' : x.rel + '/2'}｜涵蓋：${P1(x.cov)}｜依據：${P1(x.grd)}｜安全：<span class="${x.safety === '未通過' ? 'bad' : ''}">${esc(x.safety || '—')}</span>${x.safetyNote ? '（' + esc(x.safetyNote) + '）' : ''}</div>
+      ${x.note ? `<div class="note">評審說明：${esc(x.note)}</div>` : ''}<div class="q">${esc(x.answer)}</div>
+      <div class="row"><input type="text" data-c placeholder="意見（選填）" value="${esc(x.comment)}" style="flex:1;min-width:160px"><button class="btn ${x.status === '同意' ? 'pri' : ''}" data-s="同意">同意評分</button><button class="btn ${x.status === '不同意' ? 'pri' : ''}" data-s="不同意">不同意</button></div></div>`).join('') || '<p class="note">這次沒有需要抽查的題目</p>';
+    $('aReview').querySelectorAll('[data-s]').forEach(btn => btn.onclick = async () => {
+      const box = btn.closest('[data-row]');
+      try { await run('adminEvalReview', +box.dataset.row, btn.dataset.s, box.querySelector('[data-c]').value); box.querySelectorAll('[data-s]').forEach(x => x.classList.toggle('pri', x === btn)); toast('已記錄'); }
+      catch (e) { toast(e.message, 4000); }
+    });
+  } catch (e) { $('aK').innerHTML = `<p class="bad">${esc(e.message)}</p>`; }
+}
+$('aRuns').onchange = () => $('aRuns').value && loadSummary($('aRuns').value);
+$('aRunsLoad').onclick = () => loadRuns($('aRuns').value);
+document.querySelector('nav button[data-t="auto"]').addEventListener('click', () => { if (!AB) { loadBank(); loadRuns(); } });
+
+// ---------- 問題統計 ----------
+let Q = null;
+const cnt = (o, total, extra) => Object.keys(o).sort((a, b) => o[b] - o[a]).map(x => `<li>${esc(x)} <b>${o[x]}</b>${total ? ` <span class="note">${Math.round(o[x] / total * 100)}%</span>` : ''}${extra ? extra(x) : ''}</li>`).join('') || '<li class="note">沒有</li>';
+async function loadQA() {
+  $('qLoad').disabled = true; $('qGap').innerHTML = $('qL5').innerHTML = '<p class="note">載入中…</p>';
+  try {
+    const r = await run('adminLogs', { days: +$('qDays').value, includeTest: $('qTest').checked });
+    Q = r.quality; const g = Q.gap, l = Q.l5;
+    const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '—';
+    $('qKpis').innerHTML = k(Q.turns, '統計回合') + k(pct(g.n, Q.retrieval), '知識不足比例', g.n + '／' + Q.retrieval + ' 個有檢索的回合', g.n && g.n / Math.max(1, Q.retrieval) > 0.2 ? 'bad' : '') +
+      k(g.byOutcome['保守回答'] || 0, '知識不足 → 保守回答') + k(g.byOutcome['AI 補足'] || 0, '知識不足 → AI 補足') +
+      k(pct(l.any, l.checked), 'L5 有發現問題', l.any + '／' + l.checked + ' 個回答') + k(l.severe, '有嚴重問題', '會擋下並重寫', l.severe ? 'bad' : '') +
+      k(l.outcome['重寫後仍未通過 → 保守回答'] || 0, '重寫後仍未通過', '最後給保守回答');
+    $('qGap').innerHTML = !g.n ? '<p class="note">這段期間沒有知識不足的情況</p>' :
+      `<b>原因</b><ul style="margin:2px 0 6px;padding-left:18px">${cnt(g.byKind, g.n)}</ul>` +
+      `<b>處理方式</b><ul style="margin:2px 0 6px;padding-left:18px">${cnt(g.byOutcome, g.n)}</ul>` +
+      `<b>依主題</b> <span class="note">哪些主題最缺資料</span><ul style="margin:2px 0 6px;padding-left:18px">${cnt(g.byTopic, g.n)}</ul>` +
+      `<b>老師想要但找不到的</b> <span class="note">（提問焦點）</span><div class="list" style="max-height:360px;margin-top:4px"><table><thead><tr><th>時間</th><th>提問焦點／原話</th><th>原因</th></tr></thead><tbody>${g.list.slice(0, 80).map(x =>
+        `<tr><td class="note"><a data-row="${x.row}" style="cursor:pointer">${esc(x.time.slice(5, 16))}</a></td><td>${esc(x.focus || x.msg)}${x.focus && x.focus !== x.msg ? `<br><span class="note">${esc(x.msg.slice(0, 60))}</span>` : ''}</td><td class="note">${esc(x.kind)}<br>${esc(x.outcome)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('qL5').innerHTML = !l.any ? '<p class="note">這段期間 L5 沒有發現問題（或 L5 未開啟）</p>' :
+      `<b>問題類型</b> <span class="note">次數（其中嚴重）</span><ul style="margin:2px 0 6px;padding-left:18px">${cnt(l.byType, 0, x => l.severeByType[x] ? ` <span class="bad">嚴重 ${l.severeByType[x]}</span>` : '')}</ul>` +
+      `<b>結果</b><ul style="margin:2px 0 6px;padding-left:18px">${cnt(l.outcome, l.any)}</ul>` +
+      `<b>最近的例子</b><div class="list" style="max-height:360px;margin-top:4px"><table><thead><tr><th>時間</th><th>問題</th></tr></thead><tbody>${l.list.slice(0, 60).map(x =>
+        `<tr><td class="note"><a data-row="${x.row}" style="cursor:pointer">${esc(x.time.slice(5, 16))}</a><br>${esc(x.outcome)}</td><td>${x.items.map(i => `${i.severe ? '<span class="bad">【嚴重】</span>' : ''}${esc(i.type)}：${esc(i.note)}${i.attempt ? ' <span class="note">（重寫版）</span>' : ''}`).join('<br>')}<br><span class="note">${esc(x.msg.slice(0, 60))}</span></td></tr>`).join('')}</tbody></table></div>`;
+    document.querySelectorAll('#qGap a[data-row], #qL5 a[data-row]').forEach(a => a.onclick = () => openDetail(+a.dataset.row));
+  } catch (e) { $('qGap').innerHTML = `<p class="bad">${esc(e.message)}</p>`; $('qL5').innerHTML = ''; }
+  finally { $('qLoad').disabled = false; }
+}
+['qDays', 'qTest'].forEach(id => $(id).onchange = loadQA);
+$('qLoad').onclick = loadQA;
+document.querySelector('nav button[data-t="qa"]').addEventListener('click', () => { if (!Q) loadQA(); });
+$('qCsv').onclick = () => {
+  if (!Q || !Q.gap.list.length) return toast('沒有資料');
+  const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = '\ufeff' + [['時間', '單位', '提問焦點', '老師原話（去識別化）', '原因', '處理方式', '主題', '最高相似度']].concat(Q.gap.list.map(x => [x.time, x.school, x.focus, x.msg, x.kind, x.outcome, x.topics, x.top])).map(r => r.map(cell).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = '知識不足清單-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+};
+
+// 側邊明細
+let SD = null, sTab = 'trace';
+function replyText(t, rep) {
+  if (rep == null || rep === '') return '';
+  if (typeof rep === 'string') return rep;
+  if (Array.isArray(rep)) return rep.map((q, i) => (i + 1) + '. ' + q).join('\n');
+  if (rep.strategies) return [rep.empathy, ...(rep.strategies || []).map((s, i) => `${i + 1}. ${s.title}：${s.how} [${(s.refs || []).join(',')}]`)].filter(Boolean).join('\n');
+  return JSON.stringify(rep, null, 1);
+}
+function renderSide() {
+  document.querySelectorAll('.side-tabs button').forEach(b => b.classList.toggle('on', b.dataset.st === sTab));
+  if (!SD) return;
+  if (sTab === 'trace') $('sBody').innerHTML = TraceView.render(SD);
+  if (sTab === 'conv') $('sBody').innerHTML = '<div class="conv">' + SD.turns.map(t => `<div class="msg t ${t.row === SD.row ? 'cur' : ''}"><span class="note">第 ${esc(t.turn)} 輪｜${esc(t.time)}</span>\n${esc(t.msg)}</div>
+    <div class="msg ${t.row === SD.row ? 'cur' : ''}"><b class="t-${esc(t.type)}">${esc(TN[t.type] || t.type)}</b>${t.fb ? '｜' + esc(t.fb) : ''}\n${esc(replyText(t.type, t.reply))}</div>`).join('') + '</div>';
+  if (sTab === 'raw') $('sBody').innerHTML = `<div class="msg t">${esc(SD.msg)}</div><p class="note">分流</p><pre class="chunk">${esc(JSON.stringify(SD.triage, null, 1))}</pre><p class="note">回答（JSON）</p><pre class="chunk">${esc(JSON.stringify(SD.reply, null, 1))}</pre><p class="note">引用：${esc(SD.sources || '無')}</p>`;
+}
+async function openDetail(row) {
+  $('side').classList.add('open'); $('side').setAttribute('aria-hidden', 'false'); $('sBody').innerHTML = '<p class="note">載入中…</p>';
+  document.querySelectorAll('#lRows tr').forEach(tr => tr.classList.toggle('sel', +tr.dataset.row === row));
+  try {
+    SD = await run('adminLogDetail', row);
+    $('sTitle').textContent = `第 ${SD.turn} 輪｜${TN[SD.type] || SD.type}`;
+    $('sSub').textContent = `${SD.time}｜${SD.school}｜Session ${SD.session.slice(0, 8)}`;
+    renderSide();
+  } catch (e) { $('sBody').innerHTML = `<p style="color:#b23a3a">${esc(e.message)}</p>`; }
+}
+document.querySelectorAll('.side-tabs button').forEach(b => b.onclick = () => { sTab = b.dataset.st; renderSide(); });
+$('sClose').onclick = () => { $('side').classList.remove('open'); $('side').setAttribute('aria-hidden', 'true'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('sClose').click(); });
+
+// ---------- 命中率測試 ----------
+let evalLoaded = false;
+function renderEvalDocs() {
+  $('eDoc').innerHTML = D.docs.filter(d => d.status === '已核可').map(d => `<option value="${esc(d.id)}">${esc(d.title)}（${esc(d.id)}）</option>`).join('') || '<option value="">（還沒有已核可的文件）</option>';
+}
+function renderEvalRows(list) {
+  const title = id => (D.docs.find(d => d.id === id) || {}).title || id;
+  $('eRows').innerHTML = list.map(r => `<tr><td>${esc(r.q)}${r.note ? '<br><span class="note">' + esc(r.note) + '</span>' : ''}</td>
+    <td class="note">${String(r.expect).split(/[,，、\s]+/).filter(Boolean).map(x => esc(title(x))).join('<br>')}</td>
+    <td class="res-${esc(r.result)}">${esc(r.result || '未測')}</td><td class="num">${esc(r.rank || '')}</td><td class="num">${esc(r.top || '')}</td>
+    <td class="note">${esc(r.hit || '')}${r.cands ? '<details><summary>前 5 名</summary>' + r.cands.map((c, i) => `<div class="${c.ok ? 'cand-ok' : ''}">${i + 1}. ${esc(c.title)}${c.page ? ' p.' + esc(c.page) : ''}（${c.score}${c.pass ? '' : '，未達門檻'}）</div>`).join('') + '</details>' : ''}</td>
+    <td><button class="btn" data-del="${r.row}">刪除</button></td></tr>`).join('') || '<tr><td colspan="7" class="note">還沒有測試題。建議每份重要文件至少寫 2–3 題老師的口語問法。</td></tr>';
+  $('eRows').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { b.disabled = true; try { renderEvalRows(await run('adminDeleteEval', +b.dataset.del)); } catch (e) { toast(e.message, 4000); } });
+}
+async function loadEval() { try { renderEvalRows(await run('adminEvalList')); evalLoaded = true; } catch (e) { $('eRows').innerHTML = `<tr><td colspan="7" style="color:#b23a3a">${esc(e.message)}</td></tr>`; } }
+document.querySelector('nav button[data-t="eval"]').addEventListener('click', () => { if (!evalLoaded) loadEval(); });
+$('eAdd').onclick = async () => {
+  const q = $('eQ').value.trim(), d = $('eDoc').value;
+  if (!q || !d) return toast('請填寫測試問題並選擇文件');
+  $('eAdd').disabled = true;
+  try { renderEvalRows(await run('adminAddEval', q, d, $('eNote').value.trim())); $('eQ').value = ''; $('eNote').value = ''; toast('已加入'); }
+  catch (e) { toast(e.message, 4000); } finally { $('eAdd').disabled = false; }
+};
+$('eRun').onclick = async () => {
+  $('eRun').disabled = true; $('eStatus').textContent = '測試中…每題做一次檢索，題目多時需要幾十秒';
+  try {
+    const r = await run('adminRunEval');
+    $('eKpis').innerHTML = k(r.hitRate + '%', 'Hit@' + r.topK, '應命中文件出現在採用段落中的題目比例', r.hitRate < 80 ? 'bad' : '') +
+      k(r.mrr, 'MRR', '1＝每題都排第一') + k(r.avgTop, '平均最高分', '目前門檻 ' + r.minScore) + k(r.n, '題數');
+    renderEvalRows(r.results);
+    const below = r.results.filter(x => x.result === '未達門檻').length, miss = r.results.filter(x => x.result === '沒找到').length;
+    $('eStatus').textContent = `完成。${below ? below + ' 題有找到但分數低於門檻（可考慮調低 min_score 或補同義詞）；' : ''}${miss ? miss + ' 題前 10 名都沒有（文件可能缺內容或切段不好）' : ''}`;
+  } catch (e) { $('eStatus').textContent = '測試失敗：' + e.message; } finally { $('eRun').disabled = false; }
+};
+
+// ---------- 知識圖譜 ----------
+let G = null;
+async function loadGraph() {
+  try { G = await run('adminGraphLoad'); } catch (e) { $('kgStats').innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
+  const ms = (D && D.settings || []).find(s => s.key === 'enable_node_mapping');
+  $('kgAuto').checked = !!ms && String(ms.value).toUpperCase() === 'TRUE'; $('kgAuto').disabled = !ms;
+  const todo = G.todo || [];
+  $('kgDoc').innerHTML = todo.map(d => `<option value="${esc(d.id)}">${esc(d.title)}（${esc(d.status)}，${d.todo} 段未標）</option>`).join('') || '<option value="">（全部文件都已標註）</option>';
+  $('kgTodo').textContent = todo.length ? `${todo.length} 份文件、共 ${todo.reduce((a, d) => a + d.todo, 0)} 段未標註` : '全部文件都已標註';
+  $('kgMapAll').disabled = !todo.length;
+  if (G.empty) { $('kgMapAll').disabled = true; $('kgTodo').textContent = '需先匯入圖譜'; $('kgStats').innerHTML = '<p class="note">尚未匯入知識圖譜。請先在下方上傳 knowledge-graph.json（若出現找不到工作表，請先執行 setup()）。</p>'; $('kgCands').innerHTML = ''; $('kgRows').innerHTML = ''; $('kgCandN').textContent = 0; return; }
+  const s = G.stats;
+  const k = (n, l, sm) => `<div class="kpi"><b>${n}</b><span>${l}</span>${sm ? `<small>${sm}</small>` : ''}</div>`;
+  $('kgStats').innerHTML = k(s.nodes, '節點') + k(s.edges, '關係') + k(s.sources, '來源') + k(s.links, '段落對應') + k(s.covered + '／' + s.nodes, '有已核可內容的節點', Math.round(s.covered / Math.max(1, s.nodes) * 100) + '%') + k(s.pending, '待審核候選');
+  renderCands(); renderNodes();
+}
+function nodeOptions(sel) { return '<option value="">（無上層）</option>' + G.nodes.filter(n => n.status !== '停用').map(n => `<option value="${esc(n.id)}" ${n.id === sel ? 'selected' : ''}>${esc(n.label)}｜${esc(n.path.split(' > ').slice(-1)[0] || '')}</option>`).join(''); }
+function renderCands() {
+  $('kgCandN').textContent = G.cands.length;
+  $('kgCands').innerHTML = G.cands.map(c => `<div class="cand" data-id="${esc(c.id)}">
+    <div class="row" style="justify-content:space-between"><b>${esc(c.name)}</b><span class="note">${c.count} 次提到｜來自：${esc(c.doc)}</span></div>
+    <div class="note">${esc(c.def)}</div>
+    ${c.reason ? `<div class="note">AI 理由：${esc(c.reason)}</div>` : ''}
+    ${c.rel ? `<div class="note">建議關係：本節點 → ${esc(c.rel.label)} → ${esc(c.rel.targetLabel)}</div>` : ''}
+    <div class="warn" data-w>${(c.warns || []).map(esc).join('<br>')}</div>
+    ${c.snippet ? `<div class="q">${esc(c.snippet)}…</div>` : ''}
+    <div class="grid3" style="margin-top:6px">
+      <div><label>名稱</label><input type="text" data-f="name" value="${esc(c.name)}"></div>
+      <div><label>上層節點</label><select data-f="parent">${nodeOptions(c.parent)}</select></div>
+      <div><label>類型</label><select data-f="type">${G.types.map(t => `<option ${t === c.type ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <label>定義</label><input type="text" data-f="def" value="${esc(c.def)}">
+    <div class="row" style="margin-top:8px">
+      <button class="btn pri" data-a="approve">核可為新節點</button>
+      <select data-f="target" style="width:auto;max-width:260px">${nodeOptions('').replace('（無上層）', '合併到…')}</select><button class="btn" data-a="merge">合併</button>
+      <button class="btn" data-a="skip">略過</button>
+    </div></div>`).join('') || '<p class="note">目前沒有待審核的候選。</p>';
+  // 改上層或類型時，即時檢查這種接法在圖譜裡常不常見（只提醒）
+  $('kgCands').querySelectorAll('.cand').forEach(box => {
+    const c = G.cands.find(x => x.id === box.dataset.id);
+    const chk = () => {
+      const p = box.querySelector('[data-f="parent"]').value, t = box.querySelector('[data-f="type"]').value; const w = [];
+      if (p) { const m = G.pairs.hasPart || {}; if (!m[G.nodeTypes[p] + '>' + t]) w.push(`上層：圖譜裡沒有「${G.nodeTypes[p]} →包含→ ${t}」這種接法，請確認`); }
+      if (c.rel && c.rel.type !== 'relatedTo' && G.nodeTypes[c.rel.target]) { const m = G.pairs[c.rel.type] || {}; if (!m[t + '>' + G.nodeTypes[c.rel.target]]) w.push(`建議關係：圖譜裡沒有「${t} →${c.rel.label}→ ${G.nodeTypes[c.rel.target]}」這種接法，請確認`); }
+      box.querySelector('[data-w]').innerHTML = w.map(esc).join('<br>');
+    };
+    box.querySelector('[data-f="parent"]').onchange = chk; box.querySelector('[data-f="type"]').onchange = chk;
+  });
+  $('kgCands').querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+    const box = b.closest('.cand'); const f = n => box.querySelector(`[data-f="${n}"]`).value;
+    const a = b.dataset.a; const opts = a === 'approve' ? { name: f('name'), parent: f('parent'), type: f('type'), def: f('def') } : a === 'merge' ? { target: f('target') } : {};
+    if (a === 'merge' && !opts.target) return toast('請先選擇要合併到的節點');
+    box.querySelectorAll('button').forEach(x => x.disabled = true);
+    try { await run('adminCandAction', box.dataset.id, a, opts); toast(a === 'approve' ? '已新增節點' : a === 'merge' ? '已合併' : '已略過'); loadGraph(); }
+    catch (e) { toast(e.message, 4000); box.querySelectorAll('button').forEach(x => x.disabled = false); }
+  });
+}
+function renderNodes() {
+  const q = $('kgQ').value.trim(), f = $('kgF').value;
+  const list = G.nodes.filter(n => (!q || (n.label + n.path + n.syn).includes(q)) &&
+    (!f || (f === 'none' && n.ok === 0) || (f === 'noact' && n.act === 0) || (f === 'has' && n.ok > 0) || (f === 'prop' && n.from === '文件提案')));
+  $('kgCount').textContent = `${list.length} 個節點`;
+  $('kgRows').innerHTML = list.map(n => `<tr><td>${esc(n.label)}${n.status === '停用' ? ' <span class="pill 停用">停用</span>' : ''}${n.from === '文件提案' ? ' <span class="pill">提案</span>' : ''}${n.syn ? `<br><span class="note">也叫：${esc(n.syn)}</span>` : ''}</td><td class="note">${esc(n.type)}</td><td class="note">${esc(n.path)}</td><td class="num">${n.all}</td><td class="num ${n.ok ? '' : 'zero'}">${n.ok}</td><td class="num ${n.act ? '' : 'zero'}">${n.act}</td><td class="num note">${n.sub}</td></tr>`).join('');
+}
+$('kgQ').oninput = () => G && !G.empty && renderNodes();
+$('kgF').onchange = () => G && !G.empty && renderNodes();
+$('kgImport').onclick = async () => {
+  const f = $('kgFile').files[0]; if (!f) return toast('請選擇 knowledge-graph.json');
+  $('kgImport').disabled = true; $('kgImpStatus').textContent = '匯入中…';
+  try { const r = await run('adminImportKG', await f.text()); $('kgImpStatus').textContent = `完成：${r.nodes} 個節點、${r.edges} 條關係、${r.sources} 個來源、${r.defs} 筆類型與關係定義${r.kept ? `（保留提案節點 ${r.kept} 個）` : ''}`; $('kgFile').value = ''; loadGraph(); }
+  catch (e) { $('kgImpStatus').textContent = '匯入失敗：' + e.message; } finally { $('kgImport').disabled = false; }
+};
+$('kgAuto').onchange = async () => {
+  const on = $('kgAuto').checked;
+  try { await run('adminSaveSettings', [{ key: 'enable_node_mapping', value: on }]); const s = D.settings.find(x => x.key === 'enable_node_mapping'); if (s) s.value = on; renderSettings(); toast(on ? '已開啟：上傳時就標註' : '已關閉：上傳時不標註'); }
+  catch (e) { $('kgAuto').checked = !on; toast(e.message, 4000); }
+};
+// 一份一份送，避免單次執行超過 Apps Script 6 分鐘上限
+$('kgMapAll').onclick = async () => {
+  const todo = (G && G.todo) || []; if (!todo.length) return;
+  $('kgMapAll').disabled = true; $('kgMap').disabled = true; let links = 0, cands = 0, fail = [];
+  for (let i = 0; i < todo.length; i++) {
+    $('kgMapStatus').textContent = `標註中 ${i + 1}／${todo.length}：${todo[i].title}…`;
+    try { const r = await run('adminMapDoc', todo[i].id); links += r.links || 0; cands += r.candidates || 0; }
+    catch (e) { fail.push(todo[i].title + '：' + e.message); }
+  }
+  $('kgMapStatus').textContent = `完成：標註 ${links} 筆，新候選 ${cands} 個。` + (fail.length ? `\n失敗 ${fail.length} 份（可再按一次補標）：\n` + fail.join('\n') : '');
+  $('kgMap').disabled = false; loadGraph();
+};
+$('kgMap').onclick = async () => {
+  const id = $('kgDoc').value; if (!id) return;
+  $('kgMap').disabled = true; $('kgMapStatus').textContent = '對應中，可能需要 1–2 分鐘…';
+  try { const r = await run('adminMapDoc', id); $('kgMapStatus').textContent = r.skipped ? r.skipped : `完成：標註 ${r.links} 筆（主要 ${r.main}），新候選 ${r.candidates} 個`; loadGraph(); }
+  catch (e) { $('kgMapStatus').textContent = '失敗：' + e.message; } finally { $('kgMap').disabled = false; }
+};
+document.querySelector('nav button[data-t="kg"]').addEventListener('click', loadGraph);
+// ---------- 產生圖譜檔案 ----------
+let KGEN = null;
+$('kgGen').onclick = async () => {
+  $('kgGen').disabled = true; $('kgGenStatus').textContent = '統計文件中…'; $('kgGenOut').hidden = true;
+  try {
+    KGEN = await run('adminKgGenStart');
+    $('kgGenStatus').textContent = '';
+    if (!KGEN.chunks) { toast('沒有已核可的文件，請先上傳並核可文件', 5000); return; }
+    $('kgGenInfo').innerHTML = [
+      `將讀取已核可文件 <b>${KGEN.docs}</b> 份、共 <b>${KGEN.chunks}</b> 段，分 ${KGEN.batches} 批處理，約需 ${Math.max(1, Math.round(KGEN.batches * 20 / 60))}–${Math.max(2, Math.round(KGEN.batches * 40 / 60))} 分鐘，並會使用「回答模型」呼叫 AI 約 ${KGEN.batches + 1} 次（會產生費用）。處理期間請不要關閉這個頁面。`,
+      KGEN.few ? '<span class="bad">資料偏少（建議至少 10 份文件、80 段以上）：產生的主題與階層容易偏向少數文件，未必正確，請當作草稿參考。</span>' : '資料量越多、涵蓋越廣，結果越穩定；結果仍是 AI 草稿，需專家逐一確認。',
+      '只產生檔案下載，不會改動系統裡現有的圖譜與標註。',
+      '若之後匯入這份圖譜，節點會整批更換，所有文件需要<b>重新標註</b>（到下方「標註文件」執行）；標註不需要重新產生向量。',
+    ].map(x => `<li>${x}</li>`).join('');
+    $('kgGenWarn').hidden = false;
+  } catch (e) { $('kgGenStatus').textContent = '失敗：' + e.message; } finally { $('kgGen').disabled = false; }
+};
+$('kgGenCancel').onclick = () => { $('kgGenWarn').hidden = true; };
+$('kgGenGo').onclick = async () => {
+  $('kgGenWarn').hidden = true; $('kgGen').disabled = true;
+  const items = []; const fails = [];
+  try {
+    for (let i = 0; i < KGEN.batches; i++) {
+      $('kgGenStatus').textContent = `抽取概念中 ${i + 1}／${KGEN.batches}…（已找到 ${items.length} 個）`;
+      try { const r = await run('adminKgGenBatch', i); items.push(...r.items); }
+      catch (e) { try { const r = await run('adminKgGenBatch', i); items.push(...r.items); } catch (e2) { fails.push(i + 1); } }
+    }
+    if (!items.length) throw new Error('沒有抽出任何概念');
+    $('kgGenStatus').textContent = `整理階層與關係中…（${items.length} 個概念）`;
+    const r = await run('adminKgGenFinish', items);
+    const dl = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type })); a.download = name; a.textContent = name; a.className = 'btn'; a.style.textDecoration = 'none'; return a; };
+    const out = $('kgGenOut'); out.innerHTML = `<p style="margin:0 0 6px">完成：抽出 ${r.extracted} 筆 → 合併成 ${r.merged} 個概念 → 保留 ${r.kept} 個；共 ${r.stats.nodes} 個節點（含主軸與子分類）、${r.stats.edges} 條關係、${r.stats.sources} 份來源文件。${fails.length ? `<span class="bad">第 ${fails.join('、')} 批失敗，結果可能不完整。</span>` : ''}</p>`;
+    const row = document.createElement('div'); row.className = 'row';
+    const stamp = new Date().toISOString().slice(0, 10);
+    row.appendChild(dl('knowledge-graph-' + stamp + '.json', r.json, 'application/json'));
+    row.appendChild(dl('ontology-' + stamp + '.ttl', r.ttl, 'text/turtle'));
+    out.appendChild(row); out.hidden = false;
+    $('kgGenStatus').textContent = '';
+  } catch (e) { $('kgGenStatus').textContent = '產生失敗：' + e.message; } finally { $('kgGen').disabled = false; }
+};
+
+$('loginForm').onsubmit = async (e) => {
+  e.preventDefault(); $('lgBtn').disabled = true; $('lgErr').textContent = '';
+  try {
+    const r = await callRaw('adminLogin', $('lgUser').value, $('lgPass').value);
+    TOKEN = r.token; try { sessionStorage.setItem('adm-token', TOKEN); } catch (er) {}
+    $('lgPass').value = ''; load();
+  } catch (er) { $('lgErr').textContent = er.message; } finally { $('lgBtn').disabled = false; }
+};
+$('logout').onclick = async () => { try { await callRaw('adminLogout', TOKEN); } catch (e) {} TOKEN = ''; try { sessionStorage.removeItem('adm-token'); } catch (e) {} location.reload(); };
+
+load();
+</script>
+</body>
+</html>

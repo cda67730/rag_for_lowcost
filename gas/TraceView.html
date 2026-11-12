@@ -1,0 +1,126 @@
+<script>
+/**
+ * 流程觀測面板的呈現（聊天頁與後台共用同一份）
+ * 修改這個檔案後，執行 `node rag/sync-trace.js` 產生 rag/gas/TraceView.html 給後台用
+ */
+(function () {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const TYPE = { answer: ["回答", "ok"], continue: ["延續回覆", "ok"], ai_fallback: ["AI 補足", "warn"], followup: ["追問", "info"], referral: ["緊急轉介", "crit"], conservative: ["保守回答", "warn"], out_of_scope: ["超出範圍", "muted"] };
+  const CSS = `
+.tv{--tv-line:var(--line,#dce2e8);--tv-muted:var(--muted,#5e6b78);--tv-accent:var(--accent,#1e7f7d);--tv-soft:var(--soft,#e2f2f1);--tv-bg:var(--bg,#f5f7f9);
+  --tv-ok:#2e7d4f;--tv-warn:#a86a12;--tv-crit:#b23a3a;font-size:13px;line-height:1.6}
+@media (prefers-color-scheme:dark){.tv{--tv-ok:#7fd1a0;--tv-warn:#e8b45c;--tv-crit:#ee8a8a}}
+.tv-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.tv-kpi{border:1px solid var(--tv-line);border-radius:8px;padding:6px 8px}
+.tv-kpi b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+.tv-kpi span{color:var(--tv-muted);font-size:11px}
+.tv-tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:11px;border:1px solid currentColor;margin:0 4px 2px 0}
+.tv-ok{color:var(--tv-ok)}.tv-warn{color:var(--tv-warn)}.tv-crit{color:var(--tv-crit)}.tv-info{color:var(--tv-accent)}.tv-muted{color:var(--tv-muted)}
+.tv-steps{border-left:2px solid var(--tv-line);margin-left:6px;padding-left:12px}
+.tv-step{position:relative;padding:0 0 12px}
+.tv-step:before{content:"";position:absolute;left:-18px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--tv-accent)}
+.tv-h{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.tv-h span{color:var(--tv-muted);font-weight:400;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tv-b{margin-top:4px;word-break:break-word}
+.tv-b pre{white-space:pre-wrap;margin:0;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;background:var(--tv-bg);border-radius:6px;padding:6px 8px;max-height:260px;overflow:auto}
+.tv-kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.tv-kv dt{color:var(--tv-muted)} .tv-kv dd{margin:0}
+.tv-cand{border:1px solid var(--tv-line);border-radius:8px;padding:6px 8px;margin-top:6px}
+.tv-cand.off{opacity:.62}
+.tv-cand-h{display:flex;gap:6px;align-items:baseline}
+.tv-cand-h .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-bar{position:relative;height:6px;background:var(--tv-line);border-radius:3px;margin:4px 0}
+.tv-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--tv-accent)}
+.tv-bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--tv-crit)}
+.tv-cand details summary{cursor:pointer;color:var(--tv-muted);font-size:12px}
+.tv-cand p{margin:4px 0 0;white-space:pre-wrap;font-size:12px}
+.tv-chk{display:flex;gap:6px}
+.tv details>summary{cursor:pointer}
+`;
+  function injectCss() {
+    if (document.getElementById("tv-css")) return;
+    const st = document.createElement("style"); st.id = "tv-css"; st.textContent = CSS; document.head.appendChild(st);
+  }
+  const kpi = (v, label, cls) => `<div class="tv-kpi"><b class="${cls || ""}">${v == null || v === "" ? "—" : esc(v)}</b><span>${esc(label)}</span></div>`;
+  const pre = (o) => `<pre>${esc(typeof o === "string" ? o : JSON.stringify(o, null, 1))}</pre>`;
+
+  function triage(t) {
+    t = t || {};
+    const ref = t.referral || {};
+    const refTxt = ref.category && ref.category !== "none" ? `<span class="tv-tag ${ref.level === "緊急" ? "tv-crit" : "tv-warn"}">${esc(ref.category)}・${esc(ref.level)}</span>${esc(ref.reason || "")}` : '<span class="tv-muted">不需要</span>';
+    return `<dl class="tv-kv">
+      ${t.focus ? `<dt>提問焦點</dt><dd><b>${esc(t.focus)}</b></dd>` : ""}
+      ${t.intent ? `<dt>意圖</dt><dd><span class="tv-tag ${t.intent === "與幼教無關" ? "tv-warn" : "tv-info"}">${esc(t.intent)}</span></dd>` : ""}
+      <dt>找專人</dt><dd>${refTxt}</dd>
+      <dt>主題</dt><dd>${(t.topics || []).map((x) => `<span class="tv-tag tv-info">${esc(x)}</span>`).join("") || '<span class="tv-muted">無</span>'}</dd>
+      <dt>服務範圍</dt><dd>${t.in_scope === false ? '<span class="tv-crit">超出範圍</span>' : "是"}</dd>
+      <dt>資訊足夠</dt><dd>${t.info_enough ? "是" : '<span class="tv-warn">否</span>'}${(t.missing || []).length ? "｜缺：" + esc(t.missing.join("、")) : ""}</dd></dl>`;
+  }
+  function retrieval(d, used) {
+    used = used || [];
+    const head = `<div class="tv-muted">知識庫 ${esc(d.total)} 段已核可｜門檻 ${esc(d.minScore)}｜最多取 ${esc(d.topK)} 段｜列出前 ${d.cands.length} 名</div>`;
+    if (!d.cands.length) return head + "<div>知識庫沒有已核可的段落</div>";
+    return head + d.cands.map((c) => {
+      const w = Math.max(0, Math.min(1, c.score)) * 100, m = Math.max(0, Math.min(1, d.minScore)) * 100;
+      const tag = used.indexOf(c.ref) >= 0 ? '<span class="tv-tag tv-ok">被引用</span>' : c.pass ? '<span class="tv-tag tv-info">候選</span>' : '<span class="tv-tag tv-muted">未達門檻</span>';
+      return `<div class="tv-cand ${c.pass ? "" : "off"}">
+        <div class="tv-cand-h"><b>#${c.rank}</b>${c.ref ? `<b>${esc(c.ref)}</b>` : ""}<span class="t" title="${esc(c.title)}">${esc(c.title)}${c.page ? " p." + esc(c.page) : ""}</span>${c.type ? `<span class="tv-tag tv-muted">${esc(c.type)}</span>` : ""}${tag}<b>${esc(c.score)}</b></div>
+        <div class="tv-bar" title="向量 ${esc(c.vec)} + 關鍵字 ${esc(c.kw)}×0.01"><i style="width:${w}%"></i><u style="left:${m}%"></u></div>
+        <details><summary>看段落內容（${esc(c.id)}）</summary><p>${esc(c.text)}…</p></details></div>`;
+    }).join("");
+  }
+  function rerank(d, used) {
+    used = used || [];
+    const SC = ["無關", "背景", "部分回答", "直接回答"];
+    const head = `<div class="tv-muted">${d.used ? "依提問焦點重新排序" + (d.model ? "（" + esc(d.model) + "）" : "") : "未重新排序（照向量順序" + (d.why ? "：" + esc(d.why) : "") + "）"}｜具體做法至少 ${esc(d.minAct)} 段｜原則／背景最多 ${esc(d.maxPri)} 段｜採用 ${esc(d.topK)} 段</div>`;
+    return head + (d.items || []).slice().sort((a, b) => (b.ref ? 1 : 0) - (a.ref ? 1 : 0) || (b.rerank == null ? 0 : b.rerank) - (a.rerank == null ? 0 : a.rerank)).map((x) =>
+      `<div class="tv-cand ${x.ref ? "" : "off"}"><div class="tv-cand-h">${x.ref ? `<b>${esc(x.ref)}</b>` : ""}<span class="t" title="${esc(x.title)}">${esc(x.title)}${x.page ? " p." + esc(x.page) : ""}</span>` +
+      `<span class="tv-tag tv-muted">${esc(x.type || "未分類")}</span>` +
+      (x.rerank == null ? "" : `<span class="tv-tag ${x.rerank >= 2 ? "tv-ok" : x.rerank === 1 ? "tv-warn" : "tv-muted"}">${SC[x.rerank] || x.rerank}</span>`) +
+      (used.indexOf(x.ref) >= 0 ? '<span class="tv-tag tv-ok">被引用</span>' : `<span class="tv-tag ${x.ref ? "tv-info" : "tv-muted"}">${x.ref ? "採用" : "未採用"}</span>`) + `</div></div>`).join("");
+  }
+  const checks = (items) => (items || []).map((c) => `<div class="tv-chk"><b class="${c.pass ? "tv-ok" : "tv-crit"}">${c.pass ? "✓" : "✗"}</b><span><b>${esc(c.name)}</b>：${esc(c.note)}</span></div>`).join("");
+  const skills = (list) => (list || []).map((s) => `<span class="tv-tag tv-info">${esc(s.name)}${s.version ? " v" + esc(s.version) : ""}${s.always ? "・一律" : ""}</span>`).join("");
+  function prompt(d) {
+    return `<div>${esc(d.summary || "")}</div>` + (d.prompt ? `<details><summary>看完整 prompt</summary>${pre(d.prompt)}</details>` : "");
+  }
+  function body(t, used) {
+    const d = t.detail;
+    try {
+      if (t.kind === "triage") return triage(d);
+      if (t.kind === "retrieval") return retrieval(d, used);
+      if (t.kind === "checks") return checks(d);
+      if (t.kind === "rerank") return rerank(d, used);
+      if (t.kind === "skills") return skills(d);
+      if (t.kind === "prompt") return prompt(d);
+    } catch (e) { /* 舊格式就直接顯示原始內容 */ }
+    if (typeof d === "string") return `<div style="white-space:pre-wrap">${esc(d)}</div>`;
+    return pre(d);
+  }
+
+  /** r：一次回覆（含 type、ms、metrics、trace、rewritten） */
+  function render(r) {
+    injectCss();
+    const m = r.metrics || {};
+    const ty = TYPE[r.type] || [r.type, ""];
+    const used = m.usedRefs || (r.sources || []).map((s) => s.ref);
+    let prev = 0;
+    const steps = (r.trace || []).map((t) => {
+      const dt = t.ms - prev; prev = t.ms;
+      return `<div class="tv-step"><div class="tv-h">${esc(t.step)}<span>+${dt} ms</span></div><div class="tv-b">${body(t, used)}</div></div>`;
+    }).join("");
+    return `<div class="tv">
+      <div class="tv-sum">
+        ${kpi(ty[0], "回應類型", "tv-" + ty[1])}
+        ${kpi(r.ms != null ? (r.ms / 1000).toFixed(1) + " 秒" : "", "總耗時")}
+        ${kpi((m.skills || []).length || "", "載入 Skill")}
+        ${kpi(m.retrieved, "檢索採用段數", m.retrieved === 0 ? "tv-crit" : "")}
+        ${kpi(m.top, "最高相似度")}
+        ${kpi(m.cited, "被引用段數")}
+      </div>
+      ${r.rewritten ? '<p class="tv-warn">⚠ 第一版沒通過檢查，已重寫一次</p>' : ""}
+      <div class="tv-steps">${steps || '<p class="tv-muted">沒有流程紀錄</p>'}</div></div>`;
+  }
+  window.TraceView = { render: render, esc: esc, TYPE: TYPE };
+})();
+</script>
