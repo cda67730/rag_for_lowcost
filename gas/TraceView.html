@@ -50,7 +50,7 @@
     const refTxt = ref.category && ref.category !== "none" ? `<span class="tv-tag ${ref.level === "緊急" ? "tv-crit" : "tv-warn"}">${esc(ref.category)}・${esc(ref.level)}</span>${esc(ref.reason || "")}` : '<span class="tv-muted">不需要</span>';
     return `<dl class="tv-kv">
       ${t.focus ? `<dt>提問焦點</dt><dd><b>${esc(t.focus)}</b></dd>` : ""}
-      ${t.intent ? `<dt>意圖</dt><dd><span class="tv-tag ${t.intent === "與幼教無關" ? "tv-warn" : "tv-info"}">${esc(t.intent)}</span></dd>` : ""}
+      ${t.intent ? `<dt>意圖</dt><dd><span class="tv-tag ${t.intent_key === "off" ? "tv-warn" : "tv-info"}">${esc(t.intent)}</span></dd>` : ""}
       <dt>找專人</dt><dd>${refTxt}</dd>
       <dt>主題</dt><dd>${(t.topics || []).map((x) => `<span class="tv-tag tv-info">${esc(x)}</span>`).join("") || '<span class="tv-muted">無</span>'}</dd>
       <dt>服務範圍</dt><dd>${t.in_scope === false ? '<span class="tv-crit">超出範圍</span>' : "是"}</dd>

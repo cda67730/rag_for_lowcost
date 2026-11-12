@@ -38,6 +38,14 @@ const REFERRAL_DEFAULT = [
 
 // ---------- 可在後台修改的文字（程式只負責格式與流程，內容都在這裡和「設定」工作表） ----------
 const TEXT_DEFAULTS = {
+  intents: [
+    '新個案＝換了一個{subject}或完全不同的狀況',
+    '補充同一個案＝回答追問或補充細節、說試過的結果',
+    '要求特定協助＝要家長訊息、觀察記錄、其他策略、找專人等具體東西',
+    '與主題無關＝閒聊、算數、與帶班無關',
+  ].join('\n'),
+  triage_focus_hint: '例如「收玩具時不再丟積木的具體做法」「怎麼跟家長開口」',
+  fallback_rules: '只能提供低風險、班級日常可做的做法（環境調整、預告、示範、正向回饋、觀察記錄等）；不得判斷行為功能、介入層級或推測診斷；來自一般知識的策略 refs 填空陣列；最後建議{user}把狀況整理給專業人員確認。',
   triage_rules: [
     '轉介等級：',
     '- 緊急：現在就要找人，例如孩子自述被大人傷害、老師有傷害自己的念頭、正在發生的醫療狀況',
@@ -69,16 +77,46 @@ const TEXT_DEFAULTS = {
   msg_ai_fallback: '目前知識庫內容不足，以下由 AI 協助補足，尚未經專家審核，請斟酌使用；必要時請和園長或特教巡迴輔導老師確認。',
   msg_out_of_scope: '這個問題超出幼兒園教保現場的範圍，建議洽詢相關專業人員。如果是班上孩子的狀況，歡迎描述你看到的情境。',
 };
-/** 讀文字設定；設定表沒有這一項時用預設值 */
+/** 讀文字設定；設定表沒有這一項時用預設值。{user}{subject}{escalate}{domain} 會換成「角色用詞」設定 */
 function text_(key) {
   const v = cfg_(key);
-  return v == null || String(v).trim() === '' ? (TEXT_DEFAULTS[key] || '') : String(v);
+  return tpl_(v == null || String(v).trim() === '' ? (TEXT_DEFAULTS[key] || '') : String(v));
 }
+// ---------- 角色用詞：提示詞骨架裡的稱呼都從設定來，換案子只要改這幾項 ----------
+const ROLE_DEFAULTS = { domain: 'AI 知識問答系統', user: '使用者', subject: '對方', escalate: '主管' };
+function roles_() {
+  const C = cfgAll_(), o = {};
+  ['domain', 'user', 'subject', 'escalate'].forEach(k => { const v = C[k === 'domain' ? 'domain_desc' : 'role_' + k]; o[k] = v == null || String(v).trim() === '' ? ROLE_DEFAULTS[k] : String(v).trim(); });
+  return o;
+}
+function tpl_(s) {
+  const R = roles_();
+  return String(s).replace(/\{(user|subject|escalate|domain)\}/g, (m, k) => R[k]);
+}
+// ---------- 意圖選項：一行一個「名稱＝說明」，順序固定對應 new／more／specific／off 四種流程處理 ----------
+const INTENT_KEYS = ['new', 'more', 'specific', 'off'];
+function intents_() {
+  const lines = text_('intents').split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const def = TEXT_DEFAULTS.intents.split('\n');
+  return INTENT_KEYS.map((k, i) => {
+    const p = String(lines[i] || def[i]).split(/[＝=]/);
+    return { key: k, name: p[0].trim(), desc: p.slice(1).join('＝').trim() };
+  });
+}
+function intentName_(key) { return (intents_().find(i => i.key === key) || {}).name || key; }
+function intentKey_(name) { return (intents_().find(i => i.name === String(name).trim()) || {}).key || null; }
 
 const SETTINGS_DEFAULT = [
     ['bot_name', '融合教育小幫手', '老師端顯示的名稱'],
     ['welcome', '你好，我是融合教育小幫手。說說班上遇到的狀況，我會先了解情境，再給你幾個馬上能用的做法。', '老師端的歡迎訊息'],
     ['system_prompt', SYSTEM_PROMPT_DEFAULT, '固定 system prompt（第 1 層）'],
+    ['domain_desc', '學前融合教育 AI 系統', '領域描述：分流器與審查器的 prompt 開頭「你是〔領域描述〕的分流器」'],
+    ['role_user', '老師', '提問者的稱呼；所有 prompt 裡的 {user} 都換成這個'],
+    ['role_subject', '孩子', '談論對象的稱呼（提問者在問誰的事）；{subject}'],
+    ['role_escalate', '園長或協同老師', '預設升級對象：轉介資源沒有「系統能力不足」時，保守回答建議找誰；{escalate}'],
+    ['intents', TEXT_DEFAULTS.intents, 'L4 意圖選項，一行一個「名稱＝說明」，順序固定：1 新個案（只看這一則）、2 補充同一個案、3 要求特定協助（不追問、延續回覆）、4 與主題無關（拒答）。只改名稱與說明，不要增減行'],
+    ['triage_focus_hint', TEXT_DEFAULTS.triage_focus_hint, 'L4 判斷「提問焦點」時給模型看的範例'],
+    ['fallback_rules', TEXT_DEFAULTS.fallback_rules, 'knowledge_only 關閉、由 AI 補足時的限制（生成與 L5 檢查都用這段）'],
     ['model_triage', 'gemini-2.5-flash', 'L4 分流用模型'],
     ['model_answer', 'gemini-2.5-flash', 'A1 對話 Agent 用模型（也用於 PDF 轉文字）'],
     ['model_check', 'gemini-2.5-flash', 'L5 檢查用模型'],

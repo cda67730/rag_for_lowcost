@@ -52,8 +52,8 @@ function classifyChunks_(texts) {
   for (let i = 0; i < texts.length; i += 25) {
     const group = texts.slice(i, i + 25);
     try {
-      const r = genJson_(cfg_('model_triage'), '把每一段幼教知識分成一種類型，只輸出 JSON，types 陣列順序與段落相同。類型：' + JSON.stringify(CHUNK_TYPES) +
-        '。具體做法＝老師可以直接照做的步驟或策略；案例＝具體情境的處理實例；溝通範例＝可直接使用的說法或訊息；原則／背景＝理論、原則、概念說明；轉介資訊＝找誰、流程、資源。\n' +
+      const r = genJson_(cfg_('model_triage'), '把每一段知識分成一種類型，只輸出 JSON，types 陣列順序與段落相同。類型：' + JSON.stringify(CHUNK_TYPES) +
+        '。具體做法＝' + roles_().user + '可以直接照做的步驟或策略；案例＝具體情境的處理實例；溝通範例＝可直接使用的說法或訊息；原則／背景＝理論、原則、概念說明；轉介資訊＝找誰、流程、資源。\n' +
         '格式：{"types":["具體做法","原則／背景",…]}\n\n' + group.map((t, j) => '【段落' + (j + 1) + '】\n' + String(t).slice(0, 700)).join('\n\n'), { temperature: 0, noThink: true });
       (Array.isArray(r) ? r : (r.types || Object.values(r).find(Array.isArray) || [])).forEach((t, j) => { if (CHUNK_TYPES.indexOf(t) >= 0) out[i + j] = t; });
     } catch (e) { console.warn('分類失敗', e); }
@@ -178,8 +178,8 @@ function rerankSelect_(focus, caseText, pool, C) {
   if (pool.length && truthy_(C.enable_rerank == null || C.enable_rerank === '' ? true : C.enable_rerank)) {
     try {
       stabAt_('重排');
-      const r = genJson_(C.model_rerank || C.model_check || C.model_triage, '你在替幼教老師的提問挑選參考資料，只輸出 JSON。\n' +
-        '老師這次想要的（提問焦點）：' + focus + '\n老師的描述：' + String(caseText).slice(0, 1500) + '\n\n' +
+      const r = genJson_(C.model_rerank || C.model_check || C.model_triage, '你在替' + roles_().user + '的提問挑選參考資料，只輸出 JSON。\n' +
+        roles_().user + '這次想要的（提問焦點）：' + focus + '\n' + roles_().user + '的描述：' + String(caseText).slice(0, 1500) + '\n\n' +
         '為每段資料打分：3＝能直接回答焦點（有具體可用的做法）、2＝部分回答、1＝只是相關背景或一般原則、0＝無關。\n' +
         '注意：焦點若指名特定對象或情況（例如某種障礙類別、年齡、場合），段落必須是在談這個對象或情況才能給 2 或 3；談的是別的對象，即使做法看起來可以套用，也只能給 1。\n' +
         '格式：{"scores":[3,1,…]}，順序與段落相同。\n\n' + pool.map((h, i) => '【' + (i + 1) + '】' + (h.type ? '（' + h.type + '）' : '') + h.text.slice(0, 600)).join('\n\n'),

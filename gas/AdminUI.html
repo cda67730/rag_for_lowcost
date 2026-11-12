@@ -416,13 +416,14 @@ async function load() {
 }
 
 // ---------- 設定 ----------
-const LONG = ['system_prompt', 'welcome', 'continue_prompt', 'continue_options', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_prompt', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
+const LONG = ['system_prompt', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_prompt', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
 const SECTIONS = [
   { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
-  { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'triage_rules', 'followup_prompt', 'max_followups'] },
+  { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
+  { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
   { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
-  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_rules', 'knowledge_only', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
+  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
   { id: 'check', title: 'L5 檢查', toggle: 'enable_llm_check', keys: ['enable_relevance_check', 'model_check', 'check_prompt'] },
   { id: 'msgs', title: '固定訊息', keys: ['msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
   { id: 'evalm', title: '自動評測', keys: ['model_eval_gen', 'model_eval_judge'] },
@@ -430,10 +431,11 @@ const SECTIONS = [
 ];
 const LABELS = {
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
-  enable_triage: '啟用 L4 分流', model_triage: '分流模型', triage_rules: '分流規則', followup_prompt: '追問方式', max_followups: '最多追問次數',
+  domain_desc: '領域描述', role_user: '提問者稱呼', role_subject: '談論對象稱呼', role_escalate: '預設升級對象',
+  enable_triage: '啟用 L4 分流', model_triage: '分流模型', intents: '意圖選項', triage_rules: '分流規則', triage_focus_hint: '提問焦點範例', followup_prompt: '追問方式', max_followups: '最多追問次數',
   top_k: '採用段數', min_score: '相似度門檻', enable_rerank: 'AI 重新排序', model_rerank: '重排模型', rerank_pool: '重排候選段數',
   quota_min_actionable: '至少保留的具體做法段數', quota_max_principle: '原則／背景最多段數',
-  model_answer: '回答模型', temperature: '溫度', answer_rules: '回答規則', knowledge_only: '只用知識庫回答', full_answer_rounds: '完整回答輪數',
+  model_answer: '回答模型', temperature: '溫度', answer_rules: '回答規則', knowledge_only: '只用知識庫回答', fallback_rules: 'AI 補足時的限制', full_answer_rounds: '完整回答輪數',
   continue_prompt: '延續回覆方式', continue_options: '延續回覆選項',
   enable_llm_check: '啟用 L5 依據與轉介檢查', enable_relevance_check: '回應度檢查', model_check: '檢查模型', check_prompt: '檢查標準',
   msg_no_knowledge: '查不到資料時', msg_check_failed: '檢查沒通過時', msg_ai_fallback: 'AI 補足時的提示', msg_out_of_scope: '超出服務範圍時',
