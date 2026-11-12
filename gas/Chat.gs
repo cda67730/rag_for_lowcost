@@ -4,7 +4,8 @@
  * → [P08 規則 ‖ P09 出處 ‖ L5 AI 檢查] → P10 組合與降級 → P15 紀錄
  */
 
-// ---------- P03 去識別化（程式，不用 LLM） ----------
+// ---------- P03 去識別化（程式，不用 LLM；enable_deid 關閉時整段略過） ----------
+// 規則是幼教雛形的：「小＋一字」當名字換成「幼兒A」、刪手機號碼。其他案子要用的話得改這裡的規則
 const NAME_SKIP = ['小朋', '小孩', '小班', '小組', '小時', '小心', '小事', '小動', '小便', '小肌', '小聲', '小小', '小點', '小任', '小步', '小卡', '小物', '小玩', '小型', '小學', '小姐', '小兒', '小禮', '小貼', '小椅', '小桌', '小籃', '小手', '小部', '小片', '小塊', '小幫'];
 function deid_(text, map) {
   map = Object.assign({}, map || {});
@@ -32,7 +33,7 @@ function triagePrompt_(prevTeacher, latest, topics, categories) {
     '- missing：缺少的關鍵資訊（最多 2 項）\n' +
     '- focus：用一句話寫出' + R.user + '「這一則」真正想要的東西（' + text_('triage_focus_hint') + '），補充或回答追問時寫整個個案目前要解決的事\n' +
     '格式：{"intent":"' + IN[0].name + '","focus":"","referral":{"category":"none","level":"none","reason":""},"topics":[],"in_scope":true,"info_enough":true,"missing":[]}\n\n' +
-    (prevTeacher.length ? R.user + '先前說過（已去識別化）：\n' + prevTeacher.join('\n') + '\n\n' : '') +
+    (prevTeacher.length ? R.user + '先前說過：\n' + prevTeacher.join('\n') + '\n\n' : '') +
     R.user + '這一則訊息：\n' + latest;
 }
 
@@ -47,12 +48,14 @@ function runChat_(req, opts) {
   const C = cfgAll_(), R = roles_();
   const maxFu = Number(C.max_followups == null ? 1 : C.max_followups);
 
-  // 1. P03 去識別化
-  const d = deid_(req.message || '', req.nameMap);
+  // 1. P03 去識別化（可關閉：原文直接進流程與紀錄）
+  const useDeid = truthy_(C.enable_deid);
+  const d = useDeid ? deid_(req.message || '', req.nameMap) : { text: String(req.message || ''), map: {} };
   const history = (req.history || []).slice(-8);
   const prevTeacher = history.filter(h => h.role === 'teacher').map(h => h.text);
   const fullCase = prevTeacher.concat([d.text]).join('\n');
-  T('P03 去識別化', Object.keys(d.map).length ? JSON.stringify(d.map) : '沒有偵測到名字');
+  if (useDeid) T('P03 去識別化', Object.keys(d.map).length ? JSON.stringify(d.map) : '沒有偵測到名字');
+  else T('P03 去識別化（已關閉）', '原文直接使用');
 
   // 2. L4 分流 ‖ P06 查詢向量（fetchAll 並行）；向量同時算「整段個案」與「只有最新訊息」，分流後再選用
   const skills = skills_();
@@ -81,7 +84,10 @@ function runChat_(req, opts) {
   else T('L4 分流（已關閉）', '未呼叫分流 AI；主題依關鍵字比對：' + (tri.topics.join('、') || '無') + '｜不偵測轉介、不追問、同一段對話視為同一個案');
 
   // 意圖：new 就只看這一則，舊的對話不帶進來；其他意圖延續整段個案（名稱可在設定改，流程依 key 判斷）
-  const intentKey = intentKey_(tri.intent) || (prevTeacher.length ? 'more' : 'new');
+  // enable_case_flow 關閉：不分個案、不切換延續回覆，整段對話都帶進去、每次都完整回答（FAQ 型專案用）
+  const caseFlow = truthy_(C.enable_case_flow == null || C.enable_case_flow === '' ? true : C.enable_case_flow);
+  let intentKey = intentKey_(tri.intent) || (prevTeacher.length ? 'more' : 'new');
+  if (!caseFlow && intentKey !== 'off') intentKey = prevTeacher.length ? 'more' : 'new';
   const intent = intentName_(intentKey);
   tri.intent_key = intentKey;   // 觀測面板與紀錄用：名稱可改，key 固定
   const isNew = intentKey === 'new' || !prevTeacher.length;
@@ -134,9 +140,9 @@ function runChat_(req, opts) {
 
   // 前幾輪給完整回答；之後（或使用者點選特定協助）改成「延續回覆」：只回應新內容，並提供下一步選項
   const fullRounds = Number(C.full_answer_rounds == null || C.full_answer_rounds === '' ? 2 : C.full_answer_rounds);
-  const mode = intentKey === 'specific' && !isNew ? 'continue' : (answered >= fullRounds ? 'continue' : 'full');
+  const mode = !caseFlow ? 'full' : intentKey === 'specific' && !isNew ? 'continue' : (answered >= fullRounds ? 'continue' : 'full');
   T('P04 狀態機', intent + '｜' + (tri.info_enough ? '資訊足夠' : '已追問過') + '｜已完整回答 ' + answered + ' 次 → ' +
-    (mode === 'full' ? '完整回答' : '延續回覆') + (ref ? '（附轉介：' + ref.category + '・' + ref.level + '）' : ''));
+    (mode === 'full' ? '完整回答' : '延續回覆') + (caseFlow ? '' : '（個案機制已關閉）') + (ref ? '（附轉介：' + ref.category + '・' + ref.level + '）' : ''));
   T('P05 Skill 載入', pick.map(s => ({ name: s.name, version: s.version, always: s.always })), 'skills');
 
   // 4. P06 檢索
@@ -364,7 +370,7 @@ function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, fe
   return [
     '【1 固定 system prompt】\n' + sys,
     '【2 主題 Skill】\n' + skillText,
-    '【3 情境資訊】\n分流結果：' + JSON.stringify(tri) + '\n' + R.user + '原話（已去識別化）：\n' + caseText +
+    '【3 情境資訊】\n分流結果：' + JSON.stringify(tri) + '\n' + R.user + '原話：\n' + caseText +
       (focus ? '\n\n【' + R.user + '這次想要的】' + focus + '\n回答要先直接回應這一點；策略要具體到這個' + R.subject + '與情境（做什麼、什麼時候、怎麼說），不要只寫一般原則。' : ''),
     fallback
       ? '【4 知識庫內容不足】' + (kn ? '以下只是相關的背景或原則，可以引用（編號 K1…），但沒有直接針對這個情況的做法：\n' + kn : '知識庫沒有相關內容。') +

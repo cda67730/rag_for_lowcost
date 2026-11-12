@@ -422,6 +422,7 @@ const LONG = ['system_prompt', 'answer_schema', 'welcome', 'continue_prompt', 'c
 const SECTIONS = [
   { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
+  { id: 'flow', title: '流程開關', keys: ['enable_deid', 'enable_case_flow'] },
   { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
   { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
   { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_schema', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
@@ -432,6 +433,7 @@ const SECTIONS = [
 ];
 const LABELS = {
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
+  enable_deid: '去識別化', enable_case_flow: '個案機制',
   domain_desc: '領域描述', role_user: '提問者稱呼', role_subject: '談論對象稱呼', role_escalate: '預設升級對象',
   enable_triage: '啟用 L4 分流', model_triage: '分流模型', intents: '意圖選項', triage_rules: '分流規則', triage_focus_hint: '提問焦點範例', followup_prompt: '追問方式', max_followups: '最多追問次數',
   top_k: '採用段數', min_score: '相似度門檻', enable_rerank: 'AI 重新排序', model_rerank: '重排模型', rerank_pool: '重排候選段數',
@@ -746,12 +748,12 @@ const pc1 = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
 const secs = ms => ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒';
 const FNODES = [
   { id: 'input', title: '使用者訊息', kind: 'io', cfg: () => '', met: () => F ? `${F.turns} 回合` : '' },
-  { id: 'deid', title: 'P03 去識別化', kind: 'code', keys: [], cfg: () => '人名換成代稱', met: () => stepMs('deid') },
+  { id: 'deid', title: 'P03 去識別化', kind: 'code', toggle: 'enable_deid', keys: ['enable_deid'], cfg: () => son('enable_deid') ? '人名換成代稱、刪手機號碼' : '已關閉：原文直接使用', met: () => stepMs('deid') },
   { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'model_embed'],
     cfg: () => son('enable_triage') ? `分流 ${sm('model_triage')}｜向量 ${sm('model_embed')}` : `已關閉：只算向量（${sm('model_embed')}），主題用關鍵字`,
     met: () => stepMs('triage'),
     exit: { title: '轉介／拒答／追問', on: () => son('enable_triage'), met: () => F ? `轉介 ${F.types.referral || 0}｜拒答 ${F.types.out_of_scope || 0}｜追問 ${F.types.followup || 0}` : '', hit: r => ['referral', 'out_of_scope', 'followup'].indexOf(r.type) >= 0 } },
-  { id: 'state', title: 'P04 狀態機', kind: 'code', keys: ['max_followups', 'full_answer_rounds'], cfg: () => `最多追問 ${sv('max_followups')} 次｜前 ${sv('full_answer_rounds')} 輪完整回答，之後延續回覆`, met: () => '' },
+  { id: 'state', title: 'P04 狀態機', kind: 'code', keys: ['enable_case_flow', 'max_followups', 'full_answer_rounds'], cfg: () => `最多追問 ${sv('max_followups')} 次｜` + (son('enable_case_flow') ? `前 ${sv('full_answer_rounds')} 輪完整回答，之後延續回覆` : '個案機制關閉：每次完整回答'), met: () => '' },
   { id: 'skill', title: 'P05 載入 Skill', kind: 'code', keys: ['default_skill'], cfg: () => (F ? `啟用 ${F.skills} 個（一律載入 ${F.skillsAlways}）｜` : '') + `預設：${sv('default_skill') || '不套用'}`, met: () => '' },
   { id: 'retrieve', title: 'P06 檢索', kind: 'code', keys: ['top_k', 'min_score', 'rerank_pool'], cfg: () => `取 ${sv('top_k')} 段｜門檻 ${sv('min_score')}｜候選 ${sv('rerank_pool')} 段` + (F ? `｜知識 ${F.chunks} 段、同義詞 ${F.synonyms}` : ''),
     met: () => F ? `有找到 ${pc1(F.retrieval.hit, F.retrieval.n)}｜平均最高分 ${F.retrieval.topN ? (F.retrieval.top / F.retrieval.topN).toFixed(2) : '—'}｜${stepMs('retrieve')}` : '' },
