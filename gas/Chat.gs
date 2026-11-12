@@ -97,6 +97,7 @@ function runChat_(req, opts) {
   const finish = (out) => {
     const res = Object.assign(base, out, { ms: Date.now() - t0 });
     res.quality = quality;
+    res.schema = schema_();   // 前端依這份欄位定義呈現回答（不寫進紀錄）
     res.stability = { models: { triage: useTriage ? C.model_triage : '', answer: C.model_answer, check: C.model_check, rerank: C.model_rerank || '' }, ev: stab.ev, rewriteWhy: stab.rewriteWhy || [] };
     if (!opts.noLog) { try { logTurn_(req, res, trace); } catch (e) { console.warn(e); } }   // 自動評測不寫對話紀錄
     if (opts.trace) res.trace = trace;
@@ -166,7 +167,7 @@ function runChat_(req, opts) {
 
   // 5. P07 組裝 + A1 生成，最多重寫一次
   const refWho = ref ? ((refTable[ref.category] || {}).who || '') : '';
-  const range = mode === 'full' ? [2, 3] : [0, 2];
+  const range = itemsRange_(mode);
   let ans, chk, rewritten = false, maxAttempts = 2, fbNote = null;
   // 生成或檢查時才發現知識不足（檢索分數高但談的是別的對象）：不要逼模型硬寫，改走知識不足的處理
   const gapFound = (kind, detail, attempt) => {
@@ -194,8 +195,8 @@ function runChat_(req, opts) {
     }
     validateAnswer_(raw, mode);
     const kg = str_(raw.knowledge_gap).trim();
-    ans = cleanAnswer_(raw);
-    T(attempt ? 'A1 重寫' : 'A1 生成', '策略 ' + (ans.strategies || []).length + ' 個' + (kg && kg !== 'null' ? '｜模型回報知識不足：' + kg : ''));
+    ans = cleanAnswer_(raw, mode);
+    T(attempt ? 'A1 重寫' : 'A1 生成', '建議 ' + answerItems_(ans).length + ' 個' + (kg && kg !== 'null' ? '｜模型回報知識不足：' + kg : ''));
     if (kg && kg !== 'null' && !fallback) {
       chk = { pass: false, items: [], reasons: [] };
       if (gapFound('回答時發現知識不足', kg, attempt) === 'stop') return finish({ type: 'conservative', message: conservativeMsg_(refTable), sources: [] });
@@ -220,7 +221,7 @@ function runChat_(req, opts) {
     return finish({ type: 'conservative', message: conservativeMsg_(refTable, 'check'), sources: [], checks: chk.items });
   }
   T('P10 組合', '檢查全部通過' + (rewritten ? '（重寫一次後）' : ''));
-  const used = {}; (ans.strategies || []).forEach(s => (s.refs || []).forEach(r => used[r] = true));
+  const used = {}; answerItems_(ans).forEach(s => (s.refs || []).forEach(r => used[r] = true));
   metrics.cited = Object.keys(used).filter(r => hits.some(h => h.ref === r)).length;
   metrics.usedRefs = Object.keys(used);
   const sources = hits.filter(h => used[h.ref]).map(h => ({ ref: h.ref, title: h.title, source: h.source, page: h.page, evidence: h.evidence, snippet: h.text.slice(0, 280) }));
@@ -243,16 +244,61 @@ function validateTriage_(t) {
 }
 function validateAnswer_(a, mode) {
   if (!a || typeof a !== 'object' || Array.isArray(a)) return stabNote_('型別錯誤', '回答不是物件');
-  const req = mode === 'full' ? ['empathy', 'understanding', 'strategies', 'parent_message', 'observe', 'teacher_care', 'referral'] : ['reply', 'strategies', 'parent_message', 'observe', 'referral'];
-  req.forEach(k => { if (!(k in a)) stabNote_('缺欄位', k); });
-  ['empathy', 'understanding', 'reply', 'parent_message', 'teacher_care'].forEach(k => { if (a[k] != null && typeof a[k] !== 'string') stabNote_('型別錯誤', k + ' 不是文字'); });
-  if ('strategies' in a && !Array.isArray(a.strategies)) stabNote_('型別錯誤', 'strategies 不是陣列');
-  if ('observe' in a && a.observe != null && !Array.isArray(a.observe)) stabNote_('型別錯誤', 'observe 不是陣列');
-  [].concat(Array.isArray(a.strategies) ? a.strategies : []).forEach((s, i) => {
-    if (!s || typeof s !== 'object') return stabNote_('型別錯誤', '策略' + (i + 1) + ' 不是物件');
-    ['title', 'how', 'refs'].forEach(k => { if (!(k in s)) stabNote_('缺欄位', '策略' + (i + 1) + '.' + k); });
-    if ('refs' in s && !Array.isArray(s.refs)) stabNote_('型別錯誤', '策略' + (i + 1) + '.refs 不是陣列');
+  schemaFields_(mode).forEach(f => {
+    if (!(f.key in a)) { if (f.required) stabNote_('缺欄位', f.key); return; }
+    const v = a[f.key];
+    if (f.type === 'text') { if (v != null && typeof v !== 'string') stabNote_('型別錯誤', f.key + ' 不是文字'); }
+    else if (v != null && !Array.isArray(v)) stabNote_('型別錯誤', f.key + ' 不是陣列');
+    if (f.type === 'items') [].concat(Array.isArray(v) ? v : []).forEach((s, i) => {
+      if (!s || typeof s !== 'object') return stabNote_('型別錯誤', f.key + (i + 1) + ' 不是物件');
+      ['title', 'how', 'refs'].forEach(k => { if (!(k in s)) stabNote_('缺欄位', f.key + (i + 1) + '.' + k); });
+      if ('refs' in s && !Array.isArray(s.refs)) stabNote_('型別錯誤', f.key + (i + 1) + '.refs 不是陣列');
+    });
   });
+  if (!('referral' in a)) stabNote_('缺欄位', 'referral');
+}
+
+// ---------- 回答欄位定義（設定 answer_schema）：程式只認 type，欄位名稱與標題都由設定決定 ----------
+const SCHEMA_TYPES = ['text', 'list', 'items'];
+let SCHEMA_ = null;
+function schema_() {
+  if (SCHEMA_) return SCHEMA_;
+  let out = null, bad = null;
+  try { out = parseSchema_(text_('answer_schema')); } catch (e) { bad = e.message; }
+  if (out && !out.some(f => f.type === 'items')) { bad = '缺少 items 欄位'; out = null; }
+  if (!out) { out = parseSchema_(TEXT_DEFAULTS.answer_schema); stabNote_('設定錯誤', 'answer_schema：' + bad + '，改用預設欄位'); }
+  return (SCHEMA_ = out);
+}
+function parseSchema_(text) {
+  const raw = JSON.parse(text);
+  if (!Array.isArray(raw)) throw new Error('不是陣列');
+  const seen = {}, reserved = ['refs', 'knowledge_gap', 'referral', 'options', 'notice'];
+  return raw.map(f => ({
+    key: String(f.key || '').trim(), type: SCHEMA_TYPES.indexOf(f.type) >= 0 ? f.type : 'text',
+    label: str_(f.label), labelContinue: f.label_continue == null ? str_(f.label) : str_(f.label_continue), hint: tpl_(str_(f.hint)),
+    modes: f.modes === 'continue' || f.modes === 'both' ? f.modes : 'full', required: !!f.required, summary: !!f.summary, copy: !!f.copy,
+    count: rangeOf_(f.count, [2, 3]), countContinue: rangeOf_(f.count_continue, [0, 2]),
+  })).filter(f => f.key && /^[A-Za-z_][A-Za-z0-9_]*$/.test(f.key) && reserved.indexOf(f.key) < 0 && !seen[f.key] && (seen[f.key] = true));
+}
+function rangeOf_(s, def) { const m = /^\s*(\d+)\s*[-–~]\s*(\d+)\s*$/.exec(String(s == null ? '' : s)); return m ? [Number(m[1]), Number(m[2])] : def; }
+function schemaFields_(mode) { return schema_().filter(f => f.modes === 'both' || f.modes === mode); }
+function itemsRange_(mode) { const f = schemaFields_(mode).find(x => x.type === 'items'); return f ? (mode === 'full' ? f.count : f.countContinue) : [0, 3]; }
+/** 紀錄與評測用的一行摘要：summary 欄位的文字＋建議標題 */
+function answerSummary_(a, type) {
+  const mode = type === 'continue' ? 'continue' : 'full';
+  return schemaFields_(mode).filter(f => f.summary).map(f => { const v = (a || {})[f.key]; if (v == null || (Array.isArray(v) && !v.length)) return ''; return f.type === 'items' ? v.map(s => s.title).join('、') : Array.isArray(v) ? v.join('；') : String(v); }).filter(Boolean).join('｜');
+}
+/** 所有 items 欄位的內容合併（P09 出處、引用統計、評測都用這個） */
+function answerItems_(a) { return [].concat.apply([], schema_().filter(f => f.type === 'items').map(f => [].concat((a || {})[f.key] || []))); }
+/** 給模型看的輸出格式：依欄位定義拼 JSON 範例，系統欄位固定接在後面 */
+function schemaFormat_(mode, extra) {
+  const parts = schemaFields_(mode).map(f => {
+    const h = f.hint || f.label || f.key;
+    if (f.type === 'items') return '"' + f.key + '":[{"title":"標題","how":"' + h + '","refs":["K1"]}]';
+    if (f.type === 'list') return '"' + f.key + '":["' + h + '"]';
+    return '"' + f.key + '":"' + h + '"';
+  });
+  return '{' + parts.concat(extra || []).join(',') + '}';
 }
 
 // ---------- 回答清理：欄位一律轉成文字，去掉模型自己寫進內文的 (K1) ----------
@@ -266,17 +312,21 @@ function str_(v) {
 function stripRefs_(t) {
   return str_(t).replace(/\s*[（(\[【]\s*K\d+(\s*[,，、]\s*K\d+)*\s*[)）\]】]/g, '').replace(/\s*K\d+(\s*[,，、]\s*K\d+)*\s*$/g, '').trim();
 }
-function cleanAnswer_(a) {
+function cleanAnswer_(a, mode) {
   a = a || {};
-  ['empathy', 'understanding', 'parent_message', 'teacher_care', 'referral', 'reply'].forEach(k => {
-    if (a[k] == null || a[k] === 'null') a[k] = null; else a[k] = stripRefs_(a[k]) || null;
+  const out = {};
+  // 只保留欄位定義裡這個模式的欄位＋系統欄位；型別容錯：refs 給成字串、list 不是陣列時也不會出錯
+  schemaFields_(mode || 'full').forEach(f => {
+    const v = a[f.key];
+    if (f.type === 'items') out[f.key] = [].concat(v || []).filter(s => s && typeof s === 'object').map(s => ({ title: stripRefs_(s.title), how: stripRefs_(s.how), refs: [].concat(s.refs || []).map(String).filter(Boolean) }));
+    else if (f.type === 'list') out[f.key] = [].concat(v == null || v === 'null' ? [] : v).map(stripRefs_).filter(Boolean);
+    else out[f.key] = v == null || v === 'null' ? null : (stripRefs_(v) || null);
   });
-  // 型別容錯：refs 給成字串、strategies／observe 不是陣列時也不會出錯
-  a.strategies = [].concat(a.strategies || []).filter(s => s && typeof s === 'object').map(s => ({ title: stripRefs_(s.title), how: stripRefs_(s.how), refs: [].concat(s.refs || []).map(String).filter(Boolean) }));
-  a.observe = [].concat(a.observe || []).map(stripRefs_).filter(Boolean);
-  if (a.options) a.options = [].concat(a.options).map(str_).filter(Boolean);
-  return a;
+  out.referral = a.referral == null || a.referral === 'null' ? null : (stripRefs_(a.referral) || null);
+  if (a.options) out.options = [].concat(a.options).map(str_).filter(Boolean);
+  return out;
 }
+function rangeText_(mode) { const r = itemsRange_(mode); return r[0] + '–' + r[1]; }
 function continueOptions_() {
   return text_('continue_options').split(/\n+/).map(s => s.replace(/^[-・\d.、\s]+/, '').trim()).filter(Boolean);
 }
@@ -298,10 +348,10 @@ function assembleContinue_(sys, skillText, tri, prevTeacher, latest, hits, histo
       : kn ? '【5 檢索到的知識（只能引用這些，編號 K1…）】\n' + kn : '【5 檢索到的知識】這次沒有找到新的相關知識，不要給新的策略。',
     '【延續回覆的做法】\n' + text_('continue_prompt') + '\n可提供的下一步選項（挑 2–4 個最適合的，可改寫成符合情境的說法）：\n' + continueOptions_().map(o => '- ' + o).join('\n'),
     feedback ? '【重寫指示】上一版沒有通過檢查：' + feedback.join('；') + '。請修正後重寫。' : '',
-    '輸出格式（只輸出 JSON，沒有內容的欄位填 null 或空陣列）：{"reply":"直接回應' + R.user + '這次說的話","strategies":[{"title":"","how":"","refs":["K1"]}],"parent_message":null,"observe":[],"referral":' +
-      (ref ? '"依「' + ref.level + '」簡短說明該找誰（可找：' + refWho + '）"' : 'null') + ',"options":["下一步選項"],"knowledge_gap":null}\n' +
+    '輸出格式（只輸出 JSON，沒有內容的欄位填 null 或空陣列）：' + schemaFormat_('continue', ['"referral":' +
+      (ref ? '"依「' + ref.level + '」簡短說明該找誰（可找：' + refWho + '）"' : 'null'), '"options":["下一步選項"]', '"knowledge_gap":null']) + '\n' +
       (fallback ? '' : '若這次的問題換了對象或主題，而上面的知識沒有在談它，不要硬套：knowledge_gap 填一句話說明缺少什麼；知識有涵蓋時為 null。\n') +
-      '規則：strategies 0–2 個，只放之前沒給過的新做法，' + (fallback ? '有引用知識才填 refs；' : '每個都要有 refs；') + '不要重複之前回答過的內容；不得推測診斷；保留去識別化的代稱；refs 編號不要寫進文字裡。' +
+      '規則：有出處的建議 ' + rangeText_('continue') + ' 個，只放之前沒給過的新做法，' + (fallback ? '有引用知識才填 refs；' : '每個都要有 refs；') + '不要重複之前回答過的內容；不得推測診斷；保留去識別化的代稱；refs 編號不要寫進文字裡。' +
       (forbiddenWords.length ? '不得出現這些詞：' + forbiddenWords.join('、') + '。' : ''),
   ].filter(Boolean).join('\n\n');
 }
@@ -322,10 +372,10 @@ function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, fe
       : '【4 檢索到的知識（只能引用這些，編號 K1…）】\n' + kn,
     hist ? '【5 對話歷史】\n' + hist : '',
     feedback ? '【重寫指示】上一版沒有通過檢查：' + feedback.join('；') + '。請修正後重寫。' : '',
-    '輸出格式（只輸出 JSON）：{"empathy":"先回應' + R.user + '感受的一兩句","understanding":"看見與理解：把行為轉成可觀察事件，推想背後的需要（兩三句）","strategies":[{"title":"策略名稱","how":"具體怎麼做（一兩句）","refs":["K1"]}],"parent_message":"若牽涉家長，給家長的訊息草稿，否則 null","observe":["接下來的觀察重點"],"teacher_care":"若' + R.user + '提到壓力，一兩句自我照顧建議，否則 null","knowledge_gap":null,"referral":' +
-      (ref ? '"依「' + ref.level + '」說明為什麼需要、該找誰（可找：' + refWho + '）"' : 'null') + '}\n' +
-      (fallback ? '' : '若上面的知識沒有在談這個問題的對象或情況（例如問的是某種障礙、知識談的是另一種），不要硬套：knowledge_gap 填一句話說明缺少什麼，strategies 給空陣列；知識有涵蓋時 knowledge_gap 為 null。\n') +
-      '規則：' + (fallback ? 'strategies 2–3 個；引用背景知識時 refs 只能用上面提供的 K 編號，來自一般知識時 refs 為空陣列；不得推測診斷或使用標籤化用語；保留去識別化的代稱。' : text_('answer_rules')) +
+    '輸出格式（只輸出 JSON）：' + schemaFormat_('full', ['"knowledge_gap":null', '"referral":' +
+      (ref ? '"依「' + ref.level + '」說明為什麼需要、該找誰（可找：' + refWho + '）"' : 'null')]) + '\n' +
+      (fallback ? '' : '若上面的知識沒有在談這個問題的對象或情況，不要硬套：knowledge_gap 填一句話說明缺少什麼，有出處的建議給空陣列；知識有涵蓋時 knowledge_gap 為 null。\n') +
+      '規則：' + (fallback ? '有出處的建議 ' + rangeText_('full') + ' 個；引用背景知識時 refs 只能用上面提供的 K 編號，來自一般知識時 refs 為空陣列；不得推測診斷或使用標籤化用語；保留去識別化的代稱。' : text_('answer_rules')) +
       (forbiddenWords.length ? '回答中不得出現這些詞（即使是否定句也不要寫）：' + forbiddenWords.join('、') + '。' : ''),
   ].filter(Boolean).join('\n\n');
 }
@@ -340,8 +390,8 @@ function checks_(caseText, ans, hits, C, range, focus, fallback) {
   items.push({ name: 'P08 規則檢查', pass: !bad, note: bad ? '出現禁止用語「' + bad.rule + '」' : '沒有禁止用語' });
   if (bad) reasons.push('不可使用「' + bad.rule + '」' + (bad.note ? '（' + bad.note + '）' : ''));
   const ok = {}; hits.forEach(h => ok[h.ref] = true);
-  const st = ans.strategies || []; const p9 = [];
-  if (st.length < range[0] || st.length > range[1]) p9.push('策略數量 ' + st.length + ' 個，應為 ' + range[0] + '–' + range[1] + ' 個');
+  const st = answerItems_(ans); const p9 = [];
+  if (st.length < range[0] || st.length > range[1]) p9.push('建議數量 ' + st.length + ' 個，應為 ' + range[0] + '–' + range[1] + ' 個');
   st.forEach(x => { if (!fallback && !(x.refs || []).length) p9.push('「' + x.title + '」沒有出處'); (x.refs || []).forEach(r => { if (!ok[r]) p9.push(r + ' 不在檢索結果中'); }); });
   items.push({ name: 'P09 出處核對', pass: !p9.length, note: p9.join('；') || (fallback ? '知識不足，部分策略來自 AI 一般知識（已標示）' : st.length ? '每條建議都有出處' : '沒有新策略') });
   reasons.push.apply(reasons, p9);

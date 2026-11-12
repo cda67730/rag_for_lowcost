@@ -165,7 +165,9 @@ function adminEvalRunOne(run, qid, k) {
   const ans = res.answer;
   if (ans && (type === 'answer' || type === 'ai_fallback' || type === 'continue')) {
     const hits = res.hits || [];
-    const strategies = [].concat(ans.strategies || []).map((x, i) => (i + 1) + '. ' + x.title + '：' + x.how + ' [' + [].concat(x.refs || []).join(',') + ']').join('\n');
+    const strategies = answerItems_(ans).map((x, i) => (i + 1) + '. ' + x.title + '：' + x.how + ' [' + [].concat(x.refs || []).join(',') + ']').join('\n');
+    const mode = type === 'continue' ? 'continue' : 'full';
+    const body = schemaFields_(mode).filter(f => f.type !== 'items').map(f => { const v = ans[f.key]; return v == null || (Array.isArray(v) && !v.length) ? '' : (f.label || f.key) + '：' + (Array.isArray(v) ? v.join('；') : v); }).filter(Boolean).join('\n');
     try {
       const j = genJson_(evalModel_('model_eval_judge'), '你是知識問答系統的評審，只輸出 JSON，要嚴格、只依提供的資料判斷。\n' +
         '評三件事：\n' +
@@ -177,7 +179,7 @@ function adminEvalRunOne(run, qid, k) {
         '【問題】\n' + q['題目'] + '\n\n' +
         (q['應包含重點'] ? '【應包含重點】\n' + String(q['應包含重點']).split('｜').map((p, i) => (i + 1) + '. ' + p).join('\n') + '\n\n' : '') +
         '【採用的段落】\n' + (hits.map(h => h.ref + '：' + String(h.text).slice(0, 600)).join('\n\n') || '（無）') + '\n\n' +
-        '【回答】\n同理：' + (ans.empathy || ans.reply || '') + '\n理解：' + (ans.understanding || '') + '\n策略：\n' + (strategies || '（無）'), { temperature: 0, noThink: true });
+        '【回答】\n' + (body ? body + '\n' : '') + '有出處的建議：\n' + (strategies || '（無）'), { temperature: 0, noThink: true });
       rel = Number(j.relevance); if (isNaN(rel)) rel = '';
       const pts = String(q['應包含重點'] || '').split('｜').filter(Boolean);
       if (pts.length) cov = Math.round(Math.min(pts.length, [].concat(j.covered || []).length) / pts.length * 100) / 100;
@@ -199,7 +201,7 @@ function adminEvalRunOne(run, qid, k) {
   const row = { '批次ID': run, '時間': new Date(), '題目ID': String(qid), '來源': q['來源'], '類型': q['類型'], '第幾次': k, '回應類型': err ? 'error' : type,
     '找對段落': hit, '名次': rank, '對題': rel, '涵蓋重點': cov, '依據': grd, '安全': safety, '安全說明': safetyNote, '格式問題': fmt,
     '回答模型': C.model_answer, '評分模型': evalModel_('model_eval_judge'), '評分說明': err ? '執行失敗：' + err : judgeNote,
-    '回答摘要': String(ans ? (ans.empathy || ans.reply || '') + '｜' + [].concat(ans.strategies || []).map(x => x.title).join('、') : (res.message || (res.referral ? '轉介：' + res.referral.category : '') || '')).slice(0, 400),
+    '回答摘要': String(ans ? answerSummary_(ans, type) : (res.message || (res.referral ? '轉介：' + res.referral.category : '') || '')).slice(0, 400),
     '耗時ms': Date.now() - t0, '專家抽查': review, '專家意見': '' };
   const h = kgHead_('evalRuns'); append_('evalRuns', [h.map(x => row[x] == null ? '' : row[x])]);
   return { ok: true, type: row['回應類型'], hit: hit, rel: rel, grd: grd, safety: safety };

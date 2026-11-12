@@ -386,6 +386,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 <script>const WEB_MODE = <?!= webMode ? 'true' : 'false' ?>;</script>
 <?!= include('TraceView'); ?>
+<?!= include('AnswerView'); ?>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -416,14 +417,14 @@ async function load() {
 }
 
 // ---------- 設定 ----------
-const LONG = ['system_prompt', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_prompt', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
+const LONG = ['system_prompt', 'answer_schema', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_prompt', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
 const SECTIONS = [
   { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
   { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
   { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
-  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
+  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_schema', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
   { id: 'check', title: 'L5 檢查', toggle: 'enable_llm_check', keys: ['enable_relevance_check', 'model_check', 'check_prompt'] },
   { id: 'msgs', title: '固定訊息', keys: ['msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
   { id: 'evalm', title: '自動評測', keys: ['model_eval_gen', 'model_eval_judge'] },
@@ -435,7 +436,7 @@ const LABELS = {
   enable_triage: '啟用 L4 分流', model_triage: '分流模型', intents: '意圖選項', triage_rules: '分流規則', triage_focus_hint: '提問焦點範例', followup_prompt: '追問方式', max_followups: '最多追問次數',
   top_k: '採用段數', min_score: '相似度門檻', enable_rerank: 'AI 重新排序', model_rerank: '重排模型', rerank_pool: '重排候選段數',
   quota_min_actionable: '至少保留的具體做法段數', quota_max_principle: '原則／背景最多段數',
-  model_answer: '回答模型', temperature: '溫度', answer_rules: '回答規則', knowledge_only: '只用知識庫回答', fallback_rules: 'AI 補足時的限制', full_answer_rounds: '完整回答輪數',
+  model_answer: '回答模型', temperature: '溫度', answer_schema: '回答欄位', answer_rules: '回答規則', knowledge_only: '只用知識庫回答', fallback_rules: 'AI 補足時的限制', full_answer_rounds: '完整回答輪數',
   continue_prompt: '延續回覆方式', continue_options: '延續回覆選項',
   enable_llm_check: '啟用 L5 依據與轉介檢查', enable_relevance_check: '回應度檢查', model_check: '檢查模型', check_prompt: '檢查標準',
   msg_no_knowledge: '查不到資料時', msg_check_failed: '檢查沒通過時', msg_ai_fallback: 'AI 補足時的提示', msg_out_of_scope: '超出服務範圍時',
@@ -449,8 +450,8 @@ function fieldHtml(s, i) {
   let input;
   if (mk) input = `<div class="row" style="flex-wrap:nowrap"><select data-i="${i}" data-model="${mk}" data-orig="${esc(v)}"><option value="${esc(v)}">${esc(v)}</option></select><button class="btn" type="button" data-ping="${i}" style="white-space:nowrap">測試</button></div><div class="note" data-pr="${i}"></div>`;
   else if (LONG.includes(s.key)) {
-    const ta = `<textarea data-i="${i}" rows="${s.key === 'system_prompt' ? 14 : /rules|prompt/.test(s.key) ? 8 : 3}">${esc(v)}</textarea>`;
-    input = /rules|prompt|options/.test(s.key) ? `<details><summary>編輯文字（${String(v).length} 字）</summary>${ta}</details>` : ta;
+    const ta = `<textarea data-i="${i}" rows="${s.key === 'system_prompt' || s.key === 'answer_schema' ? 14 : /rules|prompt/.test(s.key) ? 8 : 3}">${esc(v)}</textarea>`;
+    input = /rules|prompt|options|schema/.test(s.key) ? `<details><summary>編輯文字（${String(v).length} 字）</summary>${ta}</details>` : ta;
   }
   else if (isBoolV(v)) input = `<label style="font-weight:400;margin:0"><input type="checkbox" data-i="${i}" ${String(v).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>`;
   else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill)/.test(s.key) ? '100%' : '220px'}">`;
@@ -658,29 +659,14 @@ function tMsg(cls, html) { const d = document.createElement('div'); d.className 
 function renderReply(r) {
   if (r.type === 'followup') return esc(restore(r.empathy)) + '\n' + r.questions.map((q, i) => (i + 1) + '. ' + esc(restore(q))).join('\n');
   if (r.type === 'referral') { const f = r.referral; return `<b>需要馬上找專人（${esc(f.category)}・${esc(f.level)}）</b>\n${esc(restore(f.reason))}\n該找誰：${esc(f.who)} ${esc(f.contact)}\n現在要做：${esc(f.now)}`; }
-  if (r.type === 'continue') {
-    const a = r.answer; let h = (a.notice ? '<b style="color:var(--warn)">' + esc(a.notice) + '</b>\n' : '') + esc(restore(a.reply));
-    if ((a.strategies || []).length) h += '\n\n<b>可以再試試</b>\n' + a.strategies.map((s, i) => `${i + 1}. ${esc(restore(s.title))}：${esc(restore(s.how))} [${(s.refs || []).join(',')}]`).join('\n');
-    if (a.parent_message) h += '\n\n<b>給家長的訊息草稿</b>\n' + esc(restore(a.parent_message));
-    if ((a.observe || []).length) h += '\n\n<b>觀察重點</b>\n' + a.observe.map(o => '・' + esc(restore(o))).join('\n');
-    if (a.referral) h += '\n\n<b>需要時找專人</b>\n' + esc(restore(a.referral));
-    if ((a.options || []).length) h += '\n\n' + a.options.map(o => `<button class="btn opt" data-opt="${esc(o)}">${esc(o)}</button>`).join(' ');
-    return h;
-  }
-  if (r.type !== 'answer' && r.type !== 'ai_fallback') return esc(r.message || '');
-  const a = r.answer; let h = (a.notice ? '<b style="color:#a86a12">⚠ ' + esc(a.notice) + '</b>\n\n' : '') + esc(restore(a.empathy)) + '\n\n<b>看見與理解</b>\n' + esc(restore(a.understanding)) + '\n\n<b>現在可以試試</b>\n' +
-    (a.strategies || []).map((s, i) => `${i + 1}. ${esc(restore(s.title))}：${esc(restore(s.how))} [${(s.refs || []).join(',')}]`).join('\n');
-  if (a.parent_message) h += '\n\n<b>給家長的訊息草稿</b>\n' + esc(restore(a.parent_message));
-  if ((a.observe || []).length) h += '\n\n<b>接下來觀察</b>\n' + a.observe.map(o => '・' + esc(restore(o))).join('\n');
-  if (a.teacher_care) h += '\n\n<b>也照顧你自己</b>\n' + esc(restore(a.teacher_care));
-  if (a.referral) h += '\n\n<b>需要時找專人</b>\n' + esc(restore(a.referral));
+  if (r.type !== 'answer' && r.type !== 'ai_fallback' && r.type !== 'continue') return esc(r.message || '');
+  const a = r.answer; let h = (a.notice ? '<b style="color:#a86a12">⚠ ' + esc(a.notice) + '</b>\n\n' : '') + AnswerView.text(r, restore);
+  if ((a.options || []).length) h += '\n\n' + a.options.map(o => `<button class="btn opt" data-opt="${esc(o)}">${esc(o)}</button>`).join(' ');
   if ((r.sources || []).length) h += '\n\n<span class="note">出處：' + r.sources.map(s => esc(s.ref + ' ' + s.title + (s.page ? ' p.' + s.page : ''))).join('｜') + '</span>';
   return h;
 }
 function botSummary(r) {
-  const a = r.answer || {};
-  if (r.type === 'answer' || r.type === 'ai_fallback') return [a.empathy, '建議：' + (a.strategies || []).map(s => s.title).join('、')].filter(Boolean).join(' ');
-  if (r.type === 'continue') return [a.reply, (a.strategies || []).length ? '新建議：' + a.strategies.map(s => s.title).join('、') : '', a.parent_message ? '（已提供家長訊息）' : ''].filter(Boolean).join(' ');
+  if (r.type === 'answer' || r.type === 'ai_fallback' || r.type === 'continue') return AnswerView.summary(r);
   if (r.type === 'followup') return r.questions.join(' ');
   return r.message || '';
 }
@@ -839,7 +825,7 @@ $('fRun').onclick = async () => {
     FT = { hit: hit, byNode: byNode, exits: exits };
     const a = r.answer;
     $('fRes').textContent = `結果：${TN[r.type] || r.type}｜總耗時 ${secs(r.ms)}${r.quality && r.quality.gap ? '｜知識不足：' + r.quality.gap.kind : ''}\n` +
-      String(a ? (a.empathy || a.reply || '') + (a.strategies && a.strategies.length ? '\n建議：' + a.strategies.map(s => s.title).join('、') : '') : (r.message || '')).slice(0, 400);
+      String(a ? AnswerView.summary(r) : (r.message || '')).slice(0, 400);
     renderFlow();
   } catch (e) { $('fRes').textContent = '失敗：' + e.message; } finally { $('fRun').disabled = false; }
 };
@@ -984,7 +970,7 @@ function replyText(t, rep) {
   if (rep == null || rep === '') return '';
   if (typeof rep === 'string') return rep;
   if (Array.isArray(rep)) return rep.map((q, i) => (i + 1) + '. ' + q).join('\n');
-  if (rep.strategies) return [rep.empathy, ...(rep.strategies || []).map((s, i) => `${i + 1}. ${s.title}：${s.how} [${(s.refs || []).join(',')}]`)].filter(Boolean).join('\n');
+  if (typeof rep === 'object') return AnswerView.text({ type: t, answer: rep, schema: D.schema }).replace(/<\/?b>/g, '');
   return JSON.stringify(rep, null, 1);
 }
 function renderSide() {

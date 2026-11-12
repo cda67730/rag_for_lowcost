@@ -33,23 +33,7 @@
     (r.sources || []).forEach((s) => (src[s.ref] = s));
     const chips = (s) => (s.refs || []).filter((x) => src[x]).map((x) => `<button type="button" class="ref" data-ref="${esc(x)}">${esc(x)}</button>`).join("") +
       ((r.type === "ai_fallback" || (a && a.notice)) && !(s.refs || []).some((x) => src[x]) ? `<span class="ai-tag">AI 補充</span>` : "");
-    if (r.type === "continue") {
-      let c = (a.notice ? `<div class="notice">${esc(a.notice)}</div>` : "") + `<p>${R(a.reply)}</p>`;
-      if ((a.strategies || []).length) c += `<h3>可以再試試</h3><ol>${a.strategies.map((s) => `<li><b>${R(s.title)}</b>：${R(s.how)}${chips(s)}</li>`).join("")}</ol>`;
-      if (a.parent_message) c += `<h3>給家長的訊息草稿</h3><div class="pm">${R(a.parent_message)}</div><div class="actions"><button type="button" data-copy="1">複製訊息</button></div>`;
-      if ((a.observe || []).length) c += `<h3>觀察重點</h3><ul>${a.observe.map((o) => `<li>${R(o)}</li>`).join("")}</ul>`;
-      if (a.referral) c += `<h3>需要時找專人</h3><p>${R(a.referral)}</p>`;
-      if ((a.options || []).length) c += `<div class="opts">${a.options.map((o) => `<button type="button" class="opt" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
-      return c;
-    }
-    let h = (a.notice ? `<div class="notice">${esc(a.notice)}</div>` : "") + `<p>${R(a.empathy)}</p>`;
-    if (a.understanding) h += `<h3>看見與理解</h3><p>${R(a.understanding)}</p>`;
-    h += `<h3>現在可以試試</h3><ol>${(a.strategies || []).map((s) => `<li><b>${R(s.title)}</b>：${R(s.how)}${chips(s)}</li>`).join("")}</ol>`;
-    if (a.parent_message) h += `<h3>給家長的訊息草稿</h3><div class="pm">${R(a.parent_message)}</div><div class="actions"><button type="button" data-copy="1">複製訊息</button></div>`;
-    if ((a.observe || []).length) h += `<h3>接下來觀察記錄</h3><ul>${a.observe.map((o) => `<li>${R(o)}</li>`).join("")}</ul>`;
-    if (a.teacher_care) h += `<h3>也照顧你自己</h3><p>${R(a.teacher_care)}</p>`;
-    if (a.referral) h += `<h3>需要時找專人</h3><p>${R(a.referral)}</p>`;
-    return h;
+    return AnswerView.render(r, { restore, chips });
   }
 
   function attach(el, r, turn) {
@@ -66,9 +50,9 @@
       }
       const c = e.target.closest("[data-copy]");
       if (c) {
-        const t = el.querySelector(".pm").textContent;
-        navigator.clipboard?.writeText(t).then(() => (c.textContent = "已複製"), () => (c.textContent = "請手動選取複製"));
-        api("feedback", { turn, kind: "複製家長訊息" }).catch(() => {});
+        const box = el.querySelector(`.pm[data-field="${c.dataset.copy}"]`) || el.querySelector(".pm");
+        navigator.clipboard?.writeText(box ? box.textContent : "").then(() => (c.textContent = "已複製"), () => (c.textContent = "請手動選取複製"));
+        api("feedback", { turn, kind: "複製：" + (c.dataset.label || "") }).catch(() => {});
       }
       const op = e.target.closest("[data-opt]");
       if (op) { if ($("send").disabled) return; return send(op.dataset.opt); }
@@ -113,9 +97,7 @@
   }
 
   function botSummary(r) {
-    const a = r.answer || {};
-    if (r.type === "answer" || r.type === "ai_fallback") return [a.empathy, "建議：" + (a.strategies || []).map((s) => s.title).join("、")].filter(Boolean).join(" ");
-    if (r.type === "continue") return [a.reply, (a.strategies || []).length ? "新建議：" + a.strategies.map((s) => s.title).join("、") : "", a.parent_message ? "（已提供家長訊息）" : ""].filter(Boolean).join(" ");
+    if (r.type === "answer" || r.type === "ai_fallback" || r.type === "continue") return AnswerView.summary(r);
     if (r.type === "followup") return r.questions.join(" ");
     return r.message || "";
   }

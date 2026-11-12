@@ -38,6 +38,21 @@ const REFERRAL_DEFAULT = [
 
 // ---------- 可在後台修改的文字（程式只負責格式與流程，內容都在這裡和「設定」工作表） ----------
 const TEXT_DEFAULTS = {
+  // 回答欄位：一個欄位一行。type：text（一段文字）、list（條列）、items（有出處的建議清單：title／how／refs）
+  // modes：full（完整回答）、continue（延續回覆）、both。label 是顯示標題（空＝直接顯示內文）、label_continue 延續時的標題
+  // required＝模型漏填會記為格式問題；summary＝放進對話歷史摘要；copy＝前端給「複製」按鈕；count／count_continue＝items 的數量範圍
+  // 系統自己管的欄位不用列：refs、knowledge_gap、referral、options、notice
+  answer_schema: [
+    '[',
+    '{"key":"empathy","type":"text","label":"","hint":"先回應{user}感受的一兩句","modes":"full","required":true,"summary":true},',
+    '{"key":"reply","type":"text","label":"","hint":"直接回應{user}這次說的話","modes":"continue","required":true,"summary":true},',
+    '{"key":"understanding","type":"text","label":"看見與理解","hint":"把行為轉成可觀察事件，推想背後的需要（兩三句）","modes":"full","required":true},',
+    '{"key":"strategies","type":"items","label":"現在可以試試","label_continue":"可以再試試","hint":"策略名稱／具體怎麼做（一兩句）","modes":"both","required":true,"summary":true,"count":"2-3","count_continue":"0-2"},',
+    '{"key":"parent_message","type":"text","label":"給家長的訊息草稿","hint":"若牽涉家長，給家長的訊息草稿，否則 null","modes":"both","copy":true},',
+    '{"key":"observe","type":"list","label":"接下來觀察記錄","label_continue":"觀察重點","hint":"接下來的觀察重點","modes":"both"},',
+    '{"key":"teacher_care","type":"text","label":"也照顧你自己","hint":"若{user}提到壓力，一兩句自我照顧建議，否則 null","modes":"full"}',
+    ']',
+  ].join('\n'),
   intents: [
     '新個案＝換了一個{subject}或完全不同的狀況',
     '補充同一個案＝回答追問或補充細節、說試過的結果',
@@ -117,6 +132,7 @@ const SETTINGS_DEFAULT = [
     ['intents', TEXT_DEFAULTS.intents, 'L4 意圖選項，一行一個「名稱＝說明」，順序固定：1 新個案（只看這一則）、2 補充同一個案、3 要求特定協助（不追問、延續回覆）、4 與主題無關（拒答）。只改名稱與說明，不要增減行'],
     ['triage_focus_hint', TEXT_DEFAULTS.triage_focus_hint, 'L4 判斷「提問焦點」時給模型看的範例'],
     ['fallback_rules', TEXT_DEFAULTS.fallback_rules, 'knowledge_only 關閉、由 AI 補足時的限制（生成與 L5 檢查都用這段）'],
+    ['answer_schema', TEXT_DEFAULTS.answer_schema, '回答欄位（JSON，一欄一行）：key／type（text、list、items）／label／hint／modes（full、continue、both）／required／summary／copy；items 另有 count、count_continue。至少要有一個 items 欄位（出處檢查用）。格式錯誤時會用預設欄位'],
     ['model_triage', 'gemini-2.5-flash', 'L4 分流用模型'],
     ['model_answer', 'gemini-2.5-flash', 'A1 對話 Agent 用模型（也用於 PDF 轉文字）'],
     ['model_check', 'gemini-2.5-flash', 'L5 檢查用模型'],
