@@ -300,12 +300,12 @@ function runChat_(req, opts) {
       fbNote = chk.reasons; rewritten = true; continue;
     }
     validateAnswer_(raw, mode);
-    const kg = str_(raw.knowledge_gap).trim();
+    const gap = str_(raw.knowledge_gap).trim();
     ans = cleanAnswer_(raw, mode);
-    T(attempt ? 'A1 重寫' : 'A1 生成', '建議 ' + answerItems_(ans).length + ' 個' + (kg && kg !== 'null' ? '｜模型回報知識不足：' + kg : ''));
-    if (kg && kg !== 'null' && !fallback) {
+    T(attempt ? 'A1 重寫' : 'A1 生成', '建議 ' + answerItems_(ans).length + ' 個' + (gap && gap !== 'null' ? '｜模型回報知識不足：' + gap : ''));
+    if (gap && gap !== 'null' && !fallback) {
       chk = { pass: false, items: [], reasons: [] };
-      if (gapFound('回答時發現知識不足', kg, attempt) === 'stop') return finish({ type: 'conservative', message: conservativeMsg_(refTable), sources: [] });
+      if (gapFound('回答時發現知識不足', gap, attempt) === 'stop') return finish({ type: 'conservative', message: conservativeMsg_(refTable), sources: [] });
       continue;
     }
     stabAt_('L5');
