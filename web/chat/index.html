@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>融合教育小幫手</title>
+<title>AI 助手</title>
 <link rel="stylesheet" href="chat.css">
 </head>
 <body>
 <div class="app">
   <header class="top">
-    <h1 id="botName">融合教育小幫手</h1>
+    <h1 id="botName">AI 助手</h1>
     <div class="top-actions">
       <button class="ghost" id="traceBtn" type="button" hidden aria-controls="drawer" aria-expanded="false">🔍 流程</button>
       <button class="ghost" id="reset" type="button" hidden>開新問題</button>
@@ -18,7 +18,7 @@
   </header>
 
   <section id="gate" class="gate">
-    <p class="muted">請輸入園所提供的邀請碼。對話內容會去除孩子姓名後保存，用於改善服務。</p>
+    <p class="muted" id="gateText">請輸入邀請碼。</p>
     <label for="code">邀請碼</label>
     <input id="code" autocomplete="off" placeholder="輸入邀請碼">
     <p class="err" id="gateErr"></p>
@@ -29,7 +29,7 @@
 
   <form id="composer" class="composer" hidden>
     <label for="msg" hidden>輸入訊息</label>
-    <textarea id="msg" rows="2" placeholder="描述你在班上遇到的狀況…"></textarea>
+    <textarea id="msg" rows="2" placeholder="輸入你的問題…"></textarea>
     <button class="primary" id="send" type="submit">送出</button>
   </form>
 </div>

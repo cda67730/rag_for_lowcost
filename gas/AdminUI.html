@@ -421,6 +421,7 @@ const LONG = ['system_prompt', 'answer_schema', 'welcome', 'continue_prompt', 'c
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
 const SECTIONS = [
   { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
+  { id: 'ui', title: '聊天介面', keys: ['ui_gate_text', 'ui_input_placeholder', 'ui_waiting', 'ui_referral_title', 'ui_referral_note', 'ui_referral_heading', 'ui_ai_tag', 'ui_fb_up', 'ui_fb_down', 'ui_accent'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
   { id: 'flow', title: '流程開關', keys: ['enable_deid', 'enable_case_flow'] },
   { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
@@ -433,6 +434,7 @@ const SECTIONS = [
 ];
 const LABELS = {
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
+  ui_gate_text: '邀請碼頁說明', ui_input_placeholder: '輸入框提示', ui_waiting: '等待訊息', ui_referral_title: '緊急轉介標題', ui_referral_note: '緊急轉介說明', ui_referral_heading: '轉介建議小標', ui_ai_tag: 'AI 補充標籤', ui_fb_up: '正面回饋按鈕', ui_fb_down: '負面回饋按鈕', ui_accent: '主色',
   enable_deid: '去識別化', enable_case_flow: '個案機制',
   domain_desc: '領域描述', role_user: '提問者稱呼', role_subject: '談論對象稱呼', role_escalate: '預設升級對象',
   enable_triage: '啟用 L4 分流', model_triage: '分流模型', intents: '意圖選項', triage_rules: '分流規則', triage_focus_hint: '提問焦點範例', followup_prompt: '追問方式', max_followups: '最多追問次數',
@@ -456,7 +458,7 @@ function fieldHtml(s, i) {
     input = /rules|prompt|options|schema/.test(s.key) ? `<details><summary>編輯文字（${String(v).length} 字）</summary>${ta}</details>` : ta;
   }
   else if (isBoolV(v)) input = `<label style="font-weight:400;margin:0"><input type="checkbox" data-i="${i}" ${String(v).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>`;
-  else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill)/.test(s.key) ? '100%' : '220px'}">`;
+  else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill|ui_)/.test(s.key) ? '100%' : '220px'}">`;
   return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}</div>`;
 }
 function renderSettings() {
@@ -662,7 +664,7 @@ function renderReply(r) {
   if (r.type === 'followup') return esc(restore(r.empathy)) + '\n' + r.questions.map((q, i) => (i + 1) + '. ' + esc(restore(q))).join('\n');
   if (r.type === 'referral') { const f = r.referral; return `<b>需要馬上找專人（${esc(f.category)}・${esc(f.level)}）</b>\n${esc(restore(f.reason))}\n該找誰：${esc(f.who)} ${esc(f.contact)}\n現在要做：${esc(f.now)}`; }
   if (r.type !== 'answer' && r.type !== 'ai_fallback' && r.type !== 'continue') return esc(r.message || '');
-  const a = r.answer; let h = (a.notice ? '<b style="color:#a86a12">⚠ ' + esc(a.notice) + '</b>\n\n' : '') + AnswerView.text(r, restore);
+  const a = r.answer; let h = (a.notice ? '<b style="color:#a86a12">⚠ ' + esc(a.notice) + '</b>\n\n' : '') + AnswerView.text(r, restore, D.ui);
   if ((a.options || []).length) h += '\n\n' + a.options.map(o => `<button class="btn opt" data-opt="${esc(o)}">${esc(o)}</button>`).join(' ');
   if ((r.sources || []).length) h += '\n\n<span class="note">出處：' + r.sources.map(s => esc(s.ref + ' ' + s.title + (s.page ? ' p.' + s.page : ''))).join('｜') + '</span>';
   return h;

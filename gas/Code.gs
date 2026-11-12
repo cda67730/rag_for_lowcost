@@ -16,13 +16,14 @@ function doGet(e) {
 function doPost(e) {
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (req.action === 'ui') return json_({ ok: true, ui: uiConfig_() });   // 聊天頁載入時先拿文字與外觀，不需邀請碼
     const vc = verifyCode_(req.code);
     if (vc.error) return json_({ ok: false, error: vc.error });
     const info = vc.info, school = info.school;
     if (!rateOk_(req.code)) return json_({ ok: false, error: '使用次數過多，請稍後再試' });
     req.school = school;
     switch (req.action) {
-      case 'check': return json_({ ok: true, botName: cfg_('bot_name') || '融合教育小幫手', welcome: cfg_('welcome') || '', trace: info.trace });
+      case 'check': return json_({ ok: true, botName: cfg_('bot_name') || 'AI 助手', welcome: cfg_('welcome') || '', trace: info.trace, ui: uiConfig_() });
       case 'chat':
         if (!String(req.message || '').trim()) return json_({ ok: false, error: '請輸入內容' });
         return json_(Object.assign({ ok: true }, runChat_(req, { trace: info.trace })));

@@ -125,7 +125,7 @@ function adminLoad() {
   const skills = rows_('skills').map(r => ({ id: r['Skill ID'], name: r['名稱'], tags: r['對應主題'], always: truthy_(r['一律載入']), content: r['內容'], enabled: truthy_(r['啟用']), version: r['版本'], by: r['更新者'], at: fmt_(r['更新時間']) }));
   const docs = rows_('docs').map(r => ({ id: r['文件ID'], title: r['標題'], source: r['出處'], evidence: r['證據等級'], file: r['原始檔名'], chunks: r['段落數'], status: r['狀態'], by: r['上傳者'], at: fmt_(r['上傳時間']), reviewer: r['審核者'] })).reverse();
   const topics = Array.from(new Set([].concat.apply([], skills.map(s => String(s.tags || '').split(/[,，、]/).map(x => x.trim()).filter(Boolean)))));
-  return { me: me, settings: settings, skills: skills, docs: docs, topics: topics, schema: schema_(), sheetUrl: ss_().getUrl() };
+  return { me: me, settings: settings, skills: skills, docs: docs, topics: topics, schema: schema_(), ui: uiConfig_(), sheetUrl: ss_().getUrl() };
 }
 function fmt_(d) { return d instanceof Date ? Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd HH:mm') : String(d || ''); }
 

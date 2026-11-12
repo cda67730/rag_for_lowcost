@@ -30,7 +30,7 @@ window.AnswerView = (() => {
 
   /** 聊天頁用的 HTML。opts.restore 還原去識別化的名字；opts.chips(item) 產生出處按鈕 */
   function render(r, opts) {
-    opts = opts || {};
+    opts = opts || {}; const L = opts.labels || {};
     const a = r.answer || {}, R = (s) => esc(opts.restore ? opts.restore(s) : s), chips = opts.chips || (() => "");
     let h = a.notice ? `<div class="notice">${esc(a.notice)}</div>` : "";
     fields(r).forEach((f) => {
@@ -42,13 +42,14 @@ window.AnswerView = (() => {
       else if (f.copy) h += head + `<div class="pm" data-field="${esc(f.key)}">${R(v)}</div><div class="actions"><button type="button" data-copy="${esc(f.key)}" data-label="${esc(f.label || f.key)}">複製</button></div>`;
       else h += head + `<p>${R(v)}</p>`;
     });
-    if (a.referral) h += `<h3>需要時找專人</h3><p>${R(a.referral)}</p>`;
+    if (a.referral) h += `<h3>${esc(L.referral_heading || "需要時找專人")}</h3><p>${R(a.referral)}</p>`;
     if ((a.options || []).length) h += `<div class="opts">${a.options.map((o) => `<button type="button" class="opt" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
     return h;
   }
 
   /** 後台用的文字版（換行與粗體標題，refs 直接列在後面） */
-  function text(r, restore) {
+  function text(r, restore, labels) {
+    const L = labels || {};
     const a = r.answer || {}, R = (s) => esc(restore ? restore(s) : s);
     const parts = [];
     fields(r).forEach((f) => {
@@ -59,7 +60,7 @@ window.AnswerView = (() => {
       else if (f.type === "list") parts.push(head + v.map((o) => "・" + R(o)).join("\n"));
       else parts.push(head + R(v));
     });
-    if (a.referral) parts.push(`<b>需要時找專人</b>\n${R(a.referral)}`);
+    if (a.referral) parts.push(`<b>${esc(L.referral_heading || "需要時找專人")}</b>\n${R(a.referral)}`);
     return parts.join("\n\n");
   }
 

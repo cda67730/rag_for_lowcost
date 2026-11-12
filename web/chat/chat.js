@@ -3,6 +3,8 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const newSession = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+  let UI = {};
+  const ui = (k, d) => (UI[k] != null && UI[k] !== "" ? UI[k] : d);
   let S = { code: "", session: newSession(), history: [], nameMap: {}, followups: 0, answered: 0, turn: 0, welcome: "", trace: false, replies: [], view: -1 };
 
   async function api(action, payload) {
@@ -26,14 +28,14 @@
     if (r.type === "followup") return `<p>${R(r.empathy)}</p><ol>${r.questions.map((q) => `<li>${R(q)}</li>`).join("")}</ol>`;
     if (r.type === "referral") {
       const f = r.referral;
-      return `<h3>這個情況需要馬上找專人（${esc(f.category)}）</h3><p>${R(f.reason)}</p><h3>該找誰</h3><p>${esc(f.who)}${f.contact ? "｜" + esc(f.contact) : ""}</p>${f.now ? `<h3>現在要做的事</h3><p>${esc(f.now)}</p>` : ""}<p class="muted small">是否通報或轉介，由你和園長決定。</p>`;
+      return `<h3>${esc(ui("referral_title", "這個情況需要馬上找專人"))}（${esc(f.category)}）</h3><p>${R(f.reason)}</p><h3>該找誰</h3><p>${esc(f.who)}${f.contact ? "｜" + esc(f.contact) : ""}</p>${f.now ? `<h3>現在要做的事</h3><p>${esc(f.now)}</p>` : ""}${ui("referral_note", "") ? `<p class="muted small">${esc(ui("referral_note", ""))}</p>` : ""}`;
     }
     if (r.type !== "answer" && r.type !== "continue" && r.type !== "ai_fallback") return `<p>${esc(r.message)}</p>`;
     const a = r.answer, src = {};
     (r.sources || []).forEach((s) => (src[s.ref] = s));
     const chips = (s) => (s.refs || []).filter((x) => src[x]).map((x) => `<button type="button" class="ref" data-ref="${esc(x)}">${esc(x)}</button>`).join("") +
-      ((r.type === "ai_fallback" || (a && a.notice)) && !(s.refs || []).some((x) => src[x]) ? `<span class="ai-tag">AI 補充</span>` : "");
-    return AnswerView.render(r, { restore, chips });
+      ((r.type === "ai_fallback" || (a && a.notice)) && !(s.refs || []).some((x) => src[x]) ? `<span class="ai-tag">${esc(ui("ai_tag", "AI 補充"))}</span>` : "");
+    return AnswerView.render(r, { restore, chips, labels: UI });
   }
 
   function attach(el, r, turn) {
@@ -67,7 +69,7 @@
     const fbOn = r.type === "answer" || r.type === "ai_fallback" || r.type === "continue" || r.type === "referral" || r.type === "conservative";
     if (fbOn || S.trace) {
       const a = document.createElement("div"); a.className = "actions";
-      a.innerHTML = (fbOn ? `<button type="button" data-fb="有幫助">👍 有幫助</button><button type="button" data-fb="沒幫助">👎 沒幫助</button>` : "") +
+      a.innerHTML = (fbOn ? `<button type="button" data-fb="有幫助">${esc(ui("fb_up", "👍 有幫助"))}</button><button type="button" data-fb="沒幫助">${esc(ui("fb_down", "👎 沒幫助"))}</button>` : "") +
         (S.trace ? `<button type="button" class="trace-link" data-trace="${S.replies.length - 1}">🔍 看流程</button>` : "");
       el.appendChild(a);
     }
@@ -75,7 +77,7 @@
 
   async function send(text) {
     bubble("me", esc(text));
-    const wait = bubble("bot typing", "正在了解狀況、查找資料…");
+    const wait = bubble("bot typing", esc(ui("waiting", "正在了解狀況、查找資料…")));
     $("send").disabled = true; S.turn++;
     try {
       const r = await api("chat", { message: text, history: S.history, nameMap: S.nameMap, followups: S.followups, answered: S.answered, turn: S.turn });
@@ -115,6 +117,7 @@
     $("enter").disabled = true; S.code = code;
     try {
       const r = await api("check");
+      if (r.ui) applyUi(r.ui);
       S.welcome = r.welcome || ""; S.trace = !!r.trace; $("traceBtn").hidden = !S.trace; $("botName").textContent = r.botName || $("botName").textContent; document.title = $("botName").textContent;
       try { sessionStorage.setItem("chat-code", code); } catch (e) {}
       $("gate").hidden = true; $("chat").hidden = false; $("composer").hidden = false; $("reset").hidden = false;
@@ -147,5 +150,14 @@
   $("dPrev").addEventListener("click", () => openDrawer(S.view - 1));
   $("dNext").addEventListener("click", () => openDrawer(S.view + 1));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("drawer").classList.contains("open")) closeDrawer(); });
+  // 聊天頁的文字與外觀：後台「聊天介面」設定；沒設或拿不到時用頁面上的預設字
+  function applyUi(u) {
+    UI = u || {};
+    if (UI.botName) { $("botName").textContent = UI.botName; document.title = UI.botName; }
+    if (UI.gate_text) $("gateText").textContent = UI.gate_text;
+    if (UI.input_placeholder) $("msg").placeholder = UI.input_placeholder;
+    if (UI.accent && /^#[0-9a-f]{3,8}$/i.test(UI.accent)) document.documentElement.style.setProperty("--accent", UI.accent);
+  }
+  (async () => { try { const r = await fetch(C.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "ui" }) }).then((x) => x.json()); if (r && r.ok) applyUi(r.ui); } catch (e) {} })();
   try { const c = sessionStorage.getItem("chat-code"); if (c) $("code").value = c; } catch (e) {}
 })();

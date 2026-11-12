@@ -97,6 +97,12 @@ function text_(key) {
   const v = cfg_(key);
   return tpl_(v == null || String(v).trim() === '' ? (TEXT_DEFAULTS[key] || '') : String(v));
 }
+/** 聊天頁用的文字與外觀設定（不含敏感內容，邀請碼驗證前就可以拿） */
+function uiConfig_() {
+  const C = cfgAll_(), o = { botName: String(C.bot_name || ''), welcome: String(C.welcome || '') };
+  Object.keys(C).forEach(k => { if (/^ui_/.test(k) && C[k] != null && String(C[k]).trim() !== '') o[k.slice(3)] = String(C[k]); });
+  return o;
+}
 // ---------- 角色用詞：提示詞骨架裡的稱呼都從設定來，換案子只要改這幾項 ----------
 const ROLE_DEFAULTS = { domain: 'AI 知識問答系統', user: '使用者', subject: '對方', escalate: '主管' };
 function roles_() {
@@ -130,6 +136,16 @@ function intentKey_(name) { return (intents_().find(i => i.name === String(name)
 const SETTINGS_DEFAULT = [
     ['bot_name', '融合教育小幫手', '老師端顯示的名稱'],
     ['welcome', '你好，我是融合教育小幫手。說說班上遇到的狀況，我會先了解情境，再給你幾個馬上能用的做法。', '老師端的歡迎訊息'],
+    ['ui_gate_text', '請輸入園所提供的邀請碼。對話內容會去除孩子姓名後保存，用於改善服務。', '聊天頁：邀請碼頁的說明文字'],
+    ['ui_input_placeholder', '描述你在班上遇到的狀況…', '聊天頁：輸入框的提示文字'],
+    ['ui_waiting', '正在了解狀況、查找資料…', '聊天頁：送出後等待回答時顯示的字'],
+    ['ui_referral_title', '這個情況需要馬上找專人', '聊天頁：緊急轉介卡片的標題'],
+    ['ui_referral_note', '是否通報或轉介，由你和園長決定。', '聊天頁：緊急轉介卡片底部的說明'],
+    ['ui_referral_heading', '需要時找專人', '聊天頁：回答裡轉介建議的小標題'],
+    ['ui_ai_tag', 'AI 補充', '聊天頁：知識不足由 AI 補足的建議旁邊的標籤'],
+    ['ui_fb_up', '👍 有幫助', '聊天頁：正面回饋按鈕文字（統計以「有幫助」三個字比對）'],
+    ['ui_fb_down', '👎 沒幫助', '聊天頁：負面回饋按鈕文字（統計以「沒幫助」三個字比對）'],
+    ['ui_accent', '', '聊天頁：主色（十六進位色碼，例如 #1e7f7d）；留空用預設'],
     ['system_prompt', SYSTEM_PROMPT_DEFAULT, '固定 system prompt（第 1 層）'],
     ['domain_desc', '學前融合教育 AI 系統', '領域描述：分流器與審查器的 prompt 開頭「你是〔領域描述〕的分流器」'],
     ['role_user', '老師', '提問者的稱呼；所有 prompt 裡的 {user} 都換成這個'],
