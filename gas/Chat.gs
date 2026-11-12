@@ -1,7 +1,7 @@
 /**
  * 線上回答流程（P04 對話狀態機）
  * P03 去識別化 → [L4 分流 ‖ P06 檢索向量] → P04 判斷 → P05 載入 Skill → P07 組裝 → A1 生成
- * → [P08 規則 ‖ P09 出處 ‖ L5 依據與轉介] → P10 組合與降級 → P15 紀錄
+ * → [P08 規則 ‖ P09 出處 ‖ L5 AI 檢查] → P10 組合與降級 → P15 紀錄
  */
 
 // ---------- P03 去識別化（程式，不用 LLM） ----------
@@ -380,7 +380,7 @@ function assemble_(sys, skillText, tri, caseText, hits, history, ref, refWho, fe
   ].filter(Boolean).join('\n\n');
 }
 
-// ---------- 檢查：P08 規則、P09 出處、L5 依據與轉介 ----------
+// ---------- 檢查：P08 規則、P09 出處、L5 AI 檢查（項目在設定 check_items） ----------
 function checks_(caseText, ans, hits, C, range, focus, fallback) {
   range = range || [2, 3];
   const R = roles_();
@@ -395,18 +395,20 @@ function checks_(caseText, ans, hits, C, range, focus, fallback) {
   st.forEach(x => { if (!fallback && !(x.refs || []).length) p9.push('「' + x.title + '」沒有出處'); (x.refs || []).forEach(r => { if (!ok[r]) p9.push(r + ' 不在檢索結果中'); }); });
   items.push({ name: 'P09 出處核對', pass: !p9.length, note: p9.join('；') || (fallback ? '知識不足，部分策略來自 AI 一般知識（已標示）' : st.length ? '每條建議都有出處' : '沒有新策略') });
   reasons.push.apply(reasons, p9);
-  // L5 依據與轉介（可關閉）＋回應度（可另外關閉）；兩者合併為一次 AI 呼叫
+  // L5 AI 檢查（可關閉）＋回應度（可另外關閉）；兩者合併為一次 AI 呼叫
   const doL5 = truthy_(C.enable_llm_check);
   const doRel = !!focus && truthy_(C.enable_relevance_check == null || C.enable_relevance_check === '' ? true : C.enable_relevance_check);
   if (doL5 || doRel) {
     try {
       const kn = hits.map(h => h.ref + '：' + h.text).join('\n');
+      const CI = doL5 ? checkItems_() : [];
       const l5 = genJson_(C.model_check, '你是' + R.domain + '回答的審查器，只輸出 JSON。\n' +
-        (doL5 ? text_('check_prompt') + '\n每個問題的 severe：符合上面「嚴重」的定義為 true，其他為 false。\n' : '') +
+        (doL5 ? '逐項檢查回答：\n' + CI.map((it, i) => '(' + (i + 1) + ') ' + it.name + '：' + it.desc).join('\n') +
+          '\n嚴重（會擋下回答）只用在：' + text_('check_severe') + '\n每個問題的 severe：符合「嚴重」的定義為 true，其他為 false。\n' : '') +
         (doL5 && fallback ? '這次知識庫內容不足，refs 為空的策略來自一般實務知識：「依據」改為檢查是否符合下列補足規則：' + text_('fallback_rules') + '\n越界或可能造成傷害才算嚴重。\n' : '') +
         (doRel ? '另外判斷回應度：回答是否直接回應「' + R.user + '想要的」，策略是否具體到這個' + R.subject + '與情境（不是只有一般原則）。addressed 為 true／false，note 說明缺了什麼；' +
           'addressed 為 false 時，cause 填「知識不足」（提供的知識沒有在談這個問題的對象或情況，重寫也無法改善）或「偏題」（知識有涵蓋，但回答沒用好）。\n' : '') +
-        '格式：{' + (doL5 ? '"issues":[{"type":"依據|轉介|語氣","severe":false,"note":"一句話說明問題"}]' : '') + (doL5 && doRel ? ',' : '') +
+        '格式：{' + (doL5 ? '"issues":[{"type":"' + CI.map(it => it.name).join('|') + '","severe":false,"note":"一句話說明問題"}]' : '') + (doL5 && doRel ? ',' : '') +
         (doRel ? '"relevance":{"addressed":true,"cause":null,"note":""}' : '') + '}' + (doL5 ? '，沒有問題時 issues 為空陣列' : '') + '\n\n' +
         (doRel ? R.user + '想要的：' + focus + '\n\n' : '') + R.user + '描述：\n' + caseText + '\n\n知識：\n' + kn + '\n\n回答：\n' + s, { temperature: 0, noThink: true });
       if (doL5 && !Array.isArray(l5.issues)) stabNote_(l5.issues == null ? '缺欄位' : '型別錯誤', 'issues');
@@ -420,9 +422,9 @@ function checks_(caseText, ans, hits, C, range, focus, fallback) {
         const severe = issues.filter(i => i.severe);
         const txt = i => (i.type ? i.type + '：' : '') + i.note;
         const pass = !severe.length;
-        items.push({ name: 'L5 依據與轉介', pass: pass,
-          note: !issues.length ? '有依據、無遺漏轉介' : (pass ? '小問題（不擋）：' : '') + issues.map(i => (i.severe ? '【嚴重】' : '') + txt(i)).join('；') });
-        if (!pass) reasons.push.apply(reasons, severe.length ? severe.map(txt) : ['依據或轉介有問題']);
+        items.push({ name: 'L5 檢查', pass: pass,
+          note: !issues.length ? CI.map(it => it.name).join('、') + '都沒有問題' : (pass ? '小問題（不擋）：' : '') + issues.map(i => (i.severe ? '【嚴重】' : '') + txt(i)).join('；') });
+        if (!pass) reasons.push.apply(reasons, severe.length ? severe.map(txt) : ['檢查有問題']);
       }
       if (doRel) {
         const rel = l5.relevance || {};
@@ -431,7 +433,7 @@ function checks_(caseText, ans, hits, C, range, focus, fallback) {
         items.push({ name: '回應度', pass: ok2, note: ok2 ? '有直接回應：' + focus : '【嚴重】沒有回應到「' + focus + '」' + (rel.note ? '：' + str_(rel.note) : '') });
         if (!ok2) reasons.push('沒有直接回應' + R.user + '想要的「' + focus + '」' + (rel.note ? '（' + str_(rel.note) + '）' : '') + '，請先直接回應這一點，策略要具體');
       }
-    } catch (e) { items.push({ name: doL5 ? 'L5 依據與轉介' : '回應度', pass: true, note: '檢查未完成（略過）：' + e.message }); }
+    } catch (e) { items.push({ name: doL5 ? 'L5 檢查' : '回應度', pass: true, note: '檢查未完成（略過）：' + e.message }); }
   }
   return { pass: items.every(i => i.pass), items: items, reasons: reasons, l5: l5Issues, relFail: relFail };
 }

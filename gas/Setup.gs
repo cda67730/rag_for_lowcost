@@ -72,13 +72,13 @@ const TEXT_DEFAULTS = {
   ].join('\n'),
   followup_prompt: '老師的描述資訊不足。請先用一句話同理老師，再依 Skill 的追問清單提出最多 2 個最關鍵、好回答的追問。',
   answer_rules: 'strategies 2–3 個；每個策略的 refs 只能用上面提供的 K 編號，至少一個；不得推測診斷或使用標籤化用語；保留「幼兒A」等代稱。',
-  check_prompt: [
-    '逐項檢查回答：',
-    '(1) 依據：每個策略是否大致能從它引用的知識推得；合理的實務延伸（例如把原則轉成具體做法）不算編造，只有知識完全沒提到、或與知識矛盾才算問題。',
-    '(2) 轉介：老師描述中有明確需要專人的訊號（安全、疑似受虐、老師身心危機、長期無效）而回答完全沒提。',
-    '(3) 語氣：說教、責怪老師或家長、或替孩子下診斷。老師自己提到的診斷名稱不算違規，只要回答沒有推測或確認診斷即可。',
-    '嚴重（會擋下回答）只用在：編造或違反知識、遺漏需要專人的訊號、替孩子下診斷。其他都算小問題。',
+  // L5 檢查項目：一行一項「類型＝判斷說明」；類型名稱會成為模型回報 issues.type 的選項，統計也依這個分組
+  check_items: [
+    '依據＝每個建議是否大致能從它引用的知識推得；合理的實務延伸（例如把原則轉成具體做法）不算編造，只有知識完全沒提到、或與知識矛盾才算問題。',
+    '轉介＝{user}描述中有明確需要專人的訊號（安全、疑似受虐、{user}身心危機、長期無效）而回答完全沒提。',
+    '語氣＝說教、責怪{user}或家長、或替{subject}下診斷。{user}自己提到的診斷名稱不算違規，只要回答沒有推測或確認診斷即可。',
   ].join('\n'),
+  check_severe: '編造或違反知識、遺漏需要專人的訊號、替{subject}下診斷。其他都算小問題。',
   continue_prompt: [
     '老師已經拿到完整建議了，這次不要再重複「看見與理解、策略、觀察、找專人」的完整格式。',
     '- reply：用兩三句話直接回應老師這次說的（新的觀察、試過的結果、或要求），像同事對話一樣自然',
@@ -118,6 +118,12 @@ function intents_() {
     return { key: k, name: p[0].trim(), desc: p.slice(1).join('＝').trim() };
   });
 }
+/** L5 檢查項目：[{name, desc}]；行格式錯誤或留空時用預設 */
+function checkItems_() {
+  const parse = t => t.split(/\n+/).map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(/[＝=]/); return { name: p[0].trim(), desc: p.slice(1).join('＝').trim() }; }).filter(x => x.name);
+  const items = parse(text_('check_items'));
+  return items.length ? items : parse(tpl_(TEXT_DEFAULTS.check_items));
+}
 function intentName_(key) { return (intents_().find(i => i.key === key) || {}).name || key; }
 function intentKey_(name) { return (intents_().find(i => i.name === String(name).trim()) || {}).key || null; }
 
@@ -146,7 +152,7 @@ const SETTINGS_DEFAULT = [
     ['chunk_overlap', 80, '段落重疊（字）'],
     ['max_followups', 1, '最多追問幾輪'],
     ['enable_triage', true, 'L4 分流：開＝AI 判斷意圖、焦點、轉介、主題、是否追問；關＝不呼叫分流 AI，主題用關鍵字比對，直接檢索知識庫回答（較快較省，但不會偵測緊急轉介、不追問、不判斷超出範圍）'],
-    ['enable_llm_check', true, 'L5 依據與轉介檢查：開＝回答後由 AI 檢查依據與轉介；關＝只做程式檢查（禁止用語、出處編號）'],
+    ['enable_llm_check', true, 'L5 AI 檢查：開＝回答後由 AI 依「檢查項目」逐項檢查；關＝只做程式檢查（禁止用語、出處編號）'],
     ['knowledge_only', true, '只用知識庫回答：開＝知識不足時保守回答；關＝知識不足時由 AI 協助補足（照樣檢查，並標示「知識庫內容不足」）'],
     ['enable_relevance_check', true, '是否檢查回答有沒有直接回應老師的提問焦點（L5 關閉時也可單獨啟用）'],
     ['enable_rerank', true, '是否用 AI 依「能不能回答提問焦點」重新排序檢索結果（每題多一次 AI 呼叫）'],
@@ -161,7 +167,8 @@ const SETTINGS_DEFAULT = [
     ['triage_rules', TEXT_DEFAULTS.triage_rules, 'L4 分流規則：轉介等級怎麼判斷、什麼不算、資訊足夠的標準'],
     ['followup_prompt', TEXT_DEFAULTS.followup_prompt, '資訊不足時，追問要怎麼問'],
     ['answer_rules', TEXT_DEFAULTS.answer_rules, '回答的硬性規則（策略數量、出處、用語）'],
-    ['check_prompt', TEXT_DEFAULTS.check_prompt, 'L5 依據與轉介檢查標準：檢查什麼、什麼算嚴重（嚴重才會擋下回答）'],
+    ['check_items', TEXT_DEFAULTS.check_items, 'L5 檢查項目，一行一項「類型＝判斷說明」；可增減。類型名稱會出現在檢查結果與問題統計'],
+    ['check_severe', TEXT_DEFAULTS.check_severe, 'L5 什麼算嚴重（嚴重才會擋下回答並重寫，其他只記錄）'],
     ['full_answer_rounds', 2, '同一個個案給幾次完整回答；之後改成延續回覆（只回應新內容＋下一步選項）'],
     ['continue_prompt', TEXT_DEFAULTS.continue_prompt, '延續回覆要怎麼回'],
     ['continue_options', TEXT_DEFAULTS.continue_options, '延續回覆提供的下一步選項（一行一個，AI 會挑適合的）'],
