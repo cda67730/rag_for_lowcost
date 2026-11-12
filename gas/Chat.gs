@@ -266,12 +266,14 @@ function validateAnswer_(a, mode) {
 
 // ---------- 回答欄位定義（設定 answer_schema）：程式只認 type，欄位名稱與標題都由設定決定 ----------
 const SCHEMA_TYPES = ['text', 'list', 'items'];
+function citationOn_() { const v = cfgAll_().enable_citation; return truthy_(v == null || v === '' ? true : v); }
 let SCHEMA_ = null;
 function schema_() {
   if (SCHEMA_) return SCHEMA_;
   let out = null, bad = null;
   try { out = parseSchema_(text_('answer_schema')); } catch (e) { bad = e.message; }
-  if (out && !out.some(f => f.type === 'items')) { bad = '缺少 items 欄位'; out = null; }
+  // 出處機制開著時至少要有一個 items 欄位（P09 要檢查 refs）；關閉時允許只有文字欄位
+  if (out && citationOn_() && !out.some(f => f.type === 'items')) { bad = '缺少 items 欄位（enable_citation 開啟時必須有）'; out = null; }
   if (!out) { out = parseSchema_(TEXT_DEFAULTS.answer_schema); stabNote_('設定錯誤', 'answer_schema：' + bad + '，改用預設欄位'); }
   return (SCHEMA_ = out);
 }
@@ -300,7 +302,7 @@ function answerItems_(a) { return [].concat.apply([], schema_().filter(f => f.ty
 function schemaFormat_(mode, extra) {
   const parts = schemaFields_(mode).map(f => {
     const h = f.hint || f.label || f.key;
-    if (f.type === 'items') return '"' + f.key + '":[{"title":"標題","how":"' + h + '","refs":["K1"]}]';
+    if (f.type === 'items') return '"' + f.key + '":[{"title":"標題","how":"' + h + '","refs":' + (citationOn_() ? '["K1"]' : '[]') + '}]';
     if (f.type === 'list') return '"' + f.key + '":["' + h + '"]';
     return '"' + f.key + '":"' + h + '"';
   });
@@ -397,10 +399,13 @@ function checks_(caseText, ans, hits, C, range, focus, fallback) {
   if (bad) reasons.push('不可使用「' + bad.rule + '」' + (bad.note ? '（' + bad.note + '）' : ''));
   const ok = {}; hits.forEach(h => ok[h.ref] = true);
   const st = answerItems_(ans); const p9 = [];
-  if (st.length < range[0] || st.length > range[1]) p9.push('建議數量 ' + st.length + ' 個，應為 ' + range[0] + '–' + range[1] + ' 個');
-  st.forEach(x => { if (!fallback && !(x.refs || []).length) p9.push('「' + x.title + '」沒有出處'); (x.refs || []).forEach(r => { if (!ok[r]) p9.push(r + ' 不在檢索結果中'); }); });
-  items.push({ name: 'P09 出處核對', pass: !p9.length, note: p9.join('；') || (fallback ? '知識不足，部分策略來自 AI 一般知識（已標示）' : st.length ? '每條建議都有出處' : '沒有新策略') });
-  reasons.push.apply(reasons, p9);
+  if (citationOn_()) {
+    // P09：enable_citation 關閉時不檢查數量與出處（回答可以只有文字欄位）
+    if (st.length < range[0] || st.length > range[1]) p9.push('建議數量 ' + st.length + ' 個，應為 ' + range[0] + '–' + range[1] + ' 個');
+    st.forEach(x => { if (!fallback && !(x.refs || []).length) p9.push('「' + x.title + '」沒有出處'); (x.refs || []).forEach(r => { if (!ok[r]) p9.push(r + ' 不在檢索結果中'); }); });
+    items.push({ name: 'P09 出處核對', pass: !p9.length, note: p9.join('；') || (fallback ? '知識不足，部分建議來自 AI 一般知識（已標示）' : st.length ? '每條建議都有出處' : '沒有新建議') });
+    reasons.push.apply(reasons, p9);
+  } else items.push({ name: 'P09 出處核對', pass: true, note: '已關閉（enable_citation）' });
   // L5 AI 檢查（可關閉）＋回應度（可另外關閉）；兩者合併為一次 AI 呼叫
   const doL5 = truthy_(C.enable_llm_check);
   const doRel = !!focus && truthy_(C.enable_relevance_check == null || C.enable_relevance_check === '' ? true : C.enable_relevance_check);
