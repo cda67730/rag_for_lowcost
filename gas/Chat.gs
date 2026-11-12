@@ -43,20 +43,29 @@ function deidRule_(text, map) {
   }));
   return { text: deidApply_(out, map), map: map, found: 0 };
 }
-function deidAi_(text, map, C) {
-  map = Object.assign({}, map || {});
-  const L = deidLabels_(), R = roles_();
-  const known = Object.keys(map);
-  const r = genJson_(C.model_triage, '你負責在送出前去除個人資訊，只輸出 JSON。找出下面訊息裡所有可以指認特定個人或機構的詞：\n' +
+/** 給模型的「要找哪些個資」說明；單獨呼叫與併入 L4 時共用 */
+function deidInstr_(known) {
+  const R = roles_();
+  return '找出訊息裡所有可以指認特定個人或機構的詞：\n' +
     '- subject：' + R.subject + '的姓名、小名、綽號（例如「小宇」「宇宇」「阿明」「王小明」）\n' +
     '- family：家長或家人的姓名、稱呼（例如「宇宇媽媽」只標「宇宇」，「陳媽媽」標「陳」）\n' +
     '- staff：' + R.user + '或其他人員的姓名\n' +
     '- org：園所、學校、機構、地址或可指認的地點名稱\n' +
     '- other：其他人名\n' +
     '只抓訊息裡「原樣出現」的字串，text 必須能在訊息中逐字找到；一般名詞（小朋友、老師、媽媽、班上）不算。沒有就給空陣列。\n' +
-    (known.length ? '這些已經處理過，不用再列：' + known.join('、') + '\n' : '') +
+    (known && known.length ? '這些已經處理過，不用再列：' + known.join('、') + '\n' : '');
+}
+function deidAi_(text, map, C) {
+  const r = genJson_(C.model_triage, '你負責在送出前去除個人資訊，只輸出 JSON。' + deidInstr_(Object.keys(map || {})) +
     '格式：{"items":[{"text":"","type":"subject"}]}\n\n訊息：\n' + text, { temperature: 0, noThink: true });
-  const items = [].concat((r && r.items) || []).filter(x => x && typeof x.text === 'string' && x.text.trim().length >= 1);
+  if (!r || !Array.isArray(r.items)) throw new Error('回覆沒有 items 陣列');
+  return deidFromItems_(text, map, r.items);
+}
+/** 把模型找到的名字清單套成代稱 */
+function deidFromItems_(text, map, list) {
+  map = Object.assign({}, map || {});
+  const L = deidLabels_();
+  const items = [].concat(list || []).filter(x => x && typeof x.text === 'string' && x.text.trim().length >= 1);
   items.sort((a, b) => b.text.length - a.text.length).forEach(x => {
     const t = x.text.trim();
     if (map[t] || String(text).indexOf(t) < 0 || t.length > 20 || DEID_GENERIC.indexOf(t) >= 0) return;
@@ -77,9 +86,11 @@ function deid_(text, map, C) {
 }
 
 // ---------- L4 分流 prompt ----------
-function triagePrompt_(prevTeacher, latest, topics, categories) {
+function triagePrompt_(prevTeacher, latest, topics, categories, deidKnown) {
   // 規則文字在「設定」的 triage_rules、意圖選項在 intents、稱呼在角色用詞；這裡只放欄位與輸出格式
+  // deidKnown 不是 null 時，去識別化併在這次呼叫裡做：多回一個 deid 清單
   const R = roles_(), IN = intents_();
+  const withDeid = Array.isArray(deidKnown);
   return '你是' + R.domain + '的分流器，只輸出 JSON。依下列規則判斷：\n' + text_('triage_rules') + '\n\n' +
     '欄位：\n' +
     '- intent：' + R.user + '「這一則訊息」的意圖，從 ' + JSON.stringify(IN.map(i => i.name)) + ' 選一個。' + IN.map(i => i.name + '＝' + i.desc).join('；') + '\n' +
@@ -90,7 +101,8 @@ function triagePrompt_(prevTeacher, latest, topics, categories) {
     '- info_enough：整個個案的資訊是否足夠\n' +
     '- missing：缺少的關鍵資訊（最多 2 項）\n' +
     '- focus：用一句話寫出' + R.user + '「這一則」真正想要的東西（' + text_('triage_focus_hint') + '），補充或回答追問時寫整個個案目前要解決的事\n' +
-    '格式：{"intent":"' + IN[0].name + '","focus":"","referral":{"category":"none","level":"none","reason":""},"topics":[],"in_scope":true,"info_enough":true,"missing":[]}\n\n' +
+    (withDeid ? '- deid：' + deidInstr_(deidKnown) : '') +
+    '格式：{' + (withDeid ? '"deid":[{"text":"","type":"subject"}],' : '') + '"intent":"' + IN[0].name + '","focus":"","referral":{"category":"none","level":"none","reason":""},"topics":[],"in_scope":true,"info_enough":true,"missing":[]}\n\n' +
     (prevTeacher.length ? R.user + '先前說過：\n' + prevTeacher.join('\n') + '\n\n' : '') +
     R.user + '這一則訊息：\n' + latest;
 }
@@ -107,14 +119,24 @@ function runChat_(req, opts) {
   const maxFu = Number(C.max_followups == null ? 1 : C.max_followups);
 
   // 1. P03 去識別化（可關閉：原文直接進流程與紀錄）
+  //    deid_mode＝ai 且 L4 開著時併進 L4 那次呼叫（省一次呼叫）：先把已知的名字換掉，新名字由 L4 回報後再換
   const useDeid = truthy_(C.enable_deid);
-  const d = useDeid ? deid_(req.message || '', req.nameMap, C) : { text: String(req.message || ''), map: {} };
+  const useTriage = truthy_(C.enable_triage == null || C.enable_triage === '' ? true : C.enable_triage);
+  const mergeDeid = useDeid && useTriage && String(C.deid_mode || 'ai') !== 'rule';
+  const raw = String(req.message || '');
+  let d = !useDeid ? { text: raw, map: {} }
+    : mergeDeid ? { text: deidApply_(deidScrub_(raw), req.nameMap || {}), map: Object.assign({}, req.nameMap || {}) }
+    : deid_(raw, req.nameMap, C);
   const history = (req.history || []).slice(-8);
   const prevTeacher = history.filter(h => h.role === 'teacher').map(h => h.text);
-  const fullCase = prevTeacher.concat([d.text]).join('\n');
+  let fullCase = prevTeacher.concat([d.text]).join('\n');
   // 觀測面板與紀錄只顯示代稱，不顯示原名（對照表只回給使用者端）
-  if (useDeid) T('P03 去識別化', (String(C.deid_mode || 'ai') === 'rule' ? '規則' : 'AI') + (d.fallback ? '（AI 失敗改用規則：' + d.fallback + '）' : '') + '｜代稱：' + (Object.keys(d.map).length ? Object.keys(d.map).map(k => d.map[k]).join('、') : '無'));
-  else T('P03 去識別化（已關閉）', '原文直接使用');
+  const deidNote = () => '代稱：' + (Object.keys(d.map).length ? Object.keys(d.map).map(k => d.map[k]).join('、') : '無');
+  const p03 = { step: 'P03 去識別化', kind: 'text', detail: '', ms: Date.now() - t0 };
+  if (!useDeid) { p03.step = 'P03 去識別化（已關閉）'; p03.detail = '原文直接使用'; }
+  else if (!mergeDeid) p03.detail = (String(C.deid_mode || 'ai') === 'rule' ? '規則' : 'AI') + (d.fallback ? '（AI 失敗改用規則：' + d.fallback + '）' : '') + '｜' + deidNote();
+  else p03.detail = '併入 L4 處理中';
+  trace.push(p03);
 
   // 2. L4 分流 ‖ P06 查詢向量（fetchAll 並行）；向量同時算「整段個案」與「只有最新訊息」，分流後再選用
   const skills = skills_();
@@ -123,15 +145,26 @@ function runChat_(req, opts) {
   const expAll = expandQuery_(fullCase), expNew = expandQuery_(d.text);
   // enable_triage 關閉：不呼叫分流 AI，主題改用關鍵字比對（Skill 對應主題、同義詞概念），直接檢索知識庫回答
   //  代價：不偵測轉介、不判斷超出範圍、不追問、不判斷是否換了新個案（同一段對話都當同一個案）
-  const useTriage = truthy_(C.enable_triage == null || C.enable_triage === '' ? true : C.enable_triage);
   let tri, vecs;
   if (useTriage) {
-    const triReq = genReq_(C.model_triage, [{ text: triagePrompt_(prevTeacher, d.text, topics, Object.keys(refTable)) }], { json: true, temperature: 0, noThink: true });
+    const triReq = genReq_(C.model_triage, [{ text: triagePrompt_(prevTeacher, d.text, topics, Object.keys(refTable), mergeDeid ? Object.keys(d.map) : null) }], { json: true, temperature: 0, noThink: true });
     const [triRes, embRes] = UrlFetchApp.fetchAll([triReq, embedReqs_([expAll.text, expNew.text], 'RETRIEVAL_QUERY')[0]]);
     stabAt_('L4');
     tri = parseJson_(genText_(genFix_(triReq, triRes)));
     vecs = embedParse_(embRes);
     validateTriage_(tri);
+    if (mergeDeid) {
+      // L4 回報的名字套成代稱；沒回清單就退回規則
+      if (Array.isArray(tri.deid)) { d = deidFromItems_(d.text, d.map, tri.deid); p03.detail = 'AI（併入 L4）｜' + deidNote(); }
+      else { stabNote_('缺欄位', 'deid'); const dr = deidRule_(d.text, d.map); d = dr; p03.detail = 'AI（L4 沒回報名字清單，改用規則）｜' + deidNote(); }
+      delete tri.deid;
+      // 分流結果本身也可能寫到原名（focus、缺的資訊、轉介原因），一併換成代稱後才進紀錄與 prompt
+      if (tri.focus) tri.focus = deidApply_(str_(tri.focus), d.map);
+      if (Array.isArray(tri.missing)) tri.missing = tri.missing.map(m => deidApply_(str_(m), d.map));
+      if (tri.referral && tri.referral.reason) tri.referral.reason = deidApply_(str_(tri.referral.reason), d.map);
+      fullCase = prevTeacher.concat([d.text]).join('\n');
+      p03.ms = Date.now() - t0;
+    }
   } else {
     vecs = embedParse_(UrlFetchApp.fetch.apply(null, reqArgs_(embedReqs_([expAll.text, expNew.text], 'RETRIEVAL_QUERY')[0])));
     const words = fullCase + '\n' + expAll.concepts.join('\n');
