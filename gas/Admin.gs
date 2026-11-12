@@ -99,7 +99,7 @@ function adminCall(token, fn, args) {
     adminUploadDoc: adminUploadDoc, adminDocChunks: adminDocChunks, adminSetChunkType: adminSetChunkType, adminClassifyDoc: adminClassifyDoc,
     adminSetDocStatus: adminSetDocStatus, adminTestChat: adminTestChat, adminLogs: adminLogs, adminLogDetail: adminLogDetail,
     adminEvalList: adminEvalList, adminAddEval: adminAddEval, adminDeleteEval: adminDeleteEval, adminRunEval: adminRunEval,
-    adminRepairVectors: adminRepairVectors, adminFlowStats: adminFlowStats, adminEvalBank: adminEvalBank, adminEvalSetQ: adminEvalSetQ, adminEvalGenPlan: adminEvalGenPlan, adminEvalGenBatch: adminEvalGenBatch, adminEvalGenSpecial: adminEvalGenSpecial, adminEvalImportLogs: adminEvalImportLogs, adminEvalAddExpert: adminEvalAddExpert, adminEvalRunStart: adminEvalRunStart, adminEvalRunOne: adminEvalRunOne, adminEvalRuns: adminEvalRuns, adminEvalSummary: adminEvalSummary, adminEvalReview: adminEvalReview, adminModels: adminModels, adminPingModel: adminPingModel, adminImportKG: adminImportKG, adminKgGenStart: adminKgGenStart, adminKgGenBatch: adminKgGenBatch, adminKgGenFinish: adminKgGenFinish, adminGraphLoad: adminGraphLoad, adminMapDoc: adminMapDoc, adminCandAction: adminCandAction,
+    adminApplyTemplate: adminApplyTemplate, adminRepairVectors: adminRepairVectors, adminFlowStats: adminFlowStats, adminEvalBank: adminEvalBank, adminEvalSetQ: adminEvalSetQ, adminEvalGenPlan: adminEvalGenPlan, adminEvalGenBatch: adminEvalGenBatch, adminEvalGenSpecial: adminEvalGenSpecial, adminEvalImportLogs: adminEvalImportLogs, adminEvalAddExpert: adminEvalAddExpert, adminEvalRunStart: adminEvalRunStart, adminEvalRunOne: adminEvalRunOne, adminEvalRuns: adminEvalRuns, adminEvalSummary: adminEvalSummary, adminEvalReview: adminEvalReview, adminModels: adminModels, adminPingModel: adminPingModel, adminImportKG: adminImportKG, adminKgGenStart: adminKgGenStart, adminKgGenBatch: adminKgGenBatch, adminKgGenFinish: adminKgGenFinish, adminGraphLoad: adminGraphLoad, adminMapDoc: adminMapDoc, adminCandAction: adminCandAction,
   };
   if (!API[fn]) throw new Error('未知的操作');
   ADMIN_CTX_ = account;
@@ -130,6 +130,51 @@ function adminLoad() {
 function fmt_(d) { return d instanceof Date ? Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd HH:mm') : String(d || ''); }
 
 // ---------- 機器人設定 ----------
+// ---------- 專案範本：一次匯入設定值、Skill、同義詞、禁止用語、轉介資源、圖譜定義（repo 的 templates/ 有範例） ----------
+function adminApplyTemplate(jsonText, replace) {
+  const me = requireAdmin_();
+  let t; try { t = JSON.parse(String(jsonText || '').replace(/^\uFEFF/, '')); } catch (e) { throw new Error('檔案不是有效的 JSON'); }
+  if (!t || typeof t !== 'object' || (!t.settings && !t.skills)) throw new Error('找不到 settings 或 skills，請上傳專案範本 JSON');
+  const now = new Date(), out = { settings: 0, skills: 0, synonyms: 0, forbidden: 0, referral: 0, kgDefs: 0, skipped: [] };
+  // 設定：有的改值，沒有的新增（說明取預設表的）
+  if (t.settings && typeof t.settings === 'object') {
+    const s = sh_('settings'); const v = s.getDataRange().getValues(); const noteOf = {}; SETTINGS_DEFAULT.forEach(r => noteOf[r[0]] = r[2]);
+    const add = [];
+    Object.keys(t.settings).forEach(k => {
+      if (!/^[a-z][a-z0-9_]*$/.test(k)) return out.skipped.push('設定 ' + k);
+      const val = t.settings[k] == null ? '' : t.settings[k];
+      const i = v.findIndex((r, idx) => idx > 0 && r[0] === k);
+      if (i > 0) s.getRange(i + 1, 2).setValue(safeCell_(val)); else add.push([k, val, noteOf[k] || '（範本新增）']);
+      out.settings++;
+    });
+    if (add.length) s.getRange(s.getLastRow() + 1, 1, add.length, 3).setValues(safeRows_(add));
+  }
+  // 清單類：replace＝清掉原有內容再寫；否則只加第一欄不重複的
+  const fill = (key, rows, keyCol, counter) => {
+    if (!rows || !rows.length) return;
+    const s = sh_(key);
+    if (replace && s.getLastRow() > 1) s.getRange(2, 1, s.getLastRow() - 1, s.getLastColumn()).clearContent();
+    const have = {}; if (!replace) rows_(key).forEach(r => have[String(r[keyCol])] = true);
+    const add = rows.filter(r => r[0] && !have[String(r[0])]);
+    if (add.length) append_(key, add);
+    out[counter] += add.length; out.skipped.push.apply(out.skipped, rows.filter(r => r[0] && have[String(r[0])]).map(r => counter + ' ' + r[0]));
+    return add;
+  };
+  const addedSkills = fill('skills', (t.skills || []).map(x => [x.id, x.name, x.tags || '', !!x.always, x.content || '', true, 1, me, now]), 'Skill ID', 'skills') || [];
+  if (addedSkills.length) append_('skillHist', addedSkills.map(r => [r[0], 1, r[1], r[2], r[3], r[4], me, now]));
+  fill('synonyms', (t.synonyms || []).map(x => [x.word, x.concept]), '使用者用語', 'synonyms');
+  fill('forbidden', (t.forbidden || []).map(x => [x.rule, x.type || '詞', x.note || '']), '詞或規則', 'forbidden');
+  fill('referral', (t.referral || []).map(x => [x.category, x.who || '', x.contact || '', x.now || '']), '類別', 'referral');
+  // 圖譜定義：範本有給的種類整組換掉
+  if (t.kgDefs && typeof t.kgDefs === 'object') {
+    const kinds = { types: '節點類型', rels: '關係', audiences: '讀者對象' }; const rows = [];
+    Object.keys(kinds).forEach(k => (t.kgDefs[k] || []).forEach((x, i) => x && x.label && rows.push([kinds[k], x.id || (k.slice(0, 1) + (i + 1)), x.label, x.def || x.definition || ''])));
+    if (rows.length) { const given = {}; rows.forEach(r => given[r[0]] = true); const keep = rows_('kgDefs').filter(r => !given[r['種類']]).map(r => kgRowArr_('kgDefs', r)); kgRewrite_('kgDefs', keep, rows); out.kgDefs = rows.length; }
+  }
+  clearCfgCache_();
+  return out;
+}
+
 function adminSaveSettings(list) {
   requireAdmin_();
   const s = sh_('settings'); const v = s.getDataRange().getValues();

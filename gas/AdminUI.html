@@ -289,14 +289,18 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 
 <section id="other">
   <h3>其他設定</h3>
+  <h4>載入專案範本</h4>
+  <p class="note">一次匯入一個案子的設定值、Skill、同義詞、禁止用語、轉介資源、圖譜定義（JSON，repo 的 templates/ 有範例）。設定值會直接覆蓋；清單預設只加沒有的，勾「取代」會先清掉原有清單。</p>
+  <div class="row"><input type="file" id="tplFile" accept=".json,application/json" style="width:auto"><label style="font-weight:400;margin:0"><input type="checkbox" id="tplReplace"> 取代原有清單</label><button class="btn pri" id="tplApply">載入</button><span class="note" id="tplStatus"></span></div>
+  <h4 style="margin-top:18px">對照表</h4>
   <p>以下對照表直接在試算表裡編輯即可，修改後約 1 分鐘生效：</p>
   <ul>
-    <li><b>同義詞</b>：老師口語對應到專業概念，用來擴充檢索（例：暴衝 → 攻擊行為）</li>
+    <li><b>同義詞</b>：使用者口語對應到知識裡的概念，用來擴充檢索</li>
     <li><b>禁止用語</b>：回答中不能出現的詞（P08 規則檢查）</li>
-    <li><b>轉介資源</b>：七類需要專人的情況，各自該找誰、怎麼聯絡（各縣市可在地化）</li>
+    <li><b>轉介資源</b>：需要專人的情況類別，各自該找誰、怎麼聯絡；「系統能力不足」一類用於保守回答的建議對象</li>
     <li><b>邀請碼</b>：每個單位一組，啟用欄改 FALSE 即停用</li>
     <li><b>管理員</b>：可以開啟這個後台的 Google 帳號 email</li>
-    <li><b>對話紀錄、回饋</b>：每次問答的完整流程與老師的回饋</li>
+    <li><b>對話紀錄、回饋</b>：每次問答的完整流程與使用者的回饋</li>
   </ul>
   <p><a id="sheetLink" target="_blank">開啟試算表</a></p>
 </section>
@@ -1100,6 +1104,15 @@ function renderNodes() {
 }
 $('kgQ').oninput = () => G && !G.empty && renderNodes();
 $('kgF').onchange = () => G && !G.empty && renderNodes();
+$('tplApply').onclick = async () => {
+  const f = $('tplFile').files[0]; if (!f) return ($('tplStatus').textContent = '請先選檔案');
+  if ($('tplReplace').checked && !confirm('會清掉現有的 Skill、同義詞、禁止用語、轉介資源再寫入範本內容，確定？')) return;
+  $('tplApply').disabled = true; $('tplStatus').textContent = '載入中…';
+  try {
+    const r = await run('adminApplyTemplate', await f.text(), $('tplReplace').checked);
+    $('tplStatus').textContent = `完成：設定 ${r.settings} 項、Skill ${r.skills}、同義詞 ${r.synonyms}、禁止用語 ${r.forbidden}、轉介資源 ${r.referral}、圖譜定義 ${r.kgDefs}` + (r.skipped.length ? `｜已存在略過：${r.skipped.slice(0, 8).join('、')}${r.skipped.length > 8 ? '…' : ''}` : '') + '。請重新整理後台。';
+  } catch (e) { $('tplStatus').textContent = '失敗：' + e.message; } finally { $('tplApply').disabled = false; }
+};
 $('kgImport').onclick = async () => {
   const f = $('kgFile').files[0]; if (!f) return toast('請選擇 knowledge-graph.json');
   $('kgImport').disabled = true; $('kgImpStatus').textContent = '匯入中…';
