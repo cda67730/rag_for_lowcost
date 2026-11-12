@@ -17,10 +17,12 @@ function sh_(key) {
   if (!s) throw new Error('找不到工作表「' + name + '」，請先執行 setup()');
   return s;
 }
+// 舊版標題名稱對照：舊試算表的標題讀進來時自動換成現在程式用的名稱（setup() 也會把舊標題改掉）
+const HEADER_ALIAS = { '園所': '單位', '老師訊息（去識別化）': '使用者訊息', '老師用語': '使用者用語', '園所代號': '單位代號' };
 /** 讀成物件陣列（第一列為標題） */
 function rows_(key) {
   const v = sh_(key).getDataRange().getValues();
-  const head = v.shift() || [];
+  const head = (v.shift() || []).map(h => HEADER_ALIAS[h] || h);
   // 先記下真正的列號再過濾空白列，之後依 _row 更新才不會改錯列
   return v.map((r, i) => { const o = { _row: i + 2 }; head.forEach((h, j) => o[h] = r[j]); o._empty = !r.some(c => c !== ''); return o; }).filter(o => !o._empty);
 }
@@ -56,7 +58,7 @@ function skills_() {
 }
 
 // ---------- 對照表 ----------
-function synonyms_() { return rows_('synonyms').map(r => ({ word: String(r['老師用語']).trim(), concept: String(r['對應概念']).trim() })).filter(x => x.word); }
+function synonyms_() { return rows_('synonyms').map(r => ({ word: String(r['使用者用語']).trim(), concept: String(r['對應概念']).trim() })).filter(x => x.word); }
 function forbidden_() { return rows_('forbidden').map(r => ({ rule: String(r['詞或規則']).trim(), regex: String(r['類型']) === '正規式', note: String(r['說明'] || '') })).filter(x => x.rule); }
 function referral_() {
   const o = {};
@@ -90,7 +92,7 @@ function codeInfo_(code) {
   if (!code) return null;
   const c = String(code).trim().toUpperCase();
   const hit = rows_('codes').find(r => String(r['邀請碼']).trim().toUpperCase() === c && String(r['啟用']).toUpperCase() !== 'FALSE');
-  return hit ? { school: String(hit['園所代號'] || hit['邀請碼']), trace: truthy_(hit['觀測']) } : null;
+  return hit ? { school: String(hit['單位代號'] || hit['邀請碼']), trace: truthy_(hit['觀測']) } : null;
 }
 function checkCode_(code) { const i = codeInfo_(code); return i ? i.school : null; }
 function rateOk_(code) {

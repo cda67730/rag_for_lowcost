@@ -137,7 +137,9 @@ function setup() {
       if (seed && seed.length) s.getRange(2, 1, seed.length, head.length).setValues(safeRows_(seed));
     } else {
       // 舊版工作表補上新欄位：對話紀錄是依位置寫入，直接換成新標題；其他表把缺的欄位加在最後
-      const cur = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
+      const cur0 = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
+      const cur = cur0.map(h => HEADER_ALIAS[h] || h);
+      if (cur.some((h, i) => h !== cur0[i])) s.getRange(1, 1, 1, cur.length).setValues([cur]);
       const missing = head.filter(h => cur.indexOf(h) < 0);
       if (missing.length) {
         if (name === SHEETS.logs) s.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
@@ -154,17 +156,17 @@ function setup() {
     SKILLS_DEFAULT.map(s => [s[0], 1, s[1], s[2], s[3], s[4], 'setup', new Date()]));
   make(SHEETS.docs, ['文件ID', '標題', '出處', '證據等級', '原始檔名', '段落數', '狀態', '上傳者', '上傳時間', '審核者', '審核時間']);
   make(SHEETS.chunks, ['段落ID', '文件ID', '序號', '內容', '頁碼', '向量', '狀態', '類型', '讀者對象', '適用年齡', '情境']);
-  make(SHEETS.synonyms, ['老師用語', '對應概念'], [['丟', '攻擊行為'], ['推', '攻擊行為'], ['咬', '攻擊行為'], ['暴衝', '攻擊行為'], ['收拾', '轉銜時段'], ['換活動', '轉銜時段'], ['搶', '表達需求'], ['崩潰', '情緒調節'], ['回嘴', '口語對抗'], ['頂嘴', '口語對抗']]);
+  make(SHEETS.synonyms, ['使用者用語', '對應概念'], [['丟', '攻擊行為'], ['推', '攻擊行為'], ['咬', '攻擊行為'], ['暴衝', '攻擊行為'], ['收拾', '轉銜時段'], ['換活動', '轉銜時段'], ['搶', '表達需求'], ['崩潰', '情緒調節'], ['回嘴', '口語對抗'], ['頂嘴', '口語對抗']]);
   make(SHEETS.forbidden, ['詞或規則', '類型', '說明'], [['過動', '詞', '不推測診斷'], ['ADHD', '詞', '不推測診斷'], ['自閉症', '詞', '不推測診斷'], ['亞斯', '詞', '不推測診斷'], ['問題兒童', '詞', '標籤化用語'], ['壞孩子', '詞', '標籤化用語'], ['故意找麻煩', '詞', '標籤化用語'], ['處罰', '詞', '不建議懲罰性做法'], ['懲罰', '詞', '不建議懲罰性做法'], ['吃藥', '詞', '不給醫療建議']]);
   make(SHEETS.referral, ['類別', '該找誰', '聯絡方式', '現在要做的事'], REFERRAL_DEFAULT);
   // 測試邀請碼每次隨機產生（不寫在程式裡，避免公開在 GitHub）
   const testCode = 'TEST-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase();
   const codesNew = !ss.getSheetByName(SHEETS.codes) || ss.getSheetByName(SHEETS.codes).getLastRow() === 0;
-  make(SHEETS.codes, ['邀請碼', '園所代號', '啟用', '觀測'], [[testCode, '測試園', true, true]]);
+  make(SHEETS.codes, ['邀請碼', '單位代號', '啟用', '觀測'], [[testCode, '測試單位', true, true]]);
   if (codesNew) console.log('已建立測試邀請碼：' + testCode + '（在「邀請碼」工作表，正式使用前請停用）');
   const me = Session.getActiveUser().getEmail();
   make(SHEETS.admins, ['Email', '備註', '帳號', '密碼雜湊', '鹽'], me ? [[me, '建立者', '', '', '']] : []);
-  make(SHEETS.logs, ['時間', 'Session', '園所', '輪次', '老師訊息（去識別化）', '分流', '轉介', '回應類型', '回答', '引用', '檢查', '是否重寫', '耗時ms', '檢索段數', '最高相似度', '被引用段數', '載入Skill', '流程紀錄', '穩定度', '品質問題']);
+  make(SHEETS.logs, ['時間', 'Session', '單位', '輪次', '使用者訊息', '分流', '轉介', '回應類型', '回答', '引用', '檢查', '是否重寫', '耗時ms', '檢索段數', '最高相似度', '被引用段數', '載入Skill', '流程紀錄', '穩定度', '品質問題']);
   make(SHEETS.feedback, ['時間', 'Session', '輪次', '類型', '備註']);
   make(SHEETS.kgNodes, ['節點ID', '名稱', '類型', '上層', '路徑', '定義', '實務要點', '來源ID', '同義說法', '狀態', '來源', '新增時間']);
   make(SHEETS.kgEdges, ['主詞', '關係', '受詞', '關係說明', '來源']);

@@ -244,17 +244,17 @@ function adminLogs(opts) {
     const t = r['時間'] instanceof Date ? r['時間'].getTime() : 0;
     if (since && t < since) return false;
     if (!opts.includeTest && String(r['Session']).indexOf('admin-test') === 0) return false;
-    if (opts.school && String(r['園所']) !== opts.school) return false;
+    if (opts.school && String(r['單位']) !== opts.school) return false;
     if (opts.type && String(r['回應類型']) !== opts.type) return false;
-    if (opts.q && String(r['老師訊息（去識別化）']).indexOf(opts.q) < 0) return false;
+    if (opts.q && String(r['使用者訊息']).indexOf(opts.q) < 0) return false;
     return true;
   });
   const num = v => v === '' || v == null ? null : Number(v);
   const rows = all.map(r => {
     const f = fb[r['Session'] + '|' + r['輪次']] || [];
     return {
-      row: r._row, time: fmt_(r['時間']), session: String(r['Session']), school: String(r['園所']), turn: r['輪次'],
-      msg: String(r['老師訊息（去識別化）']).slice(0, 120), type: String(r['回應類型']), referral: String(r['轉介'] || ''),
+      row: r._row, time: fmt_(r['時間']), session: String(r['Session']), school: String(r['單位']), turn: r['輪次'],
+      msg: String(r['使用者訊息']).slice(0, 120), type: String(r['回應類型']), referral: String(r['轉介'] || ''),
       retrieved: num(r['檢索段數']), top: num(r['最高相似度']), cited: num(r['被引用段數']), skills: String(r['載入Skill'] || ''),
       rewritten: r['是否重寫'] === '是', ms: num(r['耗時ms']),
       fb: f.indexOf('有幫助') >= 0 ? 'up' : f.indexOf('沒幫助') >= 0 ? 'down' : '', copied: f.indexOf('複製家長訊息') >= 0,
@@ -286,7 +286,7 @@ function adminLogs(opts) {
   const docCount = {};
   all.forEach(r => String(r['引用'] || '').split('｜').filter(Boolean).forEach(x => { const t = x.replace(/^K\d+:/, ''); docCount[t] = (docCount[t] || 0) + 1; }));
   const topDocs = Object.keys(docCount).map(k => ({ title: k, n: docCount[k] })).sort((a, b) => b.n - a.n).slice(0, 10);
-  const schools = Array.from(new Set(rows_('logs').map(r => String(r['園所'])).filter(Boolean)));
+  const schools = Array.from(new Set(rows_('logs').map(r => String(r['單位'])).filter(Boolean)));
   return { stats: stats, stability: stabilityStats_(all), quality: qualityStats_(all, rows), rows: rows.slice(-300).reverse(), gaps: gaps, topDocs: topDocs, schools: schools, typeNames: LOG_TYPE_NAME };
 }
 
@@ -302,7 +302,7 @@ function qualityStats_(all, rows) {
     out.turns++;
     const base = typeOf[r._row] || {};
     if (r['檢索段數'] !== '' && r['檢索段數'] != null) out.retrieval++;
-    const msg = String(r['老師訊息（去識別化）']).slice(0, 160), time = fmt_(r['時間']);
+    const msg = String(r['使用者訊息']).slice(0, 160), time = fmt_(r['時間']);
     if (q.gap) {
       const g = out.gap; g.n++;
       g.byKind[q.gap.kind] = (g.byKind[q.gap.kind] || 0) + 1;
@@ -365,12 +365,12 @@ function adminLogDetail(row) {
   const fb = feedbackMap_();
   const session = String(o['Session']);
   const turns = rows_('logs').filter(r => String(r['Session']) === session).map(r => ({
-    row: r._row, turn: r['輪次'], time: fmt_(r['時間']), msg: String(r['老師訊息（去識別化）']), type: String(r['回應類型']),
+    row: r._row, turn: r['輪次'], time: fmt_(r['時間']), msg: String(r['使用者訊息']), type: String(r['回應類型']),
     reply: jsonOr_(r['回答'], r['回答']), fb: (fb[session + '|' + r['輪次']] || []).join('、'),
   }));
   return {
-    row: row, time: fmt_(o['時間']), session: session, school: String(o['園所']), turn: o['輪次'], type: String(o['回應類型']),
-    msg: String(o['老師訊息（去識別化）']), triage: jsonOr_(o['分流'], {}), reply: jsonOr_(o['回答'], o['回答']),
+    row: row, time: fmt_(o['時間']), session: session, school: String(o['單位']), turn: o['輪次'], type: String(o['回應類型']),
+    msg: String(o['使用者訊息']), triage: jsonOr_(o['分流'], {}), reply: jsonOr_(o['回答'], o['回答']),
     sources: String(o['引用'] || ''), checks: jsonOr_(o['檢查'], []), rewritten: o['是否重寫'] === '是', ms: o['耗時ms'],
     metrics: { retrieved: o['檢索段數'] === '' ? null : o['檢索段數'], top: o['最高相似度'] === '' ? null : o['最高相似度'], cited: o['被引用段數'] === '' ? null : o['被引用段數'], skills: String(o['載入Skill'] || '').split('、').filter(Boolean) },
     trace: jsonOr_(o['流程紀錄'], []), turns: turns,

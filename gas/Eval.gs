@@ -101,7 +101,7 @@ function adminEvalImportLogs(n) {
     if (list.length >= n) return;
     const s = String(r['Session']); if (s.indexOf('admin-test') === 0 || seen[s]) return;
     if (Number(r['輪次']) > 1) return;
-    const q = String(r['老師訊息（去識別化）'] || '').trim(); if (q.length < 8 || have[q]) return;
+    const q = String(r['使用者訊息'] || '').trim(); if (q.length < 8 || have[q]) return;
     seen[s] = 1; have[q] = 1;
     list.push({ '來源': '真實提問', '類型': '一般', '題目': q.slice(0, 500), '期望回應': 'answer' });
   });

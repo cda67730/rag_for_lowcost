@@ -195,7 +195,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   <div class="row">
     <h3 style="margin:0">對話紀錄與指標</h3>
     <select id="lDays" style="width:auto"><option value="1">今天起 24 小時</option><option value="7" selected>最近 7 天</option><option value="30">最近 30 天</option><option value="0">全部</option></select>
-    <select id="lSchool" style="width:auto"><option value="">全部園所</option></select>
+    <select id="lSchool" style="width:auto"><option value="">全部單位</option></select>
     <select id="lType" style="width:auto"><option value="">全部類型</option><option value="answer">回答</option><option value="ai_fallback">AI 補足</option><option value="continue">延續</option><option value="followup">追問</option><option value="referral">緊急轉介</option><option value="conservative">保守回答</option><option value="out_of_scope">超出範圍</option></select>
     <input type="text" id="lQ" placeholder="搜尋老師訊息" style="width:180px">
     <label style="font-weight:400;margin:0"><input type="checkbox" id="lTest"> 含後台測試</label>
@@ -203,7 +203,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   </div>
   <div class="kpis" id="lKpis"></div>
   <div class="cols">
-    <div class="list" style="max-height:520px"><table><thead><tr><th>時間</th><th>園所</th><th>輪</th><th>老師訊息（去識別化）</th><th>類型</th><th>檢索</th><th>最高分</th><th>引用</th><th>回饋</th><th>秒</th></tr></thead><tbody id="lRows"><tr><td colspan="10" class="note">載入中…</td></tr></tbody></table></div>
+    <div class="list" style="max-height:520px"><table><thead><tr><th>時間</th><th>單位</th><th>輪</th><th>使用者訊息</th><th>類型</th><th>檢索</th><th>最高分</th><th>引用</th><th>回饋</th><th>秒</th></tr></thead><tbody id="lRows"><tr><td colspan="10" class="note">載入中…</td></tr></tbody></table></div>
     <div>
       <div class="box"><h4>知識缺口 <span class="note">檢索沒命中或只能保守回答的問題，請專家補資料</span></h4><ol id="lGaps" style="padding-left:18px;margin:0"></ol></div>
       <div class="box"><h4>常被引用的文件</h4><ol id="lDocs" style="padding-left:18px;margin:0"></ol></div>
@@ -294,7 +294,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
     <li><b>同義詞</b>：老師口語對應到專業概念，用來擴充檢索（例：暴衝 → 攻擊行為）</li>
     <li><b>禁止用語</b>：回答中不能出現的詞（P08 規則檢查）</li>
     <li><b>轉介資源</b>：七類需要專人的情況，各自該找誰、怎麼聯絡（各縣市可在地化）</li>
-    <li><b>邀請碼</b>：每所園所一組，啟用欄改 FALSE 即停用</li>
+    <li><b>邀請碼</b>：每個單位一組，啟用欄改 FALSE 即停用</li>
     <li><b>管理員</b>：可以開啟這個後台的 Google 帳號 email</li>
     <li><b>對話紀錄、回饋</b>：每次問答的完整流程與老師的回饋</li>
   </ul>
@@ -712,7 +712,7 @@ async function loadLogs() {
     L = await run('adminLogs', { days: +$('lDays').value, school: $('lSchool').value, type: $('lType').value, q: $('lQ').value.trim(), includeTest: $('lTest').checked });
     logsLoaded = true;
     const cur = $('lSchool').value;
-    $('lSchool').innerHTML = '<option value="">全部園所</option>' + L.schools.map(s => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('');
+    $('lSchool').innerHTML = '<option value="">全部單位</option>' + L.schools.map(s => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('');
     const s = L.stats, bt = s.byType;
     $('lKpis').innerHTML = k(s.turns, '回合數', s.sessions + ' 段對話') +
       k(s.hitRate == null ? null : s.hitRate + '%', '檢索命中率', s.retrievalTurns + ' 回合有檢索', s.hitRate != null && s.hitRate < 70 ? 'bad' : '') +
@@ -972,7 +972,7 @@ document.querySelector('nav button[data-t="qa"]').addEventListener('click', () =
 $('qCsv').onclick = () => {
   if (!Q || !Q.gap.list.length) return toast('沒有資料');
   const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const csv = '\ufeff' + [['時間', '單位', '提問焦點', '老師原話（去識別化）', '原因', '處理方式', '主題', '最高相似度']].concat(Q.gap.list.map(x => [x.time, x.school, x.focus, x.msg, x.kind, x.outcome, x.topics, x.top])).map(r => r.map(cell).join(',')).join('\n');
+  const csv = '\ufeff' + [['時間', '單位', '提問焦點', '使用者訊息', '原因', '處理方式', '主題', '最高相似度']].concat(Q.gap.list.map(x => [x.time, x.school, x.focus, x.msg, x.kind, x.outcome, x.topics, x.top])).map(r => r.map(cell).join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = '知識不足清單-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
 };
 
