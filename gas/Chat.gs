@@ -4,18 +4,76 @@
  * → [P08 規則 ‖ P09 出處 ‖ L5 AI 檢查] → P10 組合與降級 → P15 紀錄
  */
 
-// ---------- P03 去識別化（程式，不用 LLM；enable_deid 關閉時整段略過） ----------
-// 規則是幼教雛形的：「小＋一字」當名字換成「幼兒A」、刪手機號碼。其他案子要用的話得改這裡的規則
+// ---------- P03 去識別化（enable_deid 關閉時整段略過） ----------
+// deid_mode＝ai：用模型找出人名、小名、綽號、機構名，換成代稱（同一個人在整段對話用同一個代稱，對照表只留在使用者端，不寫紀錄）
+// deid_mode＝rule：只用規則（幼教雛形的「小＋一字」）。兩種模式都會另外刪手機號碼、Email、身分證字號
 const NAME_SKIP = ['小朋', '小孩', '小班', '小組', '小時', '小心', '小事', '小動', '小便', '小肌', '小聲', '小小', '小點', '小任', '小步', '小卡', '小物', '小玩', '小型', '小學', '小姐', '小兒', '小禮', '小貼', '小椅', '小桌', '小籃', '小手', '小部', '小片', '小塊', '小幫'];
-function deid_(text, map) {
+const DEID_CATS = ['subject', 'family', 'staff', 'org', 'other'];
+// 模型偶爾會把一般名詞當成人名，這些不換
+const DEID_GENERIC = ['小朋友', '孩子', '小孩', '幼兒', '老師', '家長', '媽媽', '爸爸', '園長', '主任', '同學', '班上', '園所', '學校', '阿公', '阿嬤', '奶奶', '爺爺', '哥哥', '姊姊', '姐姐', '弟弟', '妹妹'];
+/** 代稱前綴：設定 deid_labels，一行一個「類別＝代稱」 */
+function deidLabels_() {
+  const o = { subject: '幼兒', family: '家長', staff: '老師', org: '某園', other: '某人' };
+  text_('deid_labels').split(/\n+/).forEach(l => { const p = l.split(/[＝=]/); if (p.length > 1 && DEID_CATS.indexOf(p[0].trim()) >= 0) o[p[0].trim()] = p.slice(1).join('＝').trim(); });
+  return o;
+}
+function deidScrub_(text) {
+  return String(text).replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, '（電話已刪除）')
+    .replace(/\(0\d\)[-\s]?\d{3,4}[-\s]?\d{4}|0\d[-\s]?\d{3,4}[-\s]?\d{4}/g, '（電話已刪除）')
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '（Email 已刪除）')
+    .replace(/\b[A-Z][12]\d{8}\b/g, '（證號已刪除）');
+}
+/** 依對照表替換：長的先換，避免「王小明」只換到「小明」 */
+function deidApply_(text, map) {
+  let out = String(text);
+  Object.keys(map).sort((a, b) => b.length - a.length).forEach(n => { out = out.split(n).join(map[n]); });
+  return out;
+}
+function deidNext_(map, prefix) {
+  const used = Object.keys(map).filter(k => map[k].indexOf(prefix) === 0).length;
+  return prefix + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[used % 26];
+}
+function deidRule_(text, map) {
   map = Object.assign({}, map || {});
-  const labels = 'ABCDEFGHIJ';
-  const out = String(text).replace(/小[一-鿿]/g, m => {
+  const L = deidLabels_();
+  const out = deidScrub_(String(text).replace(/小[一-鿿]/g, m => {
     if (NAME_SKIP.indexOf(m) >= 0) return m;
-    if (!map[m]) map[m] = '幼兒' + labels[Object.keys(map).length % labels.length];
+    if (!map[m]) map[m] = deidNext_(map, L.subject);
     return map[m];
-  }).replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, '（電話已刪除）');
-  return { text: out, map: map };
+  }));
+  return { text: deidApply_(out, map), map: map, found: 0 };
+}
+function deidAi_(text, map, C) {
+  map = Object.assign({}, map || {});
+  const L = deidLabels_(), R = roles_();
+  const known = Object.keys(map);
+  const r = genJson_(C.model_triage, '你負責在送出前去除個人資訊，只輸出 JSON。找出下面訊息裡所有可以指認特定個人或機構的詞：\n' +
+    '- subject：' + R.subject + '的姓名、小名、綽號（例如「小宇」「宇宇」「阿明」「王小明」）\n' +
+    '- family：家長或家人的姓名、稱呼（例如「宇宇媽媽」只標「宇宇」，「陳媽媽」標「陳」）\n' +
+    '- staff：' + R.user + '或其他人員的姓名\n' +
+    '- org：園所、學校、機構、地址或可指認的地點名稱\n' +
+    '- other：其他人名\n' +
+    '只抓訊息裡「原樣出現」的字串，text 必須能在訊息中逐字找到；一般名詞（小朋友、老師、媽媽、班上）不算。沒有就給空陣列。\n' +
+    (known.length ? '這些已經處理過，不用再列：' + known.join('、') + '\n' : '') +
+    '格式：{"items":[{"text":"","type":"subject"}]}\n\n訊息：\n' + text, { temperature: 0, noThink: true });
+  const items = [].concat((r && r.items) || []).filter(x => x && typeof x.text === 'string' && x.text.trim().length >= 1);
+  items.sort((a, b) => b.text.length - a.text.length).forEach(x => {
+    const t = x.text.trim();
+    if (map[t] || String(text).indexOf(t) < 0 || t.length > 20 || DEID_GENERIC.indexOf(t) >= 0) return;
+    const longer = Object.keys(map).find(k => k.indexOf(t) >= 0 && k !== t);
+    if (longer) { map[t] = map[longer]; return; }   // 「小明」是「王小明」的一部分：用同一個代稱
+    const cat = DEID_CATS.indexOf(x.type) >= 0 ? x.type : 'other';
+    map[t] = deidNext_(map, L[cat]);
+  });
+  return { text: deidApply_(deidScrub_(text), map), map: map, found: items.length };
+}
+function deid_(text, map, C) {
+  C = C || cfgAll_();
+  if (String(C.deid_mode || 'ai') !== 'rule') {
+    try { return deidAi_(text, map, C); }
+    catch (e) { const d = deidRule_(text, map); d.fallback = e.message; return d; }
+  }
+  return deidRule_(text, map);
 }
 
 // ---------- L4 分流 prompt ----------
@@ -50,11 +108,12 @@ function runChat_(req, opts) {
 
   // 1. P03 去識別化（可關閉：原文直接進流程與紀錄）
   const useDeid = truthy_(C.enable_deid);
-  const d = useDeid ? deid_(req.message || '', req.nameMap) : { text: String(req.message || ''), map: {} };
+  const d = useDeid ? deid_(req.message || '', req.nameMap, C) : { text: String(req.message || ''), map: {} };
   const history = (req.history || []).slice(-8);
   const prevTeacher = history.filter(h => h.role === 'teacher').map(h => h.text);
   const fullCase = prevTeacher.concat([d.text]).join('\n');
-  if (useDeid) T('P03 去識別化', Object.keys(d.map).length ? JSON.stringify(d.map) : '沒有偵測到名字');
+  // 觀測面板與紀錄只顯示代稱，不顯示原名（對照表只回給使用者端）
+  if (useDeid) T('P03 去識別化', (String(C.deid_mode || 'ai') === 'rule' ? '規則' : 'AI') + (d.fallback ? '（AI 失敗改用規則：' + d.fallback + '）' : '') + '｜代稱：' + (Object.keys(d.map).length ? Object.keys(d.map).map(k => d.map[k]).join('、') : '無'));
   else T('P03 去識別化（已關閉）', '原文直接使用');
 
   // 2. L4 分流 ‖ P06 查詢向量（fetchAll 並行）；向量同時算「整段個案」與「只有最新訊息」，分流後再選用

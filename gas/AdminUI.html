@@ -421,13 +421,13 @@ async function load() {
 }
 
 // ---------- 設定 ----------
-const LONG = ['system_prompt', 'answer_schema', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_items', 'check_severe', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
+const LONG = ['system_prompt', 'answer_schema', 'deid_labels', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_items', 'check_severe', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
 const SECTIONS = [
   { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
   { id: 'ui', title: '聊天介面', keys: ['ui_gate_text', 'ui_input_placeholder', 'ui_waiting', 'ui_referral_title', 'ui_referral_note', 'ui_referral_heading', 'ui_ai_tag', 'ui_fb_up', 'ui_fb_down', 'ui_accent'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
-  { id: 'flow', title: '流程開關', keys: ['enable_deid', 'enable_case_flow', 'enable_citation'] },
+  { id: 'flow', title: '流程開關', keys: ['enable_deid', 'deid_mode', 'deid_labels', 'enable_case_flow', 'enable_citation'] },
   { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
   { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
   { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_schema', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
@@ -439,7 +439,7 @@ const SECTIONS = [
 const LABELS = {
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
   ui_gate_text: '邀請碼頁說明', ui_input_placeholder: '輸入框提示', ui_waiting: '等待訊息', ui_referral_title: '緊急轉介標題', ui_referral_note: '緊急轉介說明', ui_referral_heading: '轉介建議小標', ui_ai_tag: 'AI 補充標籤', ui_fb_up: '正面回饋按鈕', ui_fb_down: '負面回饋按鈕', ui_accent: '主色',
-  enable_deid: '去識別化', enable_case_flow: '個案機制', enable_citation: '出處機制',
+  enable_deid: '去識別化', deid_mode: '去識別化方式', deid_labels: '代稱前綴', enable_case_flow: '個案機制', enable_citation: '出處機制',
   domain_desc: '領域描述', role_user: '提問者稱呼', role_subject: '談論對象稱呼', role_escalate: '預設升級對象',
   enable_triage: '啟用 L4 分流', model_triage: '分流模型', intents: '意圖選項', triage_rules: '分流規則', triage_focus_hint: '提問焦點範例', followup_prompt: '追問方式', max_followups: '最多追問次數',
   top_k: '採用段數', min_score: '相似度門檻', enable_rerank: 'AI 重新排序', model_rerank: '重排模型', rerank_pool: '重排候選段數',
@@ -754,7 +754,7 @@ const pc1 = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
 const secs = ms => ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒';
 const FNODES = [
   { id: 'input', title: '使用者訊息', kind: 'io', cfg: () => '', met: () => F ? `${F.turns} 回合` : '' },
-  { id: 'deid', title: 'P03 去識別化', kind: 'code', toggle: 'enable_deid', keys: ['enable_deid'], cfg: () => son('enable_deid') ? '人名換成代稱、刪手機號碼' : '已關閉：原文直接使用', met: () => stepMs('deid') },
+  { id: 'deid', title: 'P03 去識別化', kind: 'ai', toggle: 'enable_deid', keys: ['enable_deid', 'deid_mode', 'deid_labels'], cfg: () => son('enable_deid') ? (sv('deid_mode') === 'rule' ? '規則：「小＋一字」換代稱' : `AI 找人名換代稱（${sm('model_triage')}）`) + '｜刪電話、Email、證號' : '已關閉：原文直接使用', met: () => stepMs('deid') },
   { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'model_embed'],
     cfg: () => son('enable_triage') ? `分流 ${sm('model_triage')}｜向量 ${sm('model_embed')}` : `已關閉：只算向量（${sm('model_embed')}），主題用關鍵字`,
     met: () => stepMs('triage'),
