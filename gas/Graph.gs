@@ -13,26 +13,30 @@
 
 const KG_FROM_IMPORT = '知識圖譜匯入', KG_FROM_PROPOSAL = '文件提案';
 const KG_TAG_MAIN = '主要', KG_TAG_SUB = '次要';
-const KG_AUDIENCES = ['家長', '教保服務人員', '專業人員'];
-// 匯入前的預設值（與 knowledge-graph.json 1.0.0 相同）；匯入後以「圖譜定義」表為準
+// 「圖譜定義」工作表的預設內容（通用版）：setup() 會寫進表裡，之後以表為準，可自行改成案子的類型、關係與讀者對象；匯入 knowledge-graph.json 會覆蓋
 const KG_DEFS_DEFAULT = {
-  types: [['hub', '主軸', '知識圖譜的五大主軸。'], ['sub', '子分類', '主軸底下的主題分類。'], ['policy', '法規課綱', '法律、行政規則、課程大綱及其構成要素。'],
-    ['approach', '課程取向', '幼兒園課程設計與教學模式。'], ['concept', '概念', '發展、心理或教育上的概念與現象。'],
-    ['practice', '實務策略', '教保服務人員或專業人員可採取的做法、工具或服務。'], ['theory', '理論', '心理學或教育學理論、模型與經典研究。'],
-    ['category', '障礙與需求類別', '特殊教育鑑定類別與學前常見的特殊需求。']],
+  types: [['hub', '主軸', '知識圖譜最上層的幾個主軸。'], ['sub', '子分類', '主軸底下的主題分類。'], ['concept', '概念', '領域裡的概念、現象或名詞。'],
+    ['practice', '實務策略', '可以照做的做法、工具、流程或服務。'], ['theory', '理論', '理論、模型、原則或經典研究。'],
+    ['policy', '法規制度', '法律、規範、標準或制度及其構成要素。'], ['category', '類別', '需求、問題或對象的分類。']],
   rels: [['hasPart', '包含', '上層分類包含下層項目（樹狀階層）。'], ['regulates', '規範', '法規或制度對某項實務、對象或程序的規範、授權或保障。'],
-    ['theoreticalBasisFor', '理論基礎', '理論、研究或概念為某項實務或概念提供理論依據。'], ['appliedIn', '應用於', '概念、能力或策略在某情境、區域或作息中被應用或練習。'],
-    ['hasStrategy', '可用策略', '某項需求、行為或目標可搭配的策略或調整方式。'], ['supports', '支持', '專業人員、資源或環境對某對象或能力的支持、評估或服務。'],
+    ['theoreticalBasisFor', '理論基礎', '理論、研究或概念為某項實務或概念提供理論依據。'], ['appliedIn', '應用於', '概念、能力或策略在某情境中被應用或練習。'],
+    ['hasStrategy', '可用策略', '某項需求、問題或目標可搭配的策略或調整方式。'], ['supports', '支持', '人員、資源或環境對某對象或能力的支持、評估或服務。'],
     ['correspondsTo', '對應', '兩者在內容上相互對應、屬於或呼應。'], ['influences', '影響', '一方會促進、阻礙、預測或觸發另一方。'],
-    ['precedes', '後續為', '發展階段、流程步驟或演變上的先後關係。'], ['informs', '提供資訊', '評量、觀察或資料為另一項工作提供依據或材料。'],
+    ['precedes', '後續為', '階段、流程步驟或演變上的先後關係。'], ['informs', '提供資訊', '評量、觀察或資料為另一項工作提供依據或材料。'],
     ['relatedTo', '相關', '無法歸入上述類型的一般關聯。']],
+  audiences: [['a1', '一般使用者', '直接面對狀況的人。'], ['a2', '專業人員', '提供專業判斷或服務的人。']],
 };
+/** 圖譜定義預設列（setup() 用） */
+function kgDefsSeed_() {
+  const row = (kind, a) => a.map(x => [kind, x[0], x[1], x[2]]);
+  return row('節點類型', KG_DEFS_DEFAULT.types).concat(row('關係', KG_DEFS_DEFAULT.rels), row('讀者對象', KG_DEFS_DEFAULT.audiences));
+}
 const KG_TOP_TYPE = '主軸'; // 主軸只有圖譜本身的五個，不接受新增
 
 function kgHasGraph_() { try { return sh_('kgNodes').getLastRow() > 1; } catch (e) { return false; } }
 function kgNodes_(includeOff) { return rows_('kgNodes').filter(r => includeOff || String(r['狀態'] || '啟用') !== '停用'); }
 
-/** 節點類型與關係的定義：{types:[{id,label,def}], rels:[{id,label,def}]} */
+/** 節點類型、關係與讀者對象的定義：{types:[{id,label,def}], rels:[…], audiences:[…]}；表裡沒有該種類時用預設 */
 function kgDefs_() {
   let rs = [];
   try { rs = rows_('kgDefs'); } catch (e) {}
@@ -40,8 +44,9 @@ function kgDefs_() {
     const a = rs.filter(r => r['種類'] === kind).map(r => ({ id: String(r['ID']), label: String(r['名稱']), def: String(r['定義'] || '') }));
     return a.length ? a : dflt.map(x => ({ id: x[0], label: x[1], def: x[2] }));
   };
-  return { types: pick('節點類型', KG_DEFS_DEFAULT.types), rels: pick('關係', KG_DEFS_DEFAULT.rels) };
+  return { types: pick('節點類型', KG_DEFS_DEFAULT.types), rels: pick('關係', KG_DEFS_DEFAULT.rels), audiences: pick('讀者對象', KG_DEFS_DEFAULT.audiences) };
 }
+function kgAudiences_(defs) { return (defs || kgDefs_()).audiences.map(a => a.label); }
 function kgRelIds_(defs) { return defs.rels.map(r => r.id); }
 function kgRelLabel_(defs, id) { const r = defs.rels.find(x => x.id === id); return r ? r.label : id; }
 function kgNewTypes_(defs) { return defs.types.map(t => t.label).filter(l => l !== KG_TOP_TYPE); }
@@ -71,7 +76,11 @@ function adminImportKG(jsonText) {
   const defRows = [];
   (d.nodeTypes || []).forEach(t => t && t.label && defRows.push(['節點類型', t.id || '', t.label, t.definition || '']));
   (d.relations || []).forEach(r => r && r.id && defRows.push(['關係', r.id, r.label || r.id, r.definition || '']));
-  if (defRows.length) kgRewrite_('kgDefs', [], defRows);
+  (d.audiences || []).forEach((a, i) => { const o = typeof a === 'string' ? { label: a } : a; if (o && o.label) defRows.push(['讀者對象', o.id || ('a' + (i + 1)), o.label, o.definition || '']); });
+  // 匯入檔沒給的種類保留表裡原本的
+  const kinds = {}; defRows.forEach(r => kinds[r[0]] = true);
+  let keepDefs = []; try { keepDefs = rows_('kgDefs').filter(r => !kinds[r['種類']]).map(r => kgRowArr_('kgDefs', r)); } catch (e) {}
+  if (defRows.length) kgRewrite_('kgDefs', keepDefs, defRows);
   const old = {}; kgNodes_(true).forEach(r => old[String(r['節點ID'])] = r);
   const keepNodes = kgNodes_(true).filter(r => String(r['來源']).indexOf(KG_FROM_IMPORT) !== 0).map(r => kgRowArr_('kgNodes', r));
   const addNodes = d.nodes.filter(n => n && n.id).map(n => {
@@ -116,14 +125,14 @@ function kgNodeList_() {
 
 function kgMapPrompt_(defs, list, title, group) {
   const types = kgNewTypes_(defs);
-  return '你在替幼教知識文件做標註，只輸出 JSON。\n\n' +
+  return '你在替' + roles_().domain + '的知識文件做標註，只輸出 JSON。\n\n' +
     '【標註規格】\n' +
     '- main（主要標籤）：這段「直接討論」的節點，1–3 個。\n' +
     '- sub（次要標籤）：這段沒有直接點名、但隱含運用的理論、策略或解釋，0–3 個。只是順帶提到的不要標。\n' +
     '- 標籤只能用節點清單裡的 ID。\n' +
-    '- audience（讀者對象）：這段是寫給誰看的，從 ' + JSON.stringify(KG_AUDIENCES) + ' 選，可多選；看不出來就給空陣列。\n' +
+    '- audience（讀者對象）：這段是寫給誰看的，從 ' + JSON.stringify(kgAudiences_(defs)) + ' 選，可多選；看不出來就給空陣列。\n' +
     '- age（適用年齡）：段落「明講」的年齡範圍，例如「3–4歲」；沒明講就給空字串（代表不限年齡，不要自己推測）。\n' +
-    '- context（情境）：段落明講的發生情境，例如「入園適應」「轉銜」「用餐」；沒有就給空陣列。\n' +
+    '- context（情境）：段落明講的發生情境（場合、流程階段或時段）；沒有就給空陣列。\n' +
     '- new（建議新增節點）：只有當這段的主要內容在清單裡找不到合適節點時才提出。欄位：name（簡短名稱）、definition（一句話）、' +
     'parent（最適合的上層節點 ID）、type（節點類型名稱）、relation（與某個既有節點的關係，可省略：{"type":關係ID,"target":節點ID}，方向為「新節點 → 目標」）、reason（為什麼現有節點不夠）。\n\n' +
     '【節點類型】（新節點的 type 只能從這些選）\n' + defs.types.filter(t => types.indexOf(t.label) >= 0).map(t => '- ' + t.label + '：' + t.def).join('\n') + '\n\n' +
@@ -136,7 +145,7 @@ function kgMapPrompt_(defs, list, title, group) {
 
 /** chunks：[{id, text}]；回傳 {links:[[段落ID, 節點ID, 標籤]], meta:{段落ID:{audience,age,context}}, cands:[...]} */
 function kgMapChunks_(title, chunks) {
-  const defs = kgDefs_();
+  const defs = kgDefs_(), auds = kgAudiences_(defs);
   const nodes = kgNodes_(); const valid = {}; nodes.forEach(r => valid[String(r['節點ID'])] = true);
   const list = kgNodeList_(); const links = [], cands = [], meta = {};
   for (let i = 0; i < chunks.length; i += 12) {
@@ -150,7 +159,7 @@ function kgMapChunks_(title, chunks) {
         main.forEach(id => links.push([c.id, id, KG_TAG_MAIN]));
         sub.forEach(id => links.push([c.id, id, KG_TAG_SUB]));
         meta[c.id] = {
-          audience: [].concat(it.audience || []).filter(a => KG_AUDIENCES.indexOf(a) >= 0).join('、'),
+          audience: [].concat(it.audience || []).filter(a => auds.indexOf(a) >= 0).join('、'),
           age: String(it.age || '').trim().slice(0, 30),
           context: [].concat(it.context || []).map(x => String(x).trim()).filter(Boolean).slice(0, 4).join('、'),
         };
@@ -330,8 +339,8 @@ function adminKgGenBatch(i) {
   const defs = kgDefs_(); const types = kgNewTypes_(defs).filter(t => t !== '子分類');
   const group = kgGenChunks_().slice(i * KG_GEN_BATCH, (i + 1) * KG_GEN_BATCH);
   if (!group.length) return { items: [] };
-  const r = genJson_(cfg_('model_answer'), '你在從幼教專業文件建立知識圖譜，只輸出 JSON。\n' +
-    '從下面段落抽出重要的「概念」：專業概念、實務策略、理論、需求類別、法規課綱、課程取向等。只抽段落真正在談、對老師有用的，不要抽一般詞彙。\n' +
+  const r = genJson_(cfg_('model_answer'), '你在從' + roles_().domain + '的專業文件建立知識圖譜，只輸出 JSON。\n' +
+    '從下面段落抽出重要的「概念」（下列類型）。只抽段落真正在談、對' + roles_().user + '有用的，不要抽一般詞彙。\n' +
     '每個概念：name（簡短標準名稱）、type（從下列類型選）、definition（一句話，依段落內容）、aliases（段落裡出現的其他說法，可空）、' +
     'tips（段落中可直接照做的實務要點，0–2 條，可空）、related（與同批其他概念的關係：{"rel":關係ID,"target":概念 name}，方向為「本概念 → target」，可空）、chunks（出現在哪幾段，填段落編號）。\n\n' +
     '【類型】\n' + defs.types.filter(t => types.indexOf(t.label) >= 0).map(t => '- ' + t.label + '：' + t.def).join('\n') + '\n\n' +
@@ -373,7 +382,7 @@ function adminKgGenFinish(items) {
   const pre = 'g' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyMMddHHmm') + '_';
   keep.forEach((c, i) => { c.id = 'c' + (i + 1); c.type = Object.keys(c.types).sort((a, b) => c.types[b] - c.types[a])[0]; });
   // 2. AI 整理階層：主軸（4–6 個）→ 子分類 → 概念；並合併仍重複的概念
-  const h = genJson_(cfg_('model_answer'), '你在整理幼教知識圖譜的階層，只輸出 JSON。\n' +
+  const h = genJson_(cfg_('model_answer'), '你在整理' + roles_().domain + '知識圖譜的階層，只輸出 JSON。\n' +
     '下面是從文件抽出的概念（ID｜名稱｜類型｜出現次數）。請：\n' +
     '1. 定出 4–6 個「主軸」（最上層大類），每個主軸下 2–8 個「子分類」。\n' +
     '2. 把每個概念放進最適合的子分類（parent 填子分類 ID）；若某概念其實是另一個概念的下位項，parent 可填該概念 ID。\n' +
@@ -454,7 +463,7 @@ function kgOntologyTtl_(defs, meta) {
   defs.types.forEach(t => L.push(cls(t.id) + ' a owl:Class ; rdfs:subClassOf kg:KnowledgeNode ;', '  rdfs:label ' + q(t.label) + ' ;', '  skos:definition ' + q(t.def) + ' .'));
   L.push('kg:Source a owl:Class ; rdfs:label ' + q('資料來源') + ' .', 'kg:Article a owl:Class ; rdfs:label ' + q('文章') + ' .',
     'kg:Audience a owl:Class ; rdfs:label ' + q('讀者對象') + ' .');
-  KG_AUDIENCES.forEach((a, i) => L.push('kg:audience' + (i + 1) + ' a kg:Audience ; rdfs:label ' + q(a) + ' .'));
+  defs.audiences.forEach((a, i) => L.push('kg:audience' + (i + 1) + ' a kg:Audience ; rdfs:label ' + q(a.label) + ' .'));
   L.push('', '#################### 關係 ####################',
     'kg:semanticRelation a owl:ObjectProperty ; rdfs:subPropertyOf skos:related ; rdfs:label ' + q('語意關聯') + ' ;', '  rdfs:domain kg:KnowledgeNode ; rdfs:range kg:KnowledgeNode .');
   defs.rels.forEach(r => {
