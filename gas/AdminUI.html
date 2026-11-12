@@ -707,7 +707,7 @@ async function loadLogs() {
       k(s.citeRate == null ? null : s.citeRate + '%', '引用率', '引用段數 ÷ 採用段數') +
       k(s.avgTop, '平均最高分', '門檻 ' + (D.settings.find(x => x.key === 'min_score') || {}).value) +
       k(s.upRate == null ? null : s.upRate + '%', '👍 比例', s.ups + ' 👍／' + s.downs + ' 👎') +
-      k(s.copied, '複製家長訊息') +
+      k(s.copied, '複製次數', '複製訊息草稿等欄位') +
       k(s.rewriteRate == null ? null : s.rewriteRate + '%', '重寫比例', '第一版沒通過檢查') +
       k(s.avgMs == null ? null : (s.avgMs / 1000).toFixed(1) + ' 秒', '平均耗時') +
       k((bt.answer || 0) + '／' + (bt.followup || 0), '回答／追問') +
@@ -747,7 +747,7 @@ const secs = ms => ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒';
 const FNODES = [
   { id: 'input', title: '使用者訊息', kind: 'io', cfg: () => '', met: () => F ? `${F.turns} 回合` : '' },
   { id: 'deid', title: 'P03 去識別化', kind: 'code', keys: [], cfg: () => '人名換成代稱', met: () => stepMs('deid') },
-  { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'triage_rules', 'followup_prompt', 'model_embed'],
+  { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'model_embed'],
     cfg: () => son('enable_triage') ? `分流 ${sm('model_triage')}｜向量 ${sm('model_embed')}` : `已關閉：只算向量（${sm('model_embed')}），主題用關鍵字`,
     met: () => stepMs('triage'),
     exit: { title: '轉介／拒答／追問', on: () => son('enable_triage'), met: () => F ? `轉介 ${F.types.referral || 0}｜拒答 ${F.types.out_of_scope || 0}｜追問 ${F.types.followup || 0}` : '', hit: r => ['referral', 'out_of_scope', 'followup'].indexOf(r.type) >= 0 } },
@@ -760,7 +760,7 @@ const FNODES = [
     met: () => F ? `有排序 ${pc1(F.rerank.used, F.rerank.n)}` + (F.rerank.failed ? `｜<span class="bad2">失敗 ${F.rerank.failed}</span>` : '') + `｜${stepMs('rerank')}` : '' },
   { id: 'gap', title: '知識足夠嗎？', kind: 'dec', keys: ['knowledge_only', 'msg_no_knowledge', 'msg_ai_fallback'], cfg: () => son('knowledge_only') ? '不足 → 保守回答' : '不足 → AI 補足並標示',
     met: () => '', exit: { title: '知識不足', on: () => true, met: () => F ? `${F.gap.n} 次（${pc1(F.gap.n, F.retrieval.n)}）｜保守 ${F.gap.byOutcome['保守回答'] || 0}、AI 補足 ${F.gap.byOutcome['AI 補足'] || 0}` : '', hit: r => !!(r.quality && r.quality.gap) } },
-  { id: 'answer', title: 'P07 組裝＋A1 產生回答', kind: 'ai', keys: ['model_answer', 'temperature', 'system_prompt', 'answer_rules', 'continue_prompt', 'continue_options', 'full_answer_rounds'],
+  { id: 'answer', title: 'P07 組裝＋A1 產生回答', kind: 'ai', keys: ['model_answer', 'temperature', 'system_prompt', 'answer_schema', 'answer_rules', 'fallback_rules', 'continue_prompt', 'continue_options', 'full_answer_rounds'],
     cfg: () => `${sm('model_answer')}`, met: () => F ? `重寫 ${pc1(F.answer.rewrite, F.answer.n)}｜格式問題 ${pc1(F.answer.format, F.answer.n)}｜${stepMs('answer')}` : '' },
   { id: 'check', title: '檢查：P08 禁用詞、P09 出處、L5', kind: 'ai', toggle: 'enable_llm_check', keys: ['enable_llm_check', 'enable_relevance_check', 'model_check', 'check_prompt', 'msg_check_failed'],
     cfg: () => `依據 ${son('enable_llm_check') ? '開' : '關'}｜回應度 ${son('enable_relevance_check') ? '開' : '關'}` + (son('enable_llm_check') || son('enable_relevance_check') ? `｜${sm('model_check')}` : '') + (F ? `｜禁止用語 ${F.forbidden}` : ''),
