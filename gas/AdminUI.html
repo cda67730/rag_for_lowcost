@@ -95,6 +95,13 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .tier.on{border-color:var(--accent);background:var(--soft)} .tier input{display:none} .tier b{font-size:14px}
 .advwrap{border:1px dashed var(--line);border-radius:10px;padding:0 14px;margin-bottom:14px}
 .advwrap>summary{cursor:pointer;font-weight:600;padding:12px 0} .advwrap[open]>summary{border-bottom:1px solid var(--line);margin-bottom:12px}
+.st.offst .stbody,.st.offst .tabs{opacity:.5}
+.st{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.st .tabs{display:flex;gap:4px;margin-bottom:8px} .st .tabs button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer} .st .tabs button.on{background:var(--soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.st table{width:100%;border-collapse:collapse;font-size:13px} .st th{text-align:left;font-weight:600;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap} .st td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.st td input[type=text],.st td select{padding:4px 6px;font-size:13px} .st td input[type=text].sm{width:64px} .st .mv{color:var(--muted);cursor:pointer;padding:0 3px} .st .mv:hover{color:var(--accent)} .st .del{color:var(--bad,#b23a3a);cursor:pointer}
+.st .pv{background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6} .st .pv h5{margin:8px 0 2px;font-size:13px} .st .pv ol,.st .pv ul{margin:2px 0 4px 18px;padding:0}
+.st .say textarea{min-height:88px} .st .warn{color:#a86a12;font-size:12px} .st .foot{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .advwrap .sec{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:4px 0 14px;margin-bottom:10px} .advwrap .sec:last-child{border-bottom:0}
 .sec.off .fld{color:var(--muted)} .sec.off .fld input,.sec.off .fld select,.sec.off .fld textarea{background:var(--bg)}
 .fld{padding:8px 0;border-top:1px solid var(--line)} .fld:first-of-type{border-top:0}
@@ -435,13 +442,14 @@ const SECTIONS = [
   { id: 'models', title: '模型', keys: ['model_answer', 'model_triage', 'model_rerank', 'model_check', 'model_embed'] },
   { id: 'flow', title: '流程開關', adv: true, keys: ['enable_triage', 'max_followups', 'enable_case_flow', 'full_answer_rounds', 'enable_rerank', 'enable_kg', 'kg_mode', 'enable_deid', 'deid_mode', 'enable_citation', 'knowledge_only'] },
   { id: 'check', title: '檢查', adv: true, keys: ['enable_llm_check', 'check_items', 'check_severe', 'enable_relevance_check'] },
-  { id: 'prompts', title: '提示詞與回答格式', adv: true, keys: ['system_prompt', 'answer_schema', 'answer_rules', 'fallback_rules', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'continue_prompt', 'continue_options'] },
+  { id: 'prompts', title: '提示詞與回答格式', adv: true, keys: ['system_prompt', 'enable_answer_schema', 'answer_schema', 'answer_rules', 'fallback_rules', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'continue_prompt', 'continue_options'] },
   { id: 'retrieval', title: '檢索參數', adv: true, keys: ['top_k', 'min_score', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle', 'kg_boost', 'kg_max_nodes', 'temperature'] },
   { id: 'ui', title: '聊天介面文字', adv: true, keys: ['ui_gate_text', 'ui_input_placeholder', 'ui_waiting', 'ui_referral_title', 'ui_referral_note', 'ui_referral_heading', 'ui_ai_tag', 'ui_fb_up', 'ui_fb_down', 'ui_accent', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
   { id: 'other', title: '其他', adv: true, keys: ['deid_labels', 'model_eval_gen', 'model_eval_judge', 'embed_dim', 'chunk_size', 'chunk_overlap', 'enable_node_mapping', 'hourly_limit'], rest: true },
 ];
 const HIDDEN_KEYS = ['tier'];   // 由版本選擇器管，不列成欄位
 const LABELS = {
+  enable_answer_schema: '固定回答欄位',
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill', enable_invite: '需要邀請碼', daily_limit: '每日回答上限（全部合計）',
   ui_gate_text: '邀請碼頁說明', ui_input_placeholder: '輸入框提示', ui_waiting: '等待訊息', ui_referral_title: '緊急轉介標題', ui_referral_note: '緊急轉介說明', ui_referral_heading: '轉介建議小標', ui_ai_tag: 'AI 補充標籤', ui_fb_up: '正面回饋按鈕', ui_fb_down: '負面回饋按鈕', ui_accent: '主色',
   enable_deid: '去識別化', deid_mode: '去識別化方式', deid_labels: '代稱前綴', enable_case_flow: '個案機制', enable_citation: '出處機制',
@@ -462,7 +470,8 @@ function fieldHtml(s, i) {
   const v = s.value, lab = `<label>${esc(LABELS[s.key] || s.key)}<span class="key">${esc(s.key)}</span><br><span class="note">${esc(s.note)}</span></label>`;
   const mk = /^model_/.test(s.key) ? (s.key === 'model_embed' ? 'embed' : 'gen') : '';
   let input;
-  if (s.key === 'default_skill') input = `<select data-i="${i}" style="max-width:320px"><option value="" ${v === '' ? 'selected' : ''}>（無：依問題直接回答）</option>${D.skills.map(k => `<option value="${esc(k.name)}" ${k.name === v ? 'selected' : ''}>${esc(k.name)}${k.enabled ? '' : '（停用）'}</option>`).join('')}${v && !D.skills.some(k => k.name === v) ? `<option value="${esc(v)}" selected>${esc(v)}（找不到這個 Skill）</option>` : ''}</select>`;
+  if (STRUCT[s.key]) input = structHtml(s, i);
+  else if (s.key === 'default_skill') input = `<select data-i="${i}" style="max-width:320px"><option value="" ${v === '' ? 'selected' : ''}>（無：依問題直接回答）</option>${D.skills.map(k => `<option value="${esc(k.name)}" ${k.name === v ? 'selected' : ''}>${esc(k.name)}${k.enabled ? '' : '（停用）'}</option>`).join('')}${v && !D.skills.some(k => k.name === v) ? `<option value="${esc(v)}" selected>${esc(v)}（找不到這個 Skill）</option>` : ''}</select>`;
   else if (mk) input = `<div class="row" style="flex-wrap:nowrap"><select data-i="${i}" data-model="${mk}" data-orig="${esc(v)}"><option value="${esc(v)}">${esc(v)}</option></select><button class="btn" type="button" data-ping="${i}" style="white-space:nowrap">測試</button></div><div class="note" data-pr="${i}"></div>`;
   else if (LONG.includes(s.key)) {
     const ta = `<textarea data-i="${i}" rows="${s.key === 'system_prompt' || s.key === 'answer_schema' ? 14 : /rules|prompt/.test(s.key) ? 8 : 3}">${esc(v)}</textarea>`;
@@ -472,6 +481,138 @@ function fieldHtml(s, i) {
   else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill|ui_)/.test(s.key) ? '100%' : '220px'}">`;
   return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}</div>`;
 }
+// ---------- 結構化設定編輯器：回答欄位、意圖、檢查項目。表格／用說的／JSON 三種檢視，都寫回同一個隱藏 textarea（data-i），儲存流程不變 ----------
+const STRUCT = {
+  answer_schema: { kind: 'answer_schema', title: '回答欄位', say: '例如：先同理老師一兩句，接著用「看見與理解」說明行為背後的需要，然後給 2–3 個有出處的具體做法；若牽涉家長附一段可複製的訊息草稿；最後列接下來要觀察什麼。延續對話時只要簡短回應加最多 2 個新做法。' },
+  intents: { kind: 'intents', title: '意圖選項', say: '例如：老師說到另一個孩子算新個案；回答我的追問或說試過的結果算補充；明確要家長訊息、觀察紀錄或找專人算要求特定協助；聊天、算數、跟帶班無關算無關。' },
+  check_items: { kind: 'check_items', title: '檢查項目', say: '例如：每條建議要能從引用的知識推出來，合理延伸不算編造；老師提到安全或受虐訊號而回答沒提要轉介算問題；說教、責怪、替孩子下診斷算語氣問題。嚴重的只有編造、漏掉轉介、下診斷。' },
+};
+const TYPE_NAMES = { text: '一段文字', list: '條列', items: '有出處的建議' }, MODE_NAMES = { full: '完整回答', continue: '延續回覆', both: '兩者都' };
+const ST = {};   // key → { rows, severe }
+function structParse(key, v) {
+  v = String(v == null ? '' : v);
+  if (key === 'answer_schema') { try { const a = JSON.parse(v); return Array.isArray(a) ? a.filter(f => f && f.key) : null; } catch (e) { return null; } }
+  const rows = v.split(/\n+/).map(l => l.trim()).filter(Boolean).map(l => { const p = l.split(/[＝=]/); return { name: p[0].trim(), desc: p.slice(1).join('＝').trim() }; }).filter(r => r.name);
+  return rows.length ? rows : null;
+}
+function structSerialize(key) {
+  const st = ST[key];
+  if (key === 'answer_schema') return '[\n' + st.rows.map(o => { const c = Object.assign({}, o); if (c.type !== 'items') { delete c.count; delete c.count_continue; } if (!c.label_continue) delete c.label_continue; return JSON.stringify(c); }).join(',\n') + '\n]';
+  return st.rows.map(r => r.name + '＝' + r.desc).join('\n');
+}
+function structDefault(key) {
+  if (key === 'answer_schema') return (D.schema || []).map(f => ({ key: f.key, type: f.type, label: f.label, label_continue: f.labelContinue !== f.label ? f.labelContinue : '', hint: f.hint, modes: f.modes, required: f.required, summary: f.summary, copy: f.copy, count: (f.count || [2, 3]).join('-'), count_continue: (f.countContinue || [0, 2]).join('-') }));
+  if (key === 'intents') return [{ name: '新問題', desc: '換了一個完全不同的狀況或主題' }, { name: '補充同一問題', desc: '回答追問或補充細節、說試過的結果' }, { name: '要求特定協助', desc: '要範本、步驟清單、其他做法、找專人等具體東西' }, { name: '與主題無關', desc: '閒聊、算數、與本系統服務範圍無關' }];
+  return [{ name: '依據', desc: '每個建議是否大致能從它引用的知識推得；合理延伸不算編造' }, { name: '轉介', desc: '描述中有明確需要專人的訊號而回答完全沒提' }, { name: '語氣', desc: '說教、責怪、或下專業判斷' }];
+}
+function structHtml(s, i) {
+  const key = s.key, rows = structParse(key, s.value);
+  ST[key] = { rows: rows || structDefault(key), usingDefault: !rows, view: 'table' };
+  return `<div class="st" data-st="${key}"><textarea data-i="${i}" hidden>${esc(s.value)}</textarea>
+    <div class="tabs"><button type="button" data-v="table" class="on">表格</button><button type="button" data-v="say">用說的</button><button type="button" data-v="preview">預覽</button><button type="button" data-v="json">原始格式</button>
+      <span style="flex:1"></span><button type="button" data-act="reset" title="換回程式內建的預設">還原預設</button></div>
+    <div class="stbody"></div></div>`;
+}
+function structRender(box) {
+  const key = box.dataset.st, st = ST[key], body = box.querySelector('.stbody');
+  if (key === 'answer_schema') { const on = onv('enable_answer_schema'); box.classList.toggle('offst', !on); const w = box.querySelector('.offnote'); if (!on && !w) box.insertAdjacentHTML('afterbegin', '<div class="offnote warn" style="margin-bottom:6px">「固定回答欄位」已關閉：目前自由作答，下面的欄位設定暫時不用（打開後生效）。</div>'); if (on && w) w.remove(); }
+  box.querySelectorAll('.tabs [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === st.view));
+  const note = st.usingDefault ? `<div class="warn">目前沒有自訂設定，顯示的是程式內建的預設；改了存檔就會變成自訂。</div>` : '';
+  if (st.view === 'table') body.innerHTML = note + structTable(key, st);
+  else if (st.view === 'say') body.innerHTML = `<div class="say"><div class="note" style="margin-bottom:4px">用自己的話描述想要的行為，按「轉換」讓 AI 整理成設定，結果會出現在「表格」讓你檢查，確認沒問題再按下方「儲存設定」。</div><textarea data-say placeholder="${esc(STRUCT[key].say)}"></textarea><div class="foot"><button type="button" class="btn pri" data-act="convert">轉換成設定</button><button type="button" class="btn" data-act="back">把目前設定寫成描述</button><span class="note" data-say-status></span></div></div>`;
+  else if (st.view === 'preview') body.innerHTML = structPreview(key, st);
+  else body.innerHTML = `<div class="note" style="margin-bottom:4px">給進階使用者：直接改原始格式，離開這個分頁時會解析；解析失敗會保留原本的內容。</div><textarea data-raw rows="12">${esc(structSerialize(key))}</textarea>`;
+}
+function structTable(key, st) {
+  const rows = st.rows;
+  if (key === 'answer_schema') {
+    const on = Object.keys(TYPE_NAMES).length;
+    return `<table><thead><tr><th></th><th>顯示標題</th><th>給 AI 的說明</th><th>型別</th><th>何時出現</th><th>選項</th><th></th></tr></thead><tbody>` + rows.map((f, i) => `<tr data-r="${i}">
+      <td style="white-space:nowrap"><span class="mv" data-act="up">▲</span><span class="mv" data-act="down">▼</span></td>
+      <td><input type="text" data-f="label" value="${esc(f.label || '')}" placeholder="（不顯示標題）"><input type="text" data-f="label_continue" value="${esc(f.label_continue || '')}" placeholder="延續時的標題（可空）" style="margin-top:3px;font-size:12px"></td>
+      <td><input type="text" data-f="hint" value="${esc(f.hint || '')}"></td>
+      <td><select data-f="type">${Object.keys(TYPE_NAMES).map(t => `<option value="${t}" ${t === f.type ? 'selected' : ''}>${TYPE_NAMES[t]}</option>`).join('')}</select>${f.type === 'items' ? `<div style="margin-top:3px;white-space:nowrap;font-size:12px">完整 <input type="text" class="sm" data-f="count" value="${esc(f.count || '2-3')}"> 個<br>延續 <input type="text" class="sm" data-f="count_continue" value="${esc(f.count_continue || '0-2')}"> 個</div>` : ''}</td>
+      <td><select data-f="modes">${Object.keys(MODE_NAMES).map(m => `<option value="${m}" ${m === f.modes ? 'selected' : ''}>${MODE_NAMES[m]}</option>`).join('')}</select></td>
+      <td style="white-space:nowrap;font-size:12px"><label style="display:block;margin:0;font-weight:400"><input type="checkbox" data-f="required" ${f.required ? 'checked' : ''}> 必填</label><label style="display:block;margin:0;font-weight:400"><input type="checkbox" data-f="summary" ${f.summary ? 'checked' : ''}> 放進摘要</label>${f.type === 'text' ? `<label style="display:block;margin:0;font-weight:400"><input type="checkbox" data-f="copy" ${f.copy ? 'checked' : ''}> 可複製</label>` : ''}</td>
+      <td><span class="del" data-act="del" title="刪除">✕</span></td></tr>`).join('') + `</tbody></table>
+      <div class="foot"><button type="button" class="btn" data-act="add">＋ 新增欄位</button><span class="note">型別：一段文字＝一段話；條列＝幾個要點；有出處的建議＝每條附知識出處的做法清單（出處機制開著時至少要有一個）</span></div>` + structWarn(key, st);
+  }
+  const fixed = key === 'intents';
+  return `<table><thead><tr>${fixed ? '' : '<th></th>'}<th style="width:28%">${key === 'intents' ? '名稱' : '類型'}</th><th>${key === 'intents' ? '什麼情況算這一類' : '判斷說明：什麼算有問題、什麼不算'}</th>${fixed ? '' : '<th></th>'}</tr></thead><tbody>` +
+    rows.map((r, i) => `<tr data-r="${i}">${fixed ? '' : `<td style="white-space:nowrap"><span class="mv" data-act="up">▲</span><span class="mv" data-act="down">▼</span></td>`}<td>${fixed ? `<span class="note" style="font-size:11px">${['新問題', '補充', '特定協助', '無關'][i] || ''}</span><br>` : ''}<input type="text" data-f="name" value="${esc(r.name)}"></td><td><input type="text" data-f="desc" value="${esc(r.desc)}"></td>${fixed ? '' : `<td><span class="del" data-act="del">✕</span></td>`}</tr>`).join('') +
+    `</tbody></table><div class="foot">${fixed ? '<span class="note">四個意圖的順序固定，對應流程的四種處理；只改名稱與說明。</span>' : '<button type="button" class="btn" data-act="add">＋ 新增項目</button><span class="note">全部刪掉等於 L5 不檢查任何項目。</span>'}</div>` + structWarn(key, st);
+}
+function structWarn(key, st) {
+  const w = [];
+  if (key === 'answer_schema') { if (!st.rows.some(f => f.type === 'items')) w.push('沒有「有出處的建議」欄位：出處機制開著時系統會改用預設欄位'); if (!st.rows.length) w.push('沒有任何欄位：會用預設'); }
+  if (key === 'check_items' && !st.rows.length) w.push('沒有檢查項目：L5 會直接通過');
+  return w.length ? `<div class="warn" style="margin-top:6px">${w.map(esc).join('<br>')}</div>` : '';
+}
+function structPreview(key, st) {
+  if (key === 'answer_schema') {
+    const one = mode => st.rows.filter(f => f.modes === 'both' || f.modes === mode).map(f => {
+      const lab = mode === 'continue' && f.label_continue ? f.label_continue : f.label;
+      const h = lab ? `<h5>${esc(lab)}</h5>` : '';
+      if (f.type === 'items') return h + `<ol><li><b>做法一</b>：具體怎麼做… <span class="pill">K1</span></li><li><b>做法二</b>：具體怎麼做… <span class="pill">K2</span></li></ol>`;
+      if (f.type === 'list') return h + `<ul><li>要點一</li><li>要點二</li></ul>`;
+      return h + `<p style="margin:2px 0">${esc(f.hint || '（一段文字）')}${f.copy ? ' <span class="pill">複製</span>' : ''}</p>`;
+    }).join('');
+    return `<div class="row" style="align-items:flex-start;gap:12px"><div style="flex:1"><div class="note" style="margin-bottom:4px">完整回答</div><div class="pv">${one('full') || '<span class="note">（沒有欄位）</span>'}<h5>需要時找專人</h5><p style="margin:2px 0">（系統欄位，轉介時才出現）</p></div></div><div style="flex:1"><div class="note" style="margin-bottom:4px">延續回覆</div><div class="pv">${one('continue') || '<span class="note">（沒有欄位）</span>'}<div style="margin-top:6px"><span class="pill">下一步選項</span> <span class="pill">下一步選項</span></div></div></div></div>`;
+  }
+  if (key === 'intents') return `<div class="pv">分流時 AI 會從這四個裡選一個：<ol>${st.rows.map(r => `<li><b>${esc(r.name)}</b>：${esc(r.desc)}</li>`).join('')}</ol></div>`;
+  return `<div class="pv">審查時 AI 會逐項檢查：<ol>${st.rows.map(r => `<li><b>${esc(r.name)}</b>：${esc(r.desc)}</li>`).join('')}</ol></div>`;
+}
+function structCommit(box) {
+  const key = box.dataset.st, ta = box.querySelector('textarea[data-i]');
+  ta.value = structSerialize(key); ST[key].usingDefault = false;
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+$('settings').addEventListener('click', async e => {
+  const box = e.target.closest('.st'); if (!box) return;
+  const key = box.dataset.st, st = ST[key];
+  const tab = e.target.closest('.tabs [data-v]');
+  if (tab) { if (st.view === 'json') structReadRaw(box); st.view = tab.dataset.v; structRender(box); return; }
+  const act = (e.target.closest('[data-act]') || {}).dataset; if (!act) return;
+  const tr = e.target.closest('tr[data-r]'), r = tr ? +tr.dataset.r : -1;
+  if (act.act === 'reset') { if (!confirm('換回程式內建的預設？（要按「儲存設定」才會生效）')) return; st.rows = structDefault(key); structCommit(box); structRender(box); return; }
+  if (act.act === 'add') { st.rows.push(key === 'answer_schema' ? { key: 'text_' + Date.now().toString(36), type: 'text', label: '', hint: '', modes: 'both', required: false, summary: false, copy: false, count: '2-3', count_continue: '0-2' } : { name: '', desc: '' }); structCommit(box); structRender(box); return; }
+  if (act.act === 'del' && r >= 0) { if (key === 'answer_schema' && !confirm('刪掉這個欄位？已有的對話紀錄仍保留原欄位，但之後不再產生。')) return; st.rows.splice(r, 1); structCommit(box); structRender(box); return; }
+  if ((act.act === 'up' || act.act === 'down') && r >= 0) { const j = act.act === 'up' ? r - 1 : r + 1; if (j < 0 || j >= st.rows.length) return; const t = st.rows[r]; st.rows[r] = st.rows[j]; st.rows[j] = t; structCommit(box); structRender(box); return; }
+  if (act.act === 'convert') {
+    const ta = box.querySelector('[data-say]'), out = box.querySelector('[data-say-status]'); if (!ta.value.trim()) return (out.textContent = '請先寫描述');
+    out.textContent = 'AI 整理中…'; e.target.disabled = true;
+    try {
+      const res = await run('adminDescribe', key, ta.value, structSerialize(key));
+      st.rows = res.rows; if (key === 'check_items' && res.severe) { const sv = $('settings').querySelector('textarea[data-i]'); const si = D.settings.findIndex(x => x.key === 'check_severe'); const el = si >= 0 ? $('settings').querySelector(`[data-i="${si}"]`) : null; if (el) { el.value = res.severe; el.dispatchEvent(new Event('input', { bubbles: true })); } }
+      structCommit(box); st.view = 'table'; structRender(box);
+      toast('已轉成設定，請在表格檢查，確認後按「儲存設定」' + (res.warn.length ? '｜' + res.warn.join('；') : ''), 6000);
+    } catch (er) { out.textContent = '轉換失敗：' + er.message; } finally { e.target.disabled = false; }
+    return;
+  }
+  if (act.act === 'back') {
+    const ta = box.querySelector('[data-say]'), out = box.querySelector('[data-say-status]'); out.textContent = 'AI 整理中…'; e.target.disabled = true;
+    try { ta.value = await run('adminDescribeBack', key); out.textContent = '可以直接改字再按「轉換」'; } catch (er) { out.textContent = '失敗：' + er.message; } finally { e.target.disabled = false; }
+  }
+});
+$('settings').addEventListener('input', e => {
+  const box = e.target.closest('.st'); if (!box) return;
+  const f = e.target.dataset.f, tr = e.target.closest('tr[data-r]'); if (!f || !tr) return;
+  const key = box.dataset.st, row = ST[key].rows[+tr.dataset.r];
+  row[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  structCommit(box);
+});
+$('settings').addEventListener('change', e => {
+  { const i = e.target.dataset && e.target.dataset.i; if (i != null && D.settings[+i] && D.settings[+i].key === 'enable_answer_schema') { const b = $('settings').querySelector('.st[data-st="answer_schema"]'); if (b) structRender(b); } }
+  const box = e.target.closest('.st'); if (!box) return;
+  if (e.target.dataset.f === 'type' || e.target.dataset.f === 'modes') structRender(box);   // 型別改變要重畫（數量欄位、可複製）
+});
+function structReadRaw(box) {
+  const raw = box.querySelector('[data-raw]'); if (!raw) return;
+  const rows = structParse(box.dataset.st, raw.value);
+  if (rows) { ST[box.dataset.st].rows = rows; structCommit(box); } else toast('原始格式解析失敗，保留原本內容', 4000);
+}
+function structInitAll() { $('settings').querySelectorAll('.st').forEach(structRender); }
+
 function tierHtml() {
   const cur = String((D.settings.find(x => x.key === 'tier') || {}).value || 'basic');
   const T = D.tiers || {};
@@ -500,7 +641,7 @@ function renderSettings() {
       renderSettings(); toast('已套用「' + T.name + '」', 3000);
     } catch (e) { toast('套用失敗：' + e.message, 5000); renderSettings(); }
   });
-  fillModelSelects(); refreshOverview(); markDirty();
+  structInitAll(); fillModelSelects(); refreshOverview(); markDirty();
 }
 function goSec(id) {
   const el = $('sec-' + id); if (!el) return;

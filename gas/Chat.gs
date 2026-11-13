@@ -368,8 +368,15 @@ function validateAnswer_(a, mode) {
 const SCHEMA_TYPES = ['text', 'list', 'items'];
 function citationOn_() { const v = cfgAll_().enable_citation; return truthy_(v == null || v === '' ? true : v); }
 let SCHEMA_ = null;
+// 回答欄位關閉（enable_answer_schema＝false）：只有一段文字 reply ＋ 一個不顯示標題的建議清單（出處機制仍能用），不強制結構
+const SCHEMA_FREE = [
+  { key: 'reply', type: 'text', label: '', labelContinue: '', hint: '用自然的段落直接回答，像同事對話；需要時可以分段', modes: 'both', required: true, summary: true, copy: false, count: [0, 3], countContinue: [0, 2] },
+  { key: 'refs_items', type: 'items', label: '參考做法', labelContinue: '參考做法', hint: '有引用知識的具體做法；沒有就給空陣列', modes: 'both', required: false, summary: false, copy: false, count: [0, 3], countContinue: [0, 2] },
+];
 function schema_() {
   if (SCHEMA_) return SCHEMA_;
+  const C0 = cfgAll_();
+  if (!truthy_(C0.enable_answer_schema == null || C0.enable_answer_schema === '' ? true : C0.enable_answer_schema)) return (SCHEMA_ = SCHEMA_FREE.map(f => Object.assign({}, f)));
   let out = null, bad = null;
   try { out = parseSchema_(text_('answer_schema')); } catch (e) { bad = e.message; }
   // 出處機制開著時至少要有一個 items 欄位（P09 要檢查 refs）；關閉時允許只有文字欄位

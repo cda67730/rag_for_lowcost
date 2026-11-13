@@ -99,7 +99,7 @@ function adminCall(token, fn, args) {
     adminUploadDoc: adminUploadDoc, adminDocChunks: adminDocChunks, adminSetChunkType: adminSetChunkType, adminClassifyDoc: adminClassifyDoc,
     adminSetDocStatus: adminSetDocStatus, adminTestChat: adminTestChat, adminLogs: adminLogs, adminLogDetail: adminLogDetail,
     adminEvalList: adminEvalList, adminAddEval: adminAddEval, adminDeleteEval: adminDeleteEval, adminRunEval: adminRunEval,
-    adminApplyTemplate: adminApplyTemplate, adminApplyTier: adminApplyTier, adminRepairVectors: adminRepairVectors, adminFlowStats: adminFlowStats, adminEvalBank: adminEvalBank, adminEvalSetQ: adminEvalSetQ, adminEvalGenPlan: adminEvalGenPlan, adminEvalGenBatch: adminEvalGenBatch, adminEvalGenSpecial: adminEvalGenSpecial, adminEvalImportLogs: adminEvalImportLogs, adminEvalAddExpert: adminEvalAddExpert, adminEvalRunStart: adminEvalRunStart, adminEvalRunOne: adminEvalRunOne, adminEvalRuns: adminEvalRuns, adminEvalSummary: adminEvalSummary, adminEvalReview: adminEvalReview, adminModels: adminModels, adminPingModel: adminPingModel, adminImportKG: adminImportKG, adminKgGenStart: adminKgGenStart, adminKgGenBatch: adminKgGenBatch, adminKgGenFinish: adminKgGenFinish, adminGraphLoad: adminGraphLoad, adminMapDoc: adminMapDoc, adminCandAction: adminCandAction,
+    adminApplyTemplate: adminApplyTemplate, adminApplyTier: adminApplyTier, adminDescribe: adminDescribe, adminDescribeBack: adminDescribeBack, adminRepairVectors: adminRepairVectors, adminFlowStats: adminFlowStats, adminEvalBank: adminEvalBank, adminEvalSetQ: adminEvalSetQ, adminEvalGenPlan: adminEvalGenPlan, adminEvalGenBatch: adminEvalGenBatch, adminEvalGenSpecial: adminEvalGenSpecial, adminEvalImportLogs: adminEvalImportLogs, adminEvalAddExpert: adminEvalAddExpert, adminEvalRunStart: adminEvalRunStart, adminEvalRunOne: adminEvalRunOne, adminEvalRuns: adminEvalRuns, adminEvalSummary: adminEvalSummary, adminEvalReview: adminEvalReview, adminModels: adminModels, adminPingModel: adminPingModel, adminImportKG: adminImportKG, adminKgGenStart: adminKgGenStart, adminKgGenBatch: adminKgGenBatch, adminKgGenFinish: adminKgGenFinish, adminGraphLoad: adminGraphLoad, adminMapDoc: adminMapDoc, adminCandAction: adminCandAction,
   };
   if (!API[fn]) throw new Error('未知的操作');
   ADMIN_CTX_ = account;
@@ -173,6 +173,72 @@ function adminApplyTemplate(jsonText, replace) {
   }
   clearCfgCache_();
   return out;
+}
+
+// ---------- 「用說的」設定：使用者寫一段描述，AI 轉成結構化設定；回傳經過驗證的結果讓前端表格顯示、確認後才存 ----------
+const DESCRIBE_KINDS = {
+  answer_schema: {
+    instr: '把下面的描述轉成「回答欄位」清單。每個欄位：label（顯示標題，可空）、hint（給回答模型看的一句說明）、type（text＝一段文字、list＝條列、items＝有出處的建議清單）、modes（full＝只在完整回答、continue＝只在延續回覆、both）、required、summary（是否放進對話摘要）、copy（是否提供複製鈕，通常是可以直接轉貼的訊息草稿）、items 另有 count（完整回答時的數量範圍如 "2-3"）與 count_continue。label_continue 是延續回覆時的標題（可省略）。順序依描述的先後。',
+    format: '{"fields":[{"label":"","label_continue":"","hint":"","type":"text","modes":"full","required":true,"summary":false,"copy":false,"count":"2-3","count_continue":"0-2"}]}',
+  },
+  intents: {
+    instr: '把下面的描述轉成四個意圖選項，順序固定：1 新問題（換了一個完全不同的狀況，只看這一則）、2 補充同一問題、3 要求特定協助（要具體東西，不追問）、4 與主題無關（拒答）。每個給 name（短名稱）與 desc（一句判斷說明）。描述沒提到的項目用合理的通用寫法。',
+    format: '{"intents":[{"name":"","desc":""},{"name":"","desc":""},{"name":"","desc":""},{"name":"","desc":""}]}',
+  },
+  check_items: {
+    instr: '把下面的描述轉成回答審查的檢查項目清單。每項：name（2–4 字的類型名）、desc（一句判斷說明：什麼情況算有問題、什麼不算）。另外給 severe：一句話說明什麼算「嚴重」（嚴重才會擋下回答重寫）。',
+    format: '{"items":[{"name":"","desc":""}],"severe":""}',
+  },
+};
+function adminDescribe(kind, text, current) {
+  requireAdmin_();
+  const K = DESCRIBE_KINDS[kind]; if (!K) throw new Error('不支援：' + kind);
+  text = String(text || '').trim(); if (!text) throw new Error('請先寫描述');
+  const R = roles_();
+  const r = genJson_(cfg_('model_answer'), '你在幫' + R.domain + '的管理者把口語描述轉成系統設定，只輸出 JSON。提問者稱為「' + R.user + '」、談論對象稱為「' + R.subject + '」；說明文字裡提到他們時直接用這兩個詞。\n' +
+    K.instr + '\n' + (current ? '目前的設定（描述沒提到的部分可以沿用）：\n' + String(current).slice(0, 4000) + '\n' : '') +
+    '格式：' + K.format + '\n\n描述：\n' + text, { temperature: 0 });
+  return describeNormalize_(kind, r);
+}
+/** 驗證並整理成前端表格用的資料；不合格直接丟錯 */
+function describeNormalize_(kind, r) {
+  if (kind === 'answer_schema') {
+    const list = [].concat((r && r.fields) || []).filter(f => f && typeof f === 'object');
+    if (!list.length) throw new Error('沒有轉出任何欄位');
+    const used = {}, out = list.map((f, i) => {
+      const type = ['text', 'list', 'items'].indexOf(f.type) >= 0 ? f.type : 'text';
+      let key = String(f.key || '').trim(); if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || used[key]) { key = type + '_' + (i + 1); while (used[key]) key += '_'; } used[key] = true;
+      const o = { key: key, type: type, label: str_(f.label), hint: str_(f.hint), modes: f.modes === 'continue' || f.modes === 'both' ? f.modes : 'full', required: !!f.required, summary: !!f.summary, copy: !!f.copy };
+      if (f.label_continue) o.label_continue = str_(f.label_continue);
+      if (type === 'items') { o.count = /^\d+-\d+$/.test(String(f.count || '')) ? String(f.count) : '2-3'; o.count_continue = /^\d+-\d+$/.test(String(f.count_continue || '')) ? String(f.count_continue) : '0-2'; }
+      return o;
+    });
+    const warn = [];
+    if (!out.some(f => f.type === 'items')) warn.push('沒有「有出處的建議」欄位：出處機制開著時會改用預設欄位');
+    if (!out.some(f => f.type !== 'items')) warn.push('沒有任何文字欄位，回答會只有建議清單');
+    return { kind: kind, rows: out, warn: warn, json: '[\n' + out.map(o => JSON.stringify(o)).join(',\n') + '\n]' };
+  }
+  if (kind === 'intents') {
+    const list = [].concat((r && r.intents) || []).slice(0, 4);
+    if (list.length < 4) throw new Error('意圖要剛好四個，只轉出 ' + list.length + ' 個');
+    const rows = list.map(x => ({ name: str_(x.name).replace(/[＝=\n]/g, ' ').trim(), desc: str_(x.desc).replace(/\n/g, ' ').trim() }));
+    if (rows.some(x => !x.name)) throw new Error('有意圖沒有名稱');
+    return { kind: kind, rows: rows, warn: [], text: rows.map(x => x.name + '＝' + x.desc).join('\n') };
+  }
+  if (kind === 'check_items') {
+    const list = [].concat((r && r.items) || []).filter(x => x && str_(x.name).trim());
+    if (!list.length) throw new Error('沒有轉出任何檢查項目');
+    const rows = list.map(x => ({ name: str_(x.name).replace(/[＝=\n|]/g, ' ').trim(), desc: str_(x.desc).replace(/\n/g, ' ').trim() }));
+    return { kind: kind, rows: rows, warn: [], text: rows.map(x => x.name + '＝' + x.desc).join('\n'), severe: str_(r.severe).trim() };
+  }
+}
+/** 反向：把目前設定變成一段可以讀、可以改的描述（給「用說的」框的起始內容） */
+function adminDescribeBack(kind) {
+  requireAdmin_();
+  const src = kind === 'answer_schema' ? JSON.stringify(schema_()) : kind === 'intents' ? JSON.stringify(intents_()) : kind === 'check_items' ? JSON.stringify(checkItems_()) + '\n嚴重：' + text_('check_severe') : '';
+  if (!src) throw new Error('不支援：' + kind);
+  const r = genJson_(cfg_('model_answer'), '把下面的系統設定改寫成一段給一般人看的自然語言描述（繁體中文，150 字內，不要出現 key、type、JSON 這類字眼），讓人讀了知道目前的行為、也能直接改字再轉回設定。只輸出 JSON：{"text":""}\n\n設定：\n' + src, { temperature: 0 });
+  return str_(r && r.text).trim();
 }
 
 /** 套用版本：寫入該版本的一組開關，回傳改了哪些 */

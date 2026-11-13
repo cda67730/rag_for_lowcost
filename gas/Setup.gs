@@ -134,6 +134,7 @@ const SETTINGS_DEFAULT = [
     ['intents', TEXT_DEFAULTS.intents, 'L4 意圖選項，一行一個「名稱＝說明」，順序固定：1 新問題（只看這一則）、2 補充同一問題、3 要求特定協助（不追問、延續回覆）、4 與主題無關（拒答）。只改名稱與說明，不要增減行'],
     ['triage_focus_hint', TEXT_DEFAULTS.triage_focus_hint, 'L4 判斷「提問焦點」時給模型看的範例'],
     ['fallback_rules', TEXT_DEFAULTS.fallback_rules, 'knowledge_only 關閉、由 AI 補足時的限制（生成與 L5 檢查都用這段）'],
+    ['enable_answer_schema', true, '回答欄位：開＝回答依「回答欄位」設定分成固定幾段（標題、建議清單…）；關＝自由作答，一段文字加可選的參考做法，不強制格式（FAQ 型或想讓模型自然回答時用）'],
     ['answer_schema', TEXT_DEFAULTS.answer_schema, '回答欄位（JSON，一欄一行）：key／type（text、list、items）／label／hint／modes（full、continue、both）／required／summary／copy；items 另有 count、count_continue。至少要有一個 items 欄位（出處檢查用）。格式錯誤時會用預設欄位'],
     ['model_triage', 'gemini-2.5-flash', 'L4 分流用模型'],
     ['model_answer', 'gemini-2.5-flash', 'A1 對話 Agent 用模型（也用於 PDF 轉文字）'],
