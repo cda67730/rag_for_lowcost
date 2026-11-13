@@ -437,7 +437,7 @@ const LONG = ['system_prompt', 'answer_schema', 'deid_labels', 'welcome', 'conti
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
 // 版面：第一層只放常改的；其餘收在「進階」底下分組（adv:true）。流程怎麼跑看「流程控制台」
 const SECTIONS = [
-  { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'default_skill', 'enable_invite', 'daily_limit'] },
+  { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'default_skill', 'show_sources', 'enable_invite', 'daily_limit'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
   { id: 'models', title: '模型', keys: ['model_answer', 'model_triage', 'model_rerank', 'model_check', 'model_embed'] },
   { id: 'flow', title: '流程開關', adv: true, keys: ['enable_triage', 'max_followups', 'enable_case_flow', 'full_answer_rounds', 'enable_rerank', 'enable_kg', 'kg_mode', 'enable_deid', 'deid_mode', 'enable_citation', 'knowledge_only'] },
@@ -449,7 +449,7 @@ const SECTIONS = [
 ];
 const HIDDEN_KEYS = ['tier'];   // 由版本選擇器管，不列成欄位
 const LABELS = {
-  enable_answer_schema: '固定回答欄位',
+  enable_answer_schema: '固定回答欄位', show_sources: '顯示出處給使用者',
   bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill', enable_invite: '需要邀請碼', daily_limit: '每日回答上限（全部合計）',
   ui_gate_text: '邀請碼頁說明', ui_input_placeholder: '輸入框提示', ui_waiting: '等待訊息', ui_referral_title: '緊急轉介標題', ui_referral_note: '緊急轉介說明', ui_referral_heading: '轉介建議小標', ui_ai_tag: 'AI 補充標籤', ui_fb_up: '正面回饋按鈕', ui_fb_down: '負面回饋按鈕', ui_accent: '主色',
   enable_deid: '去識別化', deid_mode: '去識別化方式', deid_labels: '代稱前綴', enable_case_flow: '個案機制', enable_citation: '出處機制',

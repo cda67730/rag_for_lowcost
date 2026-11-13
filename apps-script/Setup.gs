@@ -77,6 +77,7 @@ const TIERS = {
 function uiConfig_() {
   const C = cfgAll_(), o = { botName: String(C.bot_name || ''), welcome: String(C.welcome || '') };
   Object.keys(C).forEach(k => { if (/^ui_/.test(k) && C[k] != null && String(C[k]).trim() !== '') o[k.slice(3)] = String(C[k]); });
+  o.show_sources = truthy_(C.show_sources == null || C.show_sources === '' ? true : C.show_sources);
   return o;
 }
 // ---------- 角色用詞：提示詞骨架裡的稱呼都從設定來，換案子只要改這幾項 ----------
@@ -111,6 +112,7 @@ function intentKey_(name) { return (intents_().find(i => i.name === String(name)
 
 const SETTINGS_DEFAULT = [
     ['tier', 'basic', '版本：basic＝基本（問答＋知識庫，單一 Skill）、multi＝多取向分流（＋多 Skill、L4 分流與追問）、full＝全功能（＋個案機制、重排與配額、知識圖譜）。選版本會一次套用一組開關，之後每個開關仍可個別調整'],
+    ['show_sources', true, '顯示出處給使用者：開＝回答裡的建議旁有 K1、K2 出處按鈕可點開來源；關＝使用者端不顯示（後端仍要求引用、仍做出處檢查，紀錄與後台仍看得到）'],
     ['enable_invite', true, '邀請碼：開＝聊天頁要輸入邀請碼才能用（依「邀請碼」表驗證）；關＝任何人拿到網址就能用，紀錄的單位寫「公開」。關閉時請設好每日上限'],
     ['daily_limit', 500, '整個機器人每天的回答次數上限（所有使用者合計），超過回覆「今日額度已用完」。邀請碼關閉時尤其重要'],
     ['bot_name', 'AI 助手', '聊天頁顯示的名稱'],

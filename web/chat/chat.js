@@ -33,7 +33,8 @@
     if (r.type !== "answer" && r.type !== "continue" && r.type !== "ai_fallback") return `<p>${esc(r.message)}</p>`;
     const a = r.answer, src = {};
     (r.sources || []).forEach((s) => (src[s.ref] = s));
-    const chips = (s) => (s.refs || []).filter((x) => src[x]).map((x) => `<button type="button" class="ref" data-ref="${esc(x)}">${esc(x)}</button>`).join("") +
+    const showSrc = UI.show_sources !== false && UI.show_sources !== "FALSE" && UI.show_sources !== "false";   // 後台 show_sources 關閉時不顯示出處按鈕
+    const chips = (s) => (showSrc ? (s.refs || []).filter((x) => src[x]).map((x) => `<button type="button" class="ref" data-ref="${esc(x)}">${esc(x)}</button>`).join("") : "") +
       ((r.type === "ai_fallback" || (a && a.notice)) && !(s.refs || []).some((x) => src[x]) ? `<span class="ai-tag">${esc(ui("ai_tag", "AI 補充"))}</span>` : "");
     return AnswerView.render(r, { restore, chips, labels: UI });
   }
