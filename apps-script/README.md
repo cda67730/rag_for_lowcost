@@ -59,12 +59,14 @@ Google 試算表（設定、Skill、文件、知識段落、對照表、對話�
 
 #### 方式 A：三個指令（需要 Node.js）
 
+[clasp](https://github.com/google/clasp) 是 Google 官方的命令列工具，可以從電腦直接建立與推送 Apps Script 專案。第一次用前到 <https://script.google.com/home/usersettings> 把「Google Apps Script API」打開（只需一次）。
+
 ```bash
 cd apps-script
 ./install.sh "機器人名稱"
 ```
 
-腳本會：登入 Google → 建立一份新試算表與綁定的 Apps Script 專案 → 把所有程式推上去。結束時畫面會列出剩下要在瀏覽器做的事（設定金鑰、`setup()`、部署）。Windows 用 Git Bash 或 WSL 執行；或照腳本內容手動打那三行 `npx @google/clasp …`。
+腳本會：開瀏覽器讓你用 Google 帳號登入並授權 clasp → 建立一份新試算表與綁定的 Apps Script 專案 → 把所有程式推上去。結束時畫面會列出剩下要在瀏覽器做的事（設定金鑰、`setup()`、部署）。Windows 用 Git Bash 或 WSL 執行；或照腳本內容手動打那三行 `npx @google/clasp …`。
 
 之後更新程式只要 `npx @google/clasp push -f`，再到編輯器部署新版本。
 

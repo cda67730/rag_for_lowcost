@@ -4,7 +4,9 @@ set -e
 cd "$(dirname "$0")"
 TITLE="${1:-AI 知識問答}"
 command -v npx >/dev/null || { echo "需要 Node.js（含 npx）"; exit 1; }
-echo "① 登入 Google（會開瀏覽器）"; npx -y @google/clasp login
+echo "⓪ 請先確認已在 https://script.google.com/home/usersettings 開啟「Google Apps Script API」（只需一次），否則下一步建立專案會被拒絕。"
+read -r -p "   已開啟的話按 Enter 繼續… "
+echo "① 登入 Google（會開瀏覽器，用你的 Google 帳號授權 clasp）"; npx -y @google/clasp login
 echo "② 建立試算表與綁定的 Apps Script 專案：$TITLE"
 npx -y @google/clasp create --type sheets --title "$TITLE" --rootDir .
 echo "③ 推上程式"; npx -y @google/clasp push -f
