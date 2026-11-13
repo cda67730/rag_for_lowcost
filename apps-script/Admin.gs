@@ -4,12 +4,28 @@
  *  2. 網頁 /exec?page=admin：用帳號密碼登入（帳號在「管理員」工作表，密碼只存雜湊），不需分享試算表
  */
 
+/** 從試算表選單設定 API 金鑰：存進指令碼屬性，不用自己找「專案設定」 */
+function setApiKeyUi() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const which = ui.alert('設定 API 金鑰', '要設定哪一家的金鑰？\n\n「是」＝ Gemini（必要）\n「否」＝ OpenAI（選用）', ui.ButtonSet.YES_NO_CANCEL);
+  if (which === ui.Button.CANCEL || which === ui.Button.CLOSE) return;
+  const key = which === ui.Button.YES ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
+  const cur = props.getProperty(key);
+  const r = ui.prompt(key, (cur ? '目前已設定（…' + cur.slice(-4) + '）。' : '目前未設定。') + '\n貼上新的金鑰後按「確定」；留空按確定＝刪除。\n金鑰只存在這個 Apps Script 專案的指令碼屬性，不會寫進試算表。', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const v = String(r.getResponseText() || '').trim();
+  if (!v) { props.deleteProperty(key); ui.alert('已刪除 ' + key); return; }
+  props.setProperty(key, v);
+  ui.alert('已儲存 ' + key + '（…' + v.slice(-4) + '）。到後台「機器人設定 → 模型」按「測試」確認可用。');
+}
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('AI 助手後台')
     .addItem('開啟後台（視窗）', 'openAdmin')
     .addItem('後台網頁網址', 'showAdminLink')
     .addItem('設定後台帳號密碼', 'setAdminPasswordUi')
     .addSeparator()
+    .addItem('設定 API 金鑰', 'setApiKeyUi')
     .addItem('初始化工作表（setup）', 'setup')
     .addToUi();
 }

@@ -1,3 +1,8 @@
-.DS_Store
-node_modules/
 *.log
+*.pyc
+.DS_Store
+.clasp.json
+.venv/
+__pycache__/
+node_modules/
+server/.env
