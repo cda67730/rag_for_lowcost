@@ -7,7 +7,9 @@
 ```python
 class ChatState(TypedDict, total=False):
     # 輸入（來自 API 請求）
-    project_id: str
+    bot_id: str
+    flow_id: str
+    kb_ids: list[str]            # 這個 Bot 掛的知識庫（含標籤與配額，放在 cfg）
     session: str
     message: str                 # 原文
     history: list[dict]          # [{role, text}]
@@ -64,7 +66,7 @@ class ChatState(TypedDict, total=False):
 
 | 節點 | 對應 Chat.gs | 做什麼 | 下一步 |
 | --- | --- | --- | --- |
-| `load_config` | `cfgAll_()`、`roles_()`、`schema_()`、`intents_()` | 讀專案設定、角色、回答欄位；決定 `mode` 的前置資料 | `deid` |
+| `load_config` | `cfgAll_()`、`roles_()`、`schema_()`、`intents_()` | 讀 Bot＋Flow 設定、角色、回答欄位、掛的知識庫；決定 `mode` 的前置資料 | `deid` |
 | `deid` | 第 1 段 `useDeid` / `deid_()` | `enable_deid` 關→原文；`rule`→規則；`ai` 且 L4 開→只套用已知 `name_map`、標 `deid_pending`；`ai` 且 L4 關→單獨呼叫模型 | `expand_query` |
 | `expand_query` | `expandQuery_()` | 同義詞擴充、組 `case_text` | `triage_and_embed` |
 | `triage_and_embed` | 第 2 段 `fetchAll([triReq, embReq])` | **並行**：L4 分流（含 `deid_pending` 時的名字清單）＋查詢向量。L4 關→關鍵字選主題、意圖依 history 推 | `apply_deid_result` |
@@ -73,7 +75,7 @@ class ChatState(TypedDict, total=False):
 | `followup` | `followupPrompt_` 呼叫 | 一次模型呼叫，產生同理句＋最多 2 題 | `finish` |
 | `load_skills` | `pick` / `skillText` | 依主題挑 Skill，沒有就用 `default_skill`；決定 `mode`（`enable_case_flow`、`full_answer_rounds`、`specific`） | `kg_match` |
 | `kg_match` | `kgMatch_()` | `enable_kg` 開才做；純比對不呼叫模型 | `retrieve` |
-| `retrieve` | `searchDetail_()` | 向量＋關鍵字（＋圖譜加分／only）；`enable_rerank` 開→AI 重排與配額 | `judge_knowledge` |
+| `retrieve` | `searchDetail_()` | 對 Bot 掛的每個知識庫查向量＋關鍵字（＋圖譜加分／only），依 `bot_knowledge` 的配額合併；`enable_rerank` 開→AI 重排與配額 | `judge_knowledge` |
 | `judge_knowledge` | 第 5 段「知識足夠判斷」 | 沒有可用段落或只有背景原則：`knowledge_only` 開→`finish_conservative`；關→`fallback=True` 繼續 | `assemble` |
 | `assemble` | `assemble_()` / `assembleContinue_()` | 五層 prompt；依 `mode` 與 `schema` 產生輸出格式 | `generate` |
 | `generate` | `genJson_(C.model_answer, prompt)` | 一次模型呼叫；`validateAnswer_`、`cleanAnswer_`；回報 `knowledge_gap` 時依規則轉 `finish_conservative` 或重寫 | `check` |
@@ -119,24 +121,23 @@ LangGraph 原生支援的 `triage_and_embed` 並行用 `Send` 或在節點內 `a
 | `TIERS`、`DESCRIBE_KINDS`、`describeNormalize_` | 登入與權限：真正的使用者表＋角色（管理者／審核者／研究者），取代單一層級 |
 | 評測邏輯 `Eval.gs` 的出題與評分 prompt | 排程：Apps Script 觸發器 → APScheduler 或 Celery |
 
-## 資料表（最小集合）
+## 資料表（最小集合；多機器人版的完整表見 architecture.md）
 
 ```
-projects            id, name, created_at
-project_settings    project_id, key, value, note          ← 與設定表一對一
-skills              project_id, skill_id, name, tags[], always, content, enabled, version
-skill_history       同上＋version 遞增
-documents           project_id, doc_id, title, source, status(pending|approved|disabled), created_at
-chunks              project_id, chunk_id, doc_id, page, text, type, embedding vector(768)
-synonyms            project_id, word, concept
-forbidden           project_id, rule, type, note
-referrals           project_id, category, who, contact, now
-invite_codes        project_id, code, unit, enabled, trace
-kg_nodes / kg_edges / kg_links / kg_defs / kg_candidates
-conversations       project_id, session, turn, unit, deid_text, type, intent, answer jsonb, sources jsonb, checks jsonb, metrics jsonb, trace jsonb, created_at
-feedback            project_id, session, turn, kind, note
-eval_banks / eval_questions / eval_runs / eval_results
-users               id, login, pw_hash, role, project_ids[]
+bots                id, workspace_id, slug, name
+flows               id, bot_id, kind, name, is_default
+bot_settings        bot_id, key, value            ← 與設定表一對一
+flow_settings       flow_id, key, value           ← 覆蓋
+knowledge_bases     id, workspace_id, name
+bot_knowledge       bot_id, kb_id, label, min_hits, weight
+documents           kb_id, doc_id, title, source, status(pending|approved|disabled)
+chunks              kb_id, chunk_id, doc_id, page, text, type, embedding vector(n)
+skills / skill_history / synonyms / forbidden / referrals / invite_codes   bot_id
+kg_nodes / kg_edges / kg_links / kg_defs / kg_candidates                   kb_id
+conversations       bot_id, flow_id, session, turn, unit, deid_text, type, intent, answer jsonb, sources jsonb, checks jsonb, metrics jsonb, trace jsonb
+feedback            bot_id, session, turn, kind, note
+eval_banks / eval_questions / eval_runs / eval_results                     bot_id, flow_id
+users / memberships / workspaces
 ```
 
 `chunks.embedding` 用 pgvector，建 HNSW 索引；維度跟著 `embed_dim` 設定走，換模型要重建欄位。

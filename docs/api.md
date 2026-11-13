@@ -13,7 +13,7 @@
 
 所有請求與回應皆為 JSON、UTF-8。Apps Script 版因 CORS 限制用 `Content-Type: text/plain`，Python 版接受 `application/json` 與 `text/plain` 兩種。
 
-Python 版每個請求可帶 `project_id`（多專案隔離）；沒帶時用伺服器預設專案。Apps Script 版一個部署就是一個專案，忽略此欄位。
+Python 版每個請求帶 `bot_id`（多機器人；聊天頁從網址 `?bot=<id>` 取得），可再帶 `flow_id` 指定流程，沒帶用該 Bot 的預設流程。Apps Script 版一個部署就是一個機器人，忽略這兩個欄位。階層定義見 `architecture.md`。
 
 ---
 
@@ -137,7 +137,7 @@ Python 版每個請求可帶 `project_id`（多專案隔離）；沒帶時用伺
 
 ## `ingest` — 文件匯入（Python 版後台用；Apps Script 版走後台 RPC）
 
-請求（multipart 或 JSON）：`{ "project_id", "title", "source": "upload|paste", "content_type", "data": "<base64 或純文字>", "approve": false }`
+請求（multipart 或 JSON）：`{ "kb_id", "title", "source": "upload|paste", "content_type", "data": "<base64 或純文字>", "approve": false }`（文件屬於知識庫，不屬於 Bot）
 
 回應：`{ "ok": true, "doc_id", "chunks": 42, "status": "pending|approved" }`
 
@@ -147,7 +147,7 @@ Python 版每個請求可帶 `project_id`（多專案隔離）；沒帶時用伺
 
 ## `eval/run` — 自動評測（Python 版）
 
-請求：`{ "project_id", "bank_id", "question_ids": [], "repeat": 1, "settings_override": { … } }`
+請求：`{ "bot_id", "flow_id", "bank_id", "question_ids": [], "repeat": 1, "settings_override": { … } }`
 回應：`{ "ok": true, "run_id" }`；結果用 `GET /api/eval/runs/{run_id}` 取。
 
 `settings_override` 讓評測套用試用設定而不改正式設定（改版把關用）。
@@ -156,6 +156,6 @@ Python 版每個請求可帶 `project_id`（多專案隔離）；沒帶時用伺
 
 ## 設定 key
 
-兩個後端讀同一組設定 key（見 `apps-script/Setup.gs` 的 `SETTINGS_DEFAULT` 與 `templates/*.json` 的 `settings`）。Python 版把它們存在 `project_settings` 表，key 一字不改；伺服器層級的東西（資料庫連線、模型供應商金鑰、CORS）用環境變數，不放進設定。
+兩個後端讀同一組設定 key（見 `apps-script/Setup.gs` 的 `SETTINGS_DEFAULT` 與 `templates/*.json` 的 `settings`）。Python 版把它們存在 `bot_settings`（Flow 可用 `flow_settings` 覆蓋），key 一字不改；伺服器層級的東西（資料庫連線、模型供應商金鑰、CORS）用環境變數，不放進設定。
 
 專案範本 JSON（`templates/`）格式兩邊通用：`settings`、`skills`、`synonyms`、`forbidden`、`referral`、`kgDefs`。
