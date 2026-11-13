@@ -82,6 +82,7 @@ function codeSeen_(code) { return !!CacheService.getScriptCache().get('code_ok_'
 function codeOk_(code) { try { CacheService.getScriptCache().put('code_ok_' + String(code).trim().toUpperCase(), '1', 86400); } catch (e) {} }
 /** 驗證邀請碼並處理錯誤次數；回傳 {info} 或 {error} */
 function verifyCode_(code) {
+  if (!truthy_(cfg_('enable_invite') == null || cfg_('enable_invite') === '' ? true : cfg_('enable_invite'))) return { info: { school: '公開', trace: false, open: true } };
   if (codeLocked_() && !codeSeen_(code)) return { error: '嘗試次數過多，請 15 分鐘後再試' };
   const info = codeInfo_(code);
   if (!info) { codeFail_(); return { error: '邀請碼不正確或已停用' }; }
@@ -95,6 +96,14 @@ function codeInfo_(code) {
   return hit ? { school: String(hit['單位代號'] || hit['邀請碼']), trace: truthy_(hit['觀測']) } : null;
 }
 function checkCode_(code) { const i = codeInfo_(code); return i ? i.school : null; }
+/** 全機器人每日上限（所有使用者合計） */
+function dailyOk_() {
+  const cache = CacheService.getScriptCache();
+  const key = 'daily_' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMdd');
+  const n = Number(cache.get(key) || 0) + 1;
+  cache.put(key, String(n), 21600);
+  return n <= Number(cfg_('daily_limit') || 500);
+}
 function rateOk_(code) {
   const cache = CacheService.getScriptCache();
   const key = 'rate_' + code + '_' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyyMMddHH');

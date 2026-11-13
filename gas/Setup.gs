@@ -68,6 +68,12 @@ function text_(key) {
   const v = cfg_(key);
   return tpl_(v == null || String(v).trim() === '' ? (TEXT_DEFAULTS[key] || '') : String(v));
 }
+// ---------- 版本：一組開關的預設組合；套用時只改這些 key，其他設定不動 ----------
+const TIERS = {
+  basic: { name: '基本', desc: '問答＋知識庫＋出處。單一 Skill（預設 Skill 一律載入），不分流、不追問、每次完整回答', set: { enable_triage: false, enable_case_flow: false, enable_rerank: false, enable_kg: false, max_followups: 0 } },
+  multi: { name: '多取向分流', desc: '＋多個 Skill、L4 分流（意圖、主題、轉介分級）、資訊不足時追問', set: { enable_triage: true, enable_case_flow: false, enable_rerank: false, enable_kg: false, max_followups: 1 } },
+  full: { name: '全功能', desc: '＋個案機制（延續回覆）、AI 重排與配額、知識圖譜參與回答', set: { enable_triage: true, enable_case_flow: true, enable_rerank: true, enable_kg: true, max_followups: 1 } },
+};
 /** 聊天頁用的文字與外觀設定（不含敏感內容，邀請碼驗證前就可以拿） */
 function uiConfig_() {
   const C = cfgAll_(), o = { botName: String(C.bot_name || ''), welcome: String(C.welcome || '') };
@@ -105,6 +111,9 @@ function intentName_(key) { return (intents_().find(i => i.key === key) || {}).n
 function intentKey_(name) { return (intents_().find(i => i.name === String(name).trim()) || {}).key || null; }
 
 const SETTINGS_DEFAULT = [
+    ['tier', 'basic', '版本：basic＝基本（問答＋知識庫，單一 Skill）、multi＝多取向分流（＋多 Skill、L4 分流與追問）、full＝全功能（＋個案機制、重排與配額、知識圖譜）。選版本會一次套用一組開關，之後每個開關仍可個別調整'],
+    ['enable_invite', true, '邀請碼：開＝聊天頁要輸入邀請碼才能用（依「邀請碼」表驗證）；關＝任何人拿到網址就能用，紀錄的單位寫「公開」。關閉時請設好每日上限'],
+    ['daily_limit', 500, '整個機器人每天的回答次數上限（所有使用者合計），超過回覆「今日額度已用完」。邀請碼關閉時尤其重要'],
     ['bot_name', 'AI 助手', '聊天頁顯示的名稱'],
     ['welcome', '你好，說說你遇到的狀況，我會先了解情境，再依知識庫給你建議。', '聊天頁的歡迎訊息'],
     ['ui_gate_text', '請輸入邀請碼。對話內容會保存，用於改善服務。', '聊天頁：邀請碼頁的說明文字'],

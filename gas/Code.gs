@@ -16,11 +16,12 @@ function doGet(e) {
 function doPost(e) {
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (req.action === 'ui') return json_({ ok: true, ui: uiConfig_() });   // 聊天頁載入時先拿文字與外觀，不需邀請碼
+    if (req.action === 'ui') return json_({ ok: true, ui: uiConfig_(), invite: truthy_(cfg_('enable_invite') == null || cfg_('enable_invite') === '' ? true : cfg_('enable_invite')) });   // 聊天頁載入時先拿文字與外觀，不需邀請碼
     const vc = verifyCode_(req.code);
     if (vc.error) return json_({ ok: false, error: vc.error });
     const info = vc.info, school = info.school;
-    if (!rateOk_(req.code)) return json_({ ok: false, error: '使用次數過多，請稍後再試' });
+    if (!rateOk_(info.open ? ('ip_' + String(req.session || '').slice(0, 40)) : req.code)) return json_({ ok: false, error: '使用次數過多，請稍後再試' });
+    if (req.action === 'chat' && !dailyOk_()) return json_({ ok: false, error: '今日額度已用完，請明天再試' });
     req.school = school;
     switch (req.action) {
       case 'check': return json_({ ok: true, botName: cfg_('bot_name') || 'AI 助手', welcome: cfg_('welcome') || '', trace: info.trace, ui: uiConfig_() });

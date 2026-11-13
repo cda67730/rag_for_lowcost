@@ -90,6 +90,12 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .sec{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px;scroll-margin-top:60px}
 .sec>h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .sec>h4 label{margin:0;font-weight:400;font-size:13px}
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px}
+.tier{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font-weight:400;margin:0}
+.tier.on{border-color:var(--accent);background:var(--soft)} .tier input{display:none} .tier b{font-size:14px}
+.advwrap{border:1px dashed var(--line);border-radius:10px;padding:0 14px;margin-bottom:14px}
+.advwrap>summary{cursor:pointer;font-weight:600;padding:12px 0} .advwrap[open]>summary{border-bottom:1px solid var(--line);margin-bottom:12px}
+.advwrap .sec{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:4px 0 14px;margin-bottom:10px} .advwrap .sec:last-child{border-bottom:0}
 .sec.off .fld{color:var(--muted)} .sec.off .fld input,.sec.off .fld select,.sec.off .fld textarea{background:var(--bg)}
 .fld{padding:8px 0;border-top:1px solid var(--line)} .fld:first-of-type{border-top:0}
 .fld>label{margin:0 0 4px} .fld .key{font-size:11px;color:#9aa5b1;font-weight:400;margin-left:6px}
@@ -125,8 +131,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   <div class="box" id="modelBox">
     <div class="row" style="justify-content:space-between"><h4 style="margin:0">可用模型 <span class="note" id="modelSum">讀取中…</span></h4>
       <div class="row"><button class="btn" data-preset="g3" style="padding:4px 10px;font-size:12px">套用 Gemini 3 組合</button><button class="btn" data-preset="oa" style="padding:4px 10px;font-size:12px">套用 OpenAI 組合</button><button class="btn" data-preset="g25" style="padding:4px 10px;font-size:12px">還原 2.5 組合</button><button class="btn" id="modelList" style="padding:4px 10px;font-size:12px">看清單</button><button class="btn" id="modelRefresh" style="padding:4px 10px;font-size:12px">重新讀取</button></div></div>
-    <p class="note" style="margin:4px 0 0">清單直接向 Gemini／OpenAI 查詢金鑰能用的模型；各步驟的模型在下方對應區塊選，選好可按「測試」。Gemini 3 以上會自動改用官方建議的參數。
-    Gemini 3 組合：分流與重排用 3.1 Flash-Lite（快、省），回答用 3.8 Flash，檢查用 3.6 Flash。OpenAI 組合：分流與重排用 GPT-6 Luna，回答與檢查用 GPT-6.1 Terra（同系列幻覺率最低）。套用後會直接儲存，可再逐一測試。向量模型不在組合內，要換需重新上傳文件。用 OpenAI 要先在指令碼屬性加 OPENAI_API_KEY。</p>
+    <p class="note" style="margin:4px 0 0">清單直接向 Gemini／OpenAI 查詢金鑰能用的模型；各步驟的模型在「模型」區選，可按「測試」。組合：Gemini 3 用 3.1 Flash-Lite 分流重排、3.8 Flash 回答、3.6 Flash 檢查；OpenAI 用 GPT-6 Luna 分流重排、GPT-6.1 Terra 回答檢查。</p>
     <div id="modelTable" hidden style="margin-top:8px;max-height:360px;overflow:auto"></div>
   </div>
   <div class="setwrap">
@@ -423,22 +428,21 @@ async function load() {
 // ---------- 設定 ----------
 const LONG = ['system_prompt', 'answer_schema', 'deid_labels', 'welcome', 'continue_prompt', 'continue_options', 'intents', 'fallback_rules', 'triage_rules', 'followup_prompt', 'answer_rules', 'check_items', 'check_severe', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'];
 // 依流程步驟分區：toggle＝標題列的總開關；沒列到的新設定會自動放進「進階」
+// 版面：第一層只放常改的；其餘收在「進階」底下分組（adv:true）。流程怎麼跑看「流程控制台」
 const SECTIONS = [
-  { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'system_prompt', 'default_skill'] },
-  { id: 'ui', title: '聊天介面', keys: ['ui_gate_text', 'ui_input_placeholder', 'ui_waiting', 'ui_referral_title', 'ui_referral_note', 'ui_referral_heading', 'ui_ai_tag', 'ui_fb_up', 'ui_fb_down', 'ui_accent'] },
+  { id: 'basic', title: '基本', keys: ['bot_name', 'welcome', 'default_skill', 'enable_invite', 'daily_limit'] },
   { id: 'roles', title: '角色用詞', keys: ['domain_desc', 'role_user', 'role_subject', 'role_escalate'] },
-  { id: 'flow', title: '流程開關', keys: ['enable_deid', 'deid_mode', 'deid_labels', 'enable_case_flow', 'enable_citation'] },
-  { id: 'triage', title: 'L4 分流', toggle: 'enable_triage', keys: ['model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'max_followups'] },
-  { id: 'retrieval', title: '檢索與重排', keys: ['top_k', 'min_score', 'enable_rerank', 'model_rerank', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle'] },
-  { id: 'kg', title: '知識圖譜', toggle: 'enable_kg', keys: ['kg_mode', 'kg_boost', 'kg_max_nodes'] },
-  { id: 'answer', title: '回答', keys: ['model_answer', 'temperature', 'answer_schema', 'answer_rules', 'knowledge_only', 'fallback_rules', 'full_answer_rounds', 'continue_prompt', 'continue_options'] },
-  { id: 'check', title: 'L5 檢查', toggle: 'enable_llm_check', keys: ['enable_relevance_check', 'model_check', 'check_items', 'check_severe'] },
-  { id: 'msgs', title: '固定訊息', keys: ['msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
-  { id: 'evalm', title: '自動評測', keys: ['model_eval_gen', 'model_eval_judge'] },
-  { id: 'adv', title: '進階', keys: ['model_embed', 'embed_dim', 'chunk_size', 'chunk_overlap', 'enable_node_mapping', 'hourly_limit'], rest: true },
+  { id: 'models', title: '模型', keys: ['model_answer', 'model_triage', 'model_rerank', 'model_check', 'model_embed'] },
+  { id: 'flow', title: '流程開關', adv: true, keys: ['enable_triage', 'max_followups', 'enable_case_flow', 'full_answer_rounds', 'enable_rerank', 'enable_kg', 'kg_mode', 'enable_deid', 'deid_mode', 'enable_citation', 'knowledge_only'] },
+  { id: 'check', title: '檢查', adv: true, keys: ['enable_llm_check', 'check_items', 'check_severe', 'enable_relevance_check'] },
+  { id: 'prompts', title: '提示詞與回答格式', adv: true, keys: ['system_prompt', 'answer_schema', 'answer_rules', 'fallback_rules', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'continue_prompt', 'continue_options'] },
+  { id: 'retrieval', title: '檢索參數', adv: true, keys: ['top_k', 'min_score', 'rerank_pool', 'quota_min_actionable', 'quota_max_principle', 'kg_boost', 'kg_max_nodes', 'temperature'] },
+  { id: 'ui', title: '聊天介面文字', adv: true, keys: ['ui_gate_text', 'ui_input_placeholder', 'ui_waiting', 'ui_referral_title', 'ui_referral_note', 'ui_referral_heading', 'ui_ai_tag', 'ui_fb_up', 'ui_fb_down', 'ui_accent', 'msg_no_knowledge', 'msg_check_failed', 'msg_ai_fallback', 'msg_out_of_scope'] },
+  { id: 'other', title: '其他', adv: true, keys: ['deid_labels', 'model_eval_gen', 'model_eval_judge', 'embed_dim', 'chunk_size', 'chunk_overlap', 'enable_node_mapping', 'hourly_limit'], rest: true },
 ];
+const HIDDEN_KEYS = ['tier'];   // 由版本選擇器管，不列成欄位
 const LABELS = {
-  bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill',
+  bot_name: '機器人名稱', welcome: '歡迎訊息', system_prompt: '固定 system prompt', default_skill: '預設 Skill', enable_invite: '需要邀請碼', daily_limit: '每日回答上限（全部合計）',
   ui_gate_text: '邀請碼頁說明', ui_input_placeholder: '輸入框提示', ui_waiting: '等待訊息', ui_referral_title: '緊急轉介標題', ui_referral_note: '緊急轉介說明', ui_referral_heading: '轉介建議小標', ui_ai_tag: 'AI 補充標籤', ui_fb_up: '正面回饋按鈕', ui_fb_down: '負面回饋按鈕', ui_accent: '主色',
   enable_deid: '去識別化', deid_mode: '去識別化方式', deid_labels: '代稱前綴', enable_case_flow: '個案機制', enable_citation: '出處機制',
   enable_kg: '圖譜參與回答', kg_mode: '圖譜模式', kg_boost: '圖譜加分', kg_max_nodes: '最多命中節點數',
@@ -458,7 +462,8 @@ function fieldHtml(s, i) {
   const v = s.value, lab = `<label>${esc(LABELS[s.key] || s.key)}<span class="key">${esc(s.key)}</span><br><span class="note">${esc(s.note)}</span></label>`;
   const mk = /^model_/.test(s.key) ? (s.key === 'model_embed' ? 'embed' : 'gen') : '';
   let input;
-  if (mk) input = `<div class="row" style="flex-wrap:nowrap"><select data-i="${i}" data-model="${mk}" data-orig="${esc(v)}"><option value="${esc(v)}">${esc(v)}</option></select><button class="btn" type="button" data-ping="${i}" style="white-space:nowrap">測試</button></div><div class="note" data-pr="${i}"></div>`;
+  if (s.key === 'default_skill') input = `<select data-i="${i}" style="max-width:320px"><option value="" ${v === '' ? 'selected' : ''}>（無：依問題直接回答）</option>${D.skills.map(k => `<option value="${esc(k.name)}" ${k.name === v ? 'selected' : ''}>${esc(k.name)}${k.enabled ? '' : '（停用）'}</option>`).join('')}${v && !D.skills.some(k => k.name === v) ? `<option value="${esc(v)}" selected>${esc(v)}（找不到這個 Skill）</option>` : ''}</select>`;
+  else if (mk) input = `<div class="row" style="flex-wrap:nowrap"><select data-i="${i}" data-model="${mk}" data-orig="${esc(v)}"><option value="${esc(v)}">${esc(v)}</option></select><button class="btn" type="button" data-ping="${i}" style="white-space:nowrap">測試</button></div><div class="note" data-pr="${i}"></div>`;
   else if (LONG.includes(s.key)) {
     const ta = `<textarea data-i="${i}" rows="${s.key === 'system_prompt' || s.key === 'answer_schema' ? 14 : /rules|prompt/.test(s.key) ? 8 : 3}">${esc(v)}</textarea>`;
     input = /rules|prompt|options|schema/.test(s.key) ? `<details><summary>編輯文字（${String(v).length} 字）</summary>${ta}</details>` : ta;
@@ -467,23 +472,39 @@ function fieldHtml(s, i) {
   else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill|ui_)/.test(s.key) ? '100%' : '220px'}">`;
   return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}</div>`;
 }
+function tierHtml() {
+  const cur = String((D.settings.find(x => x.key === 'tier') || {}).value || 'basic');
+  const T = D.tiers || {};
+  return `<div class="sec" id="sec-tier"><h4>版本 <span class="note">選一個就套用該版本的開關組合（會直接儲存）；之後每個開關仍可在「進階」個別調整</span></h4>
+    <div class="tiers">${Object.keys(T).map(k => `<label class="tier ${k === cur ? 'on' : ''}"><input type="radio" name="tier" value="${k}" ${k === cur ? 'checked' : ''}><b>${esc(T[k].name)}</b><span class="note">${esc(T[k].desc)}</span></label>`).join('')}</div></div>`;
+}
 function renderSettings() {
   const idx = {}; D.settings.forEach((s, i) => idx[s.key] = i);
-  const used = {}; SECTIONS.forEach(sec => { (sec.toggle ? [sec.toggle] : []).concat(sec.keys).forEach(k => used[k] = true); });
-  $('settings').innerHTML = SECTIONS.map(sec => {
+  const used = {}; HIDDEN_KEYS.forEach(k => used[k] = true); SECTIONS.forEach(sec => sec.keys.forEach(k => used[k] = true));
+  const secHtml = sec => {
     const keys = sec.keys.concat(sec.rest ? D.settings.map(s => s.key).filter(k => !used[k]) : []).filter(k => idx[k] != null);
-    const t = sec.toggle && idx[sec.toggle] != null ? D.settings[idx[sec.toggle]] : null;
-    const head = t ? `<label title="${esc(t.note)}"><input type="checkbox" data-i="${idx[sec.toggle]}" data-toggle="${sec.id}" ${String(t.value).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>` : '';
-    const body = keys.map(k => fieldHtml(D.settings[idx[k]], idx[k])).join('');
-    const inner = `<h4>${esc(sec.title)}${head}</h4>${t ? `<div class="note" style="margin-bottom:4px">${esc(t.note)}</div>` : ''}${body}`;
-    return `<div class="sec" id="sec-${sec.id}">${sec.id === 'adv' ? `<details><summary style="cursor:pointer;font-weight:600">進階 <span class="note">很少需要改；換向量模型或切段方式要重新上傳文件</span></summary>${inner.replace('<h4>進階</h4>', '')}</details>` : inner}</div>`;
-  }).join('');
-  $('setNav').innerHTML = SECTIONS.map(sec => `<a data-go="${sec.id}">${esc(sec.title)}</a>`).join('');
+    return `<div class="sec" id="sec-${sec.id}"><h4>${esc(sec.title)}</h4>${keys.map(k => fieldHtml(D.settings[idx[k]], idx[k])).join('')}</div>`;
+  };
+  const top = SECTIONS.filter(s => !s.adv), adv = SECTIONS.filter(s => s.adv);
+  $('settings').innerHTML = tierHtml() + top.map(secHtml).join('') +
+    `<details class="advwrap" id="advwrap"><summary>進階設定 <span class="note">流程開關、檢查、提示詞、檢索參數、介面文字</span></summary>${adv.map(secHtml).join('')}</details>`;
+  $('setNav').innerHTML = `<a data-go="tier">版本</a>` + top.map(sec => `<a data-go="${sec.id}">${esc(sec.title)}</a>`).join('') + `<span class="note" style="padding:8px 10px 2px">進階</span>` + adv.map(sec => `<a data-go="${sec.id}">${esc(sec.title)}</a>`).join('');
   $('setNav').querySelectorAll('a').forEach(a => a.onclick = () => goSec(a.dataset.go));
+  $('settings').querySelectorAll('input[name="tier"]').forEach(r => r.onchange = async () => {
+    const T = D.tiers[r.value];
+    if (!confirm(`套用「${T.name}」：會改這些開關並直接儲存：\n${T.changed || Object.keys(T.set).map(k => (LABELS[k] || k) + '＝' + T.set[k]).join('、')}\n其他設定不動。確定？`)) { renderSettings(); return; }
+    try {
+      await run('adminApplyTier', r.value);
+      Object.keys(T.set).forEach(k => { const x = D.settings.find(y => y.key === k); if (x) x.value = T.set[k]; });
+      const t = D.settings.find(y => y.key === 'tier'); if (t) t.value = r.value;
+      renderSettings(); toast('已套用「' + T.name + '」', 3000);
+    } catch (e) { toast('套用失敗：' + e.message, 5000); renderSettings(); }
+  });
   fillModelSelects(); refreshOverview(); markDirty();
 }
 function goSec(id) {
   const el = $('sec-' + id); if (!el) return;
+  const w = el.closest('details'); if (w) w.open = true;
   const d = el.querySelector('details'); if (d) d.open = true;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('setNav').querySelectorAll('a').forEach(a => a.classList.toggle('on', a.dataset.go === id));
@@ -499,13 +520,12 @@ const shortM = m => String(m || '').replace(/^gemini-/, '').replace(/-preview$/,
 function refreshOverview() {
   const chip = (id, on, txt) => `<a data-go="${id}"${on ? '' : ' class="offc"'}>${txt}</a>`;
   $('ovBar').innerHTML = '<span class="note">目前流程：</span>' + [
-    chip('triage', onv('enable_triage'), 'L4 分流 ' + (onv('enable_triage') ? shortM(curVal('model_triage')) : '關')),
+    chip('flow', onv('enable_triage'), 'L4 分流 ' + (onv('enable_triage') ? shortM(curVal('model_triage')) : '關')),
     chip('retrieval', true, '檢索 ' + (curVal('top_k') || '') + ' 段・門檻 ' + (curVal('min_score') || '') + '｜重排 ' + (onv('enable_rerank') ? shortM(curVal('model_rerank')) : '關')),
-    chip('answer', true, '回答 ' + shortM(curVal('model_answer')) + (onv('knowledge_only') ? '・只用知識庫' : '・可 AI 補足')),
+    chip('models', true, '回答 ' + shortM(curVal('model_answer')) + (onv('knowledge_only') ? '・只用知識庫' : '・可 AI 補足')),
     chip('check', onv('enable_llm_check') || onv('enable_relevance_check'), 'L5 ' + (onv('enable_llm_check') ? '依據' : '') + (onv('enable_llm_check') && onv('enable_relevance_check') ? '＋' : '') + (onv('enable_relevance_check') ? '回應度' : '') + (onv('enable_llm_check') || onv('enable_relevance_check') ? ' ' + shortM(curVal('model_check')) : '關')),
   ].join('<span class="arr">→</span>');
   $('ovBar').querySelectorAll('a').forEach(a => a.onclick = () => goSec(a.dataset.go));
-  SECTIONS.filter(s => s.toggle).forEach(s => { const el = $('sec-' + s.id); if (el) el.classList.toggle('off', !onv(s.toggle)); });
 }
 function markDirty() {
   let n = 0;

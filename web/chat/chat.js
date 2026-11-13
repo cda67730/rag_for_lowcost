@@ -111,9 +111,8 @@
     if (S.welcome) bubble("bot", `<p>${esc(S.welcome)}</p>`);
   }
 
-  $("enter").addEventListener("click", async () => {
-    const code = $("code").value.trim(); $("gateErr").textContent = "";
-    if (!code) return ($("gateErr").textContent = "請輸入邀請碼。");
+  async function enter(code) {
+    $("gateErr").textContent = "";
     $("enter").disabled = true; S.code = code;
     try {
       const r = await api("check");
@@ -122,7 +121,12 @@
       try { sessionStorage.setItem("chat-code", code); } catch (e) {}
       $("gate").hidden = true; $("chat").hidden = false; $("composer").hidden = false; $("reset").hidden = false;
       start(); $("msg").focus();
-    } catch (e) { $("gateErr").textContent = e.message; } finally { $("enter").disabled = false; }
+    } catch (e) { $("gateErr").textContent = e.message; $("gate").hidden = false; } finally { $("enter").disabled = false; }
+  }
+  $("enter").addEventListener("click", () => {
+    const code = $("code").value.trim();
+    if (!code) return ($("gateErr").textContent = "請輸入邀請碼。");
+    enter(code);
   });
   $("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = $("msg").value.trim(); if (!t || $("send").disabled) return; $("msg").value = ""; send(t); });
   $("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); } });
@@ -158,6 +162,12 @@
     if (UI.input_placeholder) $("msg").placeholder = UI.input_placeholder;
     if (UI.accent && /^#[0-9a-f]{3,8}$/i.test(UI.accent)) document.documentElement.style.setProperty("--accent", UI.accent);
   }
-  (async () => { try { const r = await fetch(C.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "ui" }) }).then((x) => x.json()); if (r && r.ok) applyUi(r.ui); } catch (e) {} })();
+  // 載入時先拿介面設定；後台關閉邀請碼時直接進聊天（不顯示邀請碼頁）
+  (async () => {
+    try {
+      const r = await fetch(C.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "ui" }) }).then((x) => x.json());
+      if (r && r.ok) { applyUi(r.ui); if (r.invite === false) { $("gate").hidden = true; enter(""); } }
+    } catch (e) {}
+  })();
   try { const c = sessionStorage.getItem("chat-code"); if (c) $("code").value = c; } catch (e) {}
 })();
