@@ -92,8 +92,9 @@ bots                id, workspace_id, slug, name, created_at
 flows               id, bot_id, kind('chat'|'collect'), name, is_default
 bot_settings        bot_id, key, value            ← Apps Script 的「設定」表
 flow_settings       flow_id, key, value           ← 覆蓋 bot_settings
-knowledge_bases     id, workspace_id, name
-bot_knowledge       bot_id, kb_id, label, min_hits, weight
+knowledge_bases     id, workspace_id, name, visibility('workspace'|'restricted'), embed_model, embed_dim
+kb_allowed_bots     kb_id, bot_id
+bot_knowledge       bot_id, kb_id, label, min_hits, weight, enabled
 documents           kb_id, …     chunks  kb_id, …, embedding vector(n)
 skills / skill_history / synonyms / forbidden / referrals / invite_codes   皆帶 bot_id
 kg_*                kb_id（圖譜跟著知識庫走）
@@ -163,13 +164,39 @@ server/
 └── docker-compose.yml
 ```
 
-## 12. 要你確認的決定
+## 12. 已確認的決定
 
-1. **Workspace 層要不要**：小型部署可以只有一個 Workspace，但表結構一開始就帶 `workspace_id`，之後不用改。建議保留。
-2. **知識庫獨立於 Bot**：帶來「共用」與「多庫組合」，代價是後台多一個「知識庫」物件要管。建議做。
-3. **Flow 層**：第一版只有 `chat` 一種圖，Flow 表先建、介面先只顯示一條。建議保留。
-4. **後台做成獨立 SPA**（`web/admin/`）還是 FastAPI 吐 HTML：SPA 可以跟聊天頁一樣放靜態空間、跟後端分開部署；建議 SPA，用原生 JS 或輕量框架，不引入大型建置流程。
-5. **向量維度固定在建庫時**：換向量模型＝重建知識庫，不做線上轉換。
-6. **第一版不做**：OIDC／AD 登入、多語言、排程評測。表結構留位置。
+| 項目 | 決定 |
+| --- | --- |
+| Workspace 層 | 要。所有表帶 `workspace_id`，小部署就一個 Workspace |
+| 知識庫 | 獨立於 Bot，屬於 Workspace；從 Bot 側「掛載」，每個掛載可設標籤、最少取幾段、權重 |
+| 知識庫可見範圍 | 要。`knowledge_bases.visibility`：`workspace`（預設，Workspace 內所有 Bot 可掛）或 `restricted`（只有 `kb_allowed_bots` 白名單裡的 Bot 可掛）。知識庫頁面顯示目前被哪些 Bot 使用，停用前提醒 |
+| Flow 層 | 表先建；第一版只有 `chat` 一種圖，介面只顯示一條 |
+| 後台 | 獨立靜態 SPA（`web/admin/`），原生 JS，不引入建置工具；跟聊天頁一樣放靜態空間 |
+| 權限 | owner／admin／reviewer／analyst 四種；知識庫內容由 Workspace 的 admin／reviewer 管，Bot 的 admin 只決定掛不掛 |
+| 登入 | 第一版帳號密碼＋JWT；OIDC／AD 留位置 |
+| 向量模型更換 | 重建知識庫，不做線上轉換；維度在建庫時固定 |
+| 文件解析 | 第一版：PDF（`pypdf`／`pdfplumber`）、Word（`python-docx`）、PowerPoint（`python-pptx`）、Excel（`openpyxl`）、TXT／Markdown。掃描檔 OCR 第一版不做 |
+| 長工作 | FastAPI 背景任務起步，量大再換佇列 |
+| 可觀測 | 自家 trace 必做；Langfuse 選用，有 `LANGFUSE_*` 環境變數才送 |
+| 資料庫 | PostgreSQL 17 + pgvector，Docker Compose |
+| 出處顯示 | 新增 Bot 設定 `show_sources`（預設開）：關閉時使用者端不顯示出處按鈕與來源清單；後端仍要求引用、仍做 P09、紀錄仍保留出處。與 `enable_citation`（模型要不要引用）分開 |
 
-確認後開始順序：`db/` → `settings/` → `services/llm.py` → `graph/` 節點 → `app/` 四支聊天端點 → 用 `web/chat/` 實測 → `ingest` → 後台 API → 後台 SPA → 評測。
+## 13. 知識庫掛載與權限
+
+```
+Workspace
+├ 知識庫：兒童發展（workspace）、班級經營（workspace）、行政規定（restricted → 只有 Bot C）
+├ Bot A → 掛 兒童發展〔發展, min 1〕＋ 班級經營〔班級, min 1〕
+├ Bot B → 掛 班級經營
+└ Bot C → 掛 行政規定
+```
+
+- 掛載在 Bot 後台「知識庫」分頁：從 Workspace 可見的清單勾選，設標籤／最少段數／權重。
+- 檢索時對每個掛的庫各查一次，依最少段數保底、權重調分後合併；出處標「〔標籤〕K1」。
+- 沒掛任何知識庫的 Bot 不能回答，後台提示。
+- 新增表：`kb_allowed_bots (kb_id, bot_id)`；`bot_knowledge` 加 `enabled`。
+
+## 14. 開始順序
+
+`db/` → `settings/` → `services/llm.py` → `graph/` 節點 → `app/` 四支聊天端點 → 用 `web/chat/` 實測 → `ingest` → 後台 API → 後台 SPA → 評測。

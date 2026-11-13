@@ -47,12 +47,13 @@ Python 版每個請求帶 `bot_id`（多機器人；聊天頁從網址 `?bot=<id
     "input_placeholder": "…", "waiting": "…",
     "referral_title": "…", "referral_note": "…", "referral_heading": "…",
     "ai_tag": "AI 補充", "fb_up": "👍 有幫助", "fb_down": "👎 沒幫助",
-    "accent": "#1e7f7d"
+    "accent": "#1e7f7d",
+    "show_sources": true
   }
 }
 ```
 
-`ui` 裡只放有值的 key；前端缺的用內建預設。`invite=false` 時前端跳過邀請碼頁，直接以空字串呼叫 `check`。
+`ui` 裡只放有值的 key；前端缺的用內建預設。`show_sources=false` 時前端不顯示出處按鈕與來源清單（回應仍帶 `sources`，供後台與紀錄使用）。`invite=false` 時前端跳過邀請碼頁，直接以空字串呼叫 `check`。
 
 ---
 
