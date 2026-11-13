@@ -25,7 +25,6 @@ const TEXT_DEFAULTS = {
     '{"key":"notes","type":"list","label":"補充說明","hint":"要留意的事項","modes":"both"}',
     ']',
   ].join('\n'),
-  deid_labels: ['subject＝{subject}', 'family＝家人', 'staff＝人員', 'org＝某機構', 'other＝某人'].join('\n'),
   intents: [
     '新問題＝換了一個完全不同的狀況或主題',
     '補充同一問題＝回答追問或補充細節、說試過的結果',
@@ -151,7 +150,7 @@ const SETTINGS_DEFAULT = [
     ['enable_deid', false, 'P03 去識別化：開＝把訊息裡的名字換成代稱、刪手機號碼後才送模型與寫紀錄（規則是幼教雛形的「小＋一字」）；關＝原文直接使用。關閉時請自行注意紀錄裡的個資'],
     ['enable_citation', true, '出處機制：開＝回答裡的建議（items 欄位）每條都要引用知識編號，P09 核對出處與數量；關＝不要求引用、不做 P09，回答欄位可以只有文字（FAQ 型或不需逐條溯源的專案用）'],
     ['deid_mode', 'ai', '去識別化方式：ai＝用模型找出人名、小名、綽號、機構名換成代稱（L4 分流開著時併在同一次呼叫，不多花時間；L4 關閉時另外呼叫一次；失敗時自動改用規則）；rule＝只用規則（「小＋一字」）。兩者都會刪電話、Email、證號'],
-    ['deid_labels', TEXT_DEFAULTS.deid_labels, '去識別化的代稱前綴，一行一個「類別＝代稱」：subject（談論對象）、family（家人）、staff（人員）、org（機構）、other'],
+    ['deid_labels', '', '代稱前綴（通常不用填）：留空＝談論對象用「談論對象稱呼」、人員用「提問者稱呼」、家人／某機構／某人固定。要改才填，一行一個「類別＝代稱」，類別：subject、family、staff、org、other'],
     ['enable_case_flow', true, '個案機制：開＝L4 判斷是否換了新個案、同一個案給 full_answer_rounds 次完整回答後改延續回覆；關＝整段對話都帶進去、每次都完整回答，不切換延續回覆（FAQ 型專案用）'],
     ['enable_triage', true, 'L4 分流：開＝AI 判斷意圖、焦點、轉介、主題、是否追問；關＝不呼叫分流 AI，主題用關鍵字比對，直接檢索知識庫回答（較快較省，但不會偵測緊急轉介、不追問、不判斷超出範圍）'],
     ['enable_llm_check', true, 'L5 AI 檢查：開＝回答後由 AI 依「檢查項目」逐項檢查；關＝只做程式檢查（禁止用語、出處編號）'],

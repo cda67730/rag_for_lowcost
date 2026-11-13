@@ -11,10 +11,11 @@ const NAME_SKIP = ['小朋', '小孩', '小班', '小組', '小時', '小心', '
 const DEID_CATS = ['subject', 'family', 'staff', 'org', 'other'];
 // 模型偶爾會把一般名詞當成人名，這些不換
 const DEID_GENERIC = ['小朋友', '孩子', '小孩', '幼兒', '老師', '家長', '媽媽', '爸爸', '園長', '主任', '同學', '班上', '園所', '學校', '阿公', '阿嬤', '奶奶', '爺爺', '哥哥', '姊姊', '姐姐', '弟弟', '妹妹'];
-/** 代稱前綴：設定 deid_labels，一行一個「類別＝代稱」 */
+/** 代稱前綴：預設直接從「角色用詞」推（談論對象→role_subject、人員→role_user），不用另外設；deid_labels 有填的類別才覆蓋，格式不對就忽略 */
 function deidLabels_() {
-  const o = { subject: '幼兒', family: '家長', staff: '老師', org: '某園', other: '某人' };
-  text_('deid_labels').split(/\n+/).forEach(l => { const p = l.split(/[＝=]/); if (p.length > 1 && DEID_CATS.indexOf(p[0].trim()) >= 0) o[p[0].trim()] = p.slice(1).join('＝').trim(); });
+  const R = roles_();
+  const o = { subject: R.subject, family: '家人', staff: R.user, org: '某機構', other: '某人' };
+  String(cfg_('deid_labels') || '').split(/\n+/).forEach(l => { const p = l.split(/[＝=]/); const k = p[0].trim(), v = p.slice(1).join('＝').trim(); if (p.length > 1 && DEID_CATS.indexOf(k) >= 0 && v) o[k] = v; });
   return o;
 }
 function deidScrub_(text) {
@@ -380,8 +381,9 @@ function schema_() {
   let out = null, bad = null;
   try { out = parseSchema_(text_('answer_schema')); } catch (e) { bad = e.message; }
   // 出處機制開著時至少要有一個 items 欄位（P09 要檢查 refs）；關閉時允許只有文字欄位
-  if (out && citationOn_() && !out.some(f => f.type === 'items')) { bad = '缺少 items 欄位（enable_citation 開啟時必須有）'; out = null; }
-  if (!out) { out = parseSchema_(TEXT_DEFAULTS.answer_schema); stabNote_('設定錯誤', 'answer_schema：' + bad + '，改用預設欄位'); }
+  // 出處機制開著但沒有 items 欄位：補一個不顯示標題的參考做法欄，不報錯
+  if (out && out.length && citationOn_() && !out.some(f => f.type === 'items')) out.push(Object.assign({}, SCHEMA_FREE[1]));
+  if (!out || !out.length) { out = parseSchema_(TEXT_DEFAULTS.answer_schema); if (bad) stabNote_('設定錯誤', 'answer_schema 解析失敗：' + bad + '，改用預設欄位'); }
   return (SCHEMA_ = out);
 }
 function parseSchema_(text) {

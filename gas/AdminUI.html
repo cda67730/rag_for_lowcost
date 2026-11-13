@@ -466,6 +466,12 @@ const LABELS = {
   model_embed: '向量模型', embed_dim: '向量維度', chunk_size: '切段長度（字）', chunk_overlap: '切段重疊（字）', enable_node_mapping: '上傳時標註知識圖譜', hourly_limit: '每個邀請碼每小時上限',
 };
 const isBoolV = v => v === true || v === false || String(v).toUpperCase() === 'TRUE' || String(v).toUpperCase() === 'FALSE';
+// 留空就走內建預設的設定：欄位底下提示目前用什麼，不報錯
+const DEFAULT_HINT = {
+  deid_labels: () => `談論對象→「${sv('role_subject') || '對方'}」、人員→「${sv('role_user') || '使用者'}」、家人、某機構、某人`,
+  default_skill: () => '不載入主題 Skill，依問題直接回答',
+  ui_accent: () => '預設主色',
+};
 function fieldHtml(s, i) {
   const v = s.value, lab = `<label>${esc(LABELS[s.key] || s.key)}<span class="key">${esc(s.key)}</span><br><span class="note">${esc(s.note)}</span></label>`;
   const mk = /^model_/.test(s.key) ? (s.key === 'model_embed' ? 'embed' : 'gen') : '';
@@ -479,7 +485,8 @@ function fieldHtml(s, i) {
   }
   else if (isBoolV(v)) input = `<label style="font-weight:400;margin:0"><input type="checkbox" data-i="${i}" ${String(v).toUpperCase() === 'TRUE' ? 'checked' : ''}> 開啟</label>`;
   else input = `<input type="text" data-i="${i}" value="${esc(v)}" style="max-width:${/^(msg_|welcome|bot_name|default_skill|ui_)/.test(s.key) ? '100%' : '220px'}">`;
-  return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}</div>`;
+  const dh = DEFAULT_HINT[s.key] && String(v).trim() === '' ? `<div class="note" style="margin-top:3px">目前使用預設：${esc(DEFAULT_HINT[s.key]())}</div>` : '';
+  return `<div class="fld" data-k="${esc(s.key)}">${lab}${input}${dh}</div>`;
 }
 // ---------- 結構化設定編輯器：回答欄位、意圖、檢查項目。表格／用說的／JSON 三種檢視，都寫回同一個隱藏 textarea（data-i），儲存流程不變 ----------
 const STRUCT = {
@@ -917,7 +924,7 @@ const pc1 = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
 const secs = ms => ms == null ? '—' : (ms / 1000).toFixed(1) + ' 秒';
 const FNODES = [
   { id: 'input', title: '使用者訊息', kind: 'io', cfg: () => '', met: () => F ? `${F.turns} 回合` : '' },
-  { id: 'deid', title: 'P03 去識別化', kind: 'ai', toggle: 'enable_deid', keys: ['enable_deid', 'deid_mode', 'deid_labels'], cfg: () => son('enable_deid') ? (sv('deid_mode') === 'rule' ? '規則：「小＋一字」換代稱' : `AI 找人名換代稱（${sm('model_triage')}）`) + '｜刪電話、Email、證號' : '已關閉：原文直接使用', met: () => stepMs('deid') },
+  { id: 'deid', title: 'P03 去識別化', kind: 'ai', toggle: 'enable_deid', keys: ['enable_deid', 'deid_mode'], cfg: () => son('enable_deid') ? (sv('deid_mode') === 'rule' ? '規則：「小＋一字」換代稱' : `AI 找人名換代稱（${sm('model_triage')}）`) + '｜刪電話、Email、證號' : '已關閉：原文直接使用', met: () => stepMs('deid') },
   { id: 'triage', title: 'L4 分流＋查詢向量', kind: 'ai', toggle: 'enable_triage', keys: ['enable_triage', 'model_triage', 'intents', 'triage_rules', 'triage_focus_hint', 'followup_prompt', 'model_embed'],
     cfg: () => son('enable_triage') ? `分流 ${sm('model_triage')}｜向量 ${sm('model_embed')}` : `已關閉：只算向量（${sm('model_embed')}），主題用關鍵字`,
     met: () => stepMs('triage'),
