@@ -1,0 +1,622 @@
+{
+  "_comment": "由 tools/export-defaults.js 自 apps-script/Setup.gs 與 Chat.gs 產生，請勿手改",
+  "settings": [
+    {
+      "key": "tier",
+      "value": "basic",
+      "note": "版本：basic＝基本（問答＋知識庫，單一 Skill）、multi＝多取向分流（＋多 Skill、L4 分流與追問）、full＝全功能（＋個案機制、重排與配額、知識圖譜）。選版本會一次套用一組開關，之後每個開關仍可個別調整"
+    },
+    {
+      "key": "show_sources",
+      "value": true,
+      "note": "顯示出處給使用者：開＝回答裡的建議旁有 K1、K2 出處按鈕可點開來源；關＝使用者端不顯示（後端仍要求引用、仍做出處檢查，紀錄與後台仍看得到）"
+    },
+    {
+      "key": "enable_invite",
+      "value": true,
+      "note": "邀請碼：開＝聊天頁要輸入邀請碼才能用（依「邀請碼」表驗證）；關＝任何人拿到網址就能用，紀錄的單位寫「公開」。關閉時請設好每日上限"
+    },
+    {
+      "key": "daily_limit",
+      "value": 500,
+      "note": "整個機器人每天的回答次數上限（所有使用者合計），超過回覆「今日額度已用完」。邀請碼關閉時尤其重要"
+    },
+    {
+      "key": "bot_name",
+      "value": "AI 助手",
+      "note": "聊天頁顯示的名稱"
+    },
+    {
+      "key": "welcome",
+      "value": "你好，說說你遇到的狀況，我會先了解情境，再依知識庫給你建議。",
+      "note": "聊天頁的歡迎訊息"
+    },
+    {
+      "key": "ui_gate_text",
+      "value": "請輸入邀請碼。對話內容會保存，用於改善服務。",
+      "note": "聊天頁：邀請碼頁的說明文字"
+    },
+    {
+      "key": "ui_input_placeholder",
+      "value": "輸入你的問題…",
+      "note": "聊天頁：輸入框的提示文字"
+    },
+    {
+      "key": "ui_waiting",
+      "value": "正在了解狀況、查找資料…",
+      "note": "聊天頁：送出後等待回答時顯示的字"
+    },
+    {
+      "key": "ui_referral_title",
+      "value": "這個情況需要馬上找專人",
+      "note": "聊天頁：緊急轉介卡片的標題"
+    },
+    {
+      "key": "ui_referral_note",
+      "value": "是否進一步處理，由你和{escalate}決定。",
+      "note": "聊天頁：緊急轉介卡片底部的說明"
+    },
+    {
+      "key": "ui_referral_heading",
+      "value": "需要時找專人",
+      "note": "聊天頁：回答裡轉介建議的小標題"
+    },
+    {
+      "key": "ui_ai_tag",
+      "value": "AI 補充",
+      "note": "聊天頁：知識不足由 AI 補足的建議旁邊的標籤"
+    },
+    {
+      "key": "ui_fb_up",
+      "value": "👍 有幫助",
+      "note": "聊天頁：正面回饋按鈕文字（統計以「有幫助」三個字比對）"
+    },
+    {
+      "key": "ui_fb_down",
+      "value": "👎 沒幫助",
+      "note": "聊天頁：負面回饋按鈕文字（統計以「沒幫助」三個字比對）"
+    },
+    {
+      "key": "ui_accent",
+      "value": "",
+      "note": "聊天頁：主色（十六進位色碼，例如 #1e7f7d）；留空用預設"
+    },
+    {
+      "key": "system_prompt",
+      "value": "你是{domain}的助手，協助{user}處理工作上遇到的問題。\n【核心原則】\n- 只根據提供的知識給建議，每條建議標註知識編號（K1、K2…）\n- 知識不足以回答時，直接說明，並建議可以詢問的專業人員\n- 先理解情境再給建議；建議要少而可立即執行\n【回答通則】\n- 使用台灣繁體中文，語氣具體、不說教\n- 依載入的 Skill 決定流程與輸出內容",
+      "note": "固定 system prompt（第 1 層）"
+    },
+    {
+      "key": "domain_desc",
+      "value": "AI 知識問答系統",
+      "note": "領域描述：分流器與審查器的 prompt 開頭「你是〔領域描述〕的分流器」"
+    },
+    {
+      "key": "role_user",
+      "value": "使用者",
+      "note": "提問者的稱呼；所有 prompt 裡的 {user} 都換成這個"
+    },
+    {
+      "key": "role_subject",
+      "value": "對方",
+      "note": "談論對象的稱呼（提問者在問誰的事）；{subject}"
+    },
+    {
+      "key": "role_escalate",
+      "value": "主管",
+      "note": "預設升級對象：轉介資源沒有「系統能力不足」時，保守回答建議找誰；{escalate}"
+    },
+    {
+      "key": "intents",
+      "value": "新問題＝換了一個完全不同的狀況或主題\n補充同一問題＝回答追問或補充細節、說試過的結果\n要求特定協助＝要範本、步驟清單、其他做法、找專人等具體東西\n與主題無關＝閒聊、算數、與本系統服務範圍無關",
+      "note": "L4 意圖選項，一行一個「名稱＝說明」，順序固定：1 新問題（只看這一則）、2 補充同一問題、3 要求特定協助（不追問、延續回覆）、4 與主題無關（拒答）。只改名稱與說明，不要增減行"
+    },
+    {
+      "key": "triage_focus_hint",
+      "value": "例如「某個流程的具體步驟」「怎麼跟對方說明」",
+      "note": "L4 判斷「提問焦點」時給模型看的範例"
+    },
+    {
+      "key": "fallback_rules",
+      "value": "只能提供低風險、一般常識範圍內的做法；不得下專業判斷；來自一般知識的建議 refs 填空陣列；最後建議{user}向{escalate}或專業人員確認。",
+      "note": "knowledge_only 關閉、由 AI 補足時的限制（生成與 L5 檢查都用這段）"
+    },
+    {
+      "key": "enable_answer_schema",
+      "value": true,
+      "note": "回答欄位：開＝回答依「回答欄位」設定分成固定幾段（標題、建議清單…）；關＝自由作答，一段文字加可選的參考做法，不強制格式（FAQ 型或想讓模型自然回答時用）"
+    },
+    {
+      "key": "answer_schema",
+      "value": "[\n{\"key\":\"reply\",\"type\":\"text\",\"label\":\"\",\"hint\":\"直接回應{user}的問題（兩三句）\",\"modes\":\"both\",\"required\":true,\"summary\":true},\n{\"key\":\"steps\",\"type\":\"items\",\"label\":\"建議做法\",\"label_continue\":\"可以再試試\",\"hint\":\"做法名稱／具體怎麼做（一兩句）\",\"modes\":\"both\",\"required\":true,\"summary\":true,\"count\":\"1-3\",\"count_continue\":\"0-2\"},\n{\"key\":\"notes\",\"type\":\"list\",\"label\":\"補充說明\",\"hint\":\"要留意的事項\",\"modes\":\"both\"}\n]",
+      "note": "回答欄位（JSON，一欄一行）：key／type（text、list、items）／label／hint／modes（full、continue、both）／required／summary／copy；items 另有 count、count_continue。至少要有一個 items 欄位（出處檢查用）。格式錯誤時會用預設欄位"
+    },
+    {
+      "key": "model_triage",
+      "value": "gemini-2.5-flash",
+      "note": "L4 分流用模型"
+    },
+    {
+      "key": "model_answer",
+      "value": "gemini-2.5-flash",
+      "note": "A1 對話 Agent 用模型（也用於 PDF 轉文字）"
+    },
+    {
+      "key": "model_check",
+      "value": "gemini-2.5-flash",
+      "note": "L5 檢查用模型"
+    },
+    {
+      "key": "model_rerank",
+      "value": "gemini-2.5-flash-lite",
+      "note": "重新排序用模型（只打 0–3 分，用較快較省的模型即可；判斷變差可改回 gemini-2.5-flash）"
+    },
+    {
+      "key": "model_embed",
+      "value": "gemini-embedding-001",
+      "note": "向量模型（更換後要重新向量化所有文件）"
+    },
+    {
+      "key": "embed_dim",
+      "value": 768,
+      "note": "向量維度"
+    },
+    {
+      "key": "temperature",
+      "value": 0.3,
+      "note": "生成溫度（只對 Gemini 2.5 以前的模型有效；Gemini 3 以上官方建議維持預設 1.0，系統不送溫度）"
+    },
+    {
+      "key": "top_k",
+      "value": 6,
+      "note": "每次檢索取幾段"
+    },
+    {
+      "key": "min_score",
+      "value": 0.45,
+      "note": "相似度門檻，低於此值不採用"
+    },
+    {
+      "key": "chunk_size",
+      "value": 500,
+      "note": "切段長度（字）"
+    },
+    {
+      "key": "chunk_overlap",
+      "value": 80,
+      "note": "段落重疊（字）"
+    },
+    {
+      "key": "max_followups",
+      "value": 1,
+      "note": "最多追問幾輪"
+    },
+    {
+      "key": "enable_deid",
+      "value": false,
+      "note": "P03 去識別化：開＝訊息裡的人名、小名、家人稱呼、機構名換成代稱並刪電話／Email／證號後，才送模型與寫紀錄（方式見 deid_mode）；關＝原文直接使用"
+    },
+    {
+      "key": "enable_citation",
+      "value": true,
+      "note": "出處機制：開＝回答裡的建議（items 欄位）每條都要引用知識編號，P09 核對出處與數量；關＝不要求引用、不做 P09，回答欄位可以只有文字（FAQ 型或不需逐條溯源的專案用）"
+    },
+    {
+      "key": "deid_mode",
+      "value": "ai",
+      "note": "去識別化方式：ai＝用模型找出人名、小名、綽號、機構名換成代稱（L4 分流開著時併在同一次呼叫，不多花時間；L4 關閉時另外呼叫一次；失敗時自動改用規則）；rule＝只用規則（「小＋一字」）。兩者都會刪電話、Email、證號"
+    },
+    {
+      "key": "deid_labels",
+      "value": "",
+      "note": "代稱前綴（通常不用填）：留空＝談論對象用「談論對象稱呼」、人員用「提問者稱呼」、家人／某機構／某人固定。要改才填，一行一個「類別＝代稱」，類別：subject、family、staff、org、other"
+    },
+    {
+      "key": "enable_case_flow",
+      "value": true,
+      "note": "個案機制：開＝L4 判斷是否換了新個案、同一個案給 full_answer_rounds 次完整回答後改延續回覆；關＝整段對話都帶進去、每次都完整回答，不切換延續回覆（FAQ 型專案用）"
+    },
+    {
+      "key": "enable_triage",
+      "value": true,
+      "note": "L4 分流：開＝AI 判斷意圖、焦點、轉介、主題、是否追問；關＝不呼叫分流 AI，主題用關鍵字比對，直接檢索知識庫回答（較快較省，但不會偵測緊急轉介、不追問、不判斷超出範圍）"
+    },
+    {
+      "key": "enable_llm_check",
+      "value": true,
+      "note": "L5 AI 檢查：開＝回答後由 AI 依「檢查項目」逐項檢查；關＝只做程式檢查（禁止用語、出處編號）"
+    },
+    {
+      "key": "knowledge_only",
+      "value": true,
+      "note": "只用知識庫回答：開＝知識不足時保守回答；關＝知識不足時由 AI 協助補足（照樣檢查，並標示「知識庫內容不足」）"
+    },
+    {
+      "key": "enable_relevance_check",
+      "value": true,
+      "note": "是否檢查回答有沒有直接回應提問焦點（L5 關閉時也可單獨啟用）"
+    },
+    {
+      "key": "enable_rerank",
+      "value": true,
+      "note": "是否用 AI 依「能不能回答提問焦點」重新排序檢索結果（每題多一次 AI 呼叫）"
+    },
+    {
+      "key": "model_eval_gen",
+      "value": "",
+      "note": "自動評測出題用模型；留空＝用檢查模型。建議用和回答不同家的模型，避免自己出題自己答"
+    },
+    {
+      "key": "model_eval_judge",
+      "value": "",
+      "note": "自動評測評分用模型；留空＝用檢查模型。建議用和回答不同家的模型，避免自己改自己的考卷"
+    },
+    {
+      "key": "enable_node_mapping",
+      "value": false,
+      "note": "上傳文件時就標註（預設關閉：先累積文件，之後在「知識圖譜」分頁一次標註）。開啟時，AI 照 ontology 的標註規格標每一段（主要／次要節點、讀者對象、適用年齡、情境），並提出新節點候選（需先在後台匯入知識圖譜；每份文件多幾次 AI 呼叫）"
+    },
+    {
+      "key": "rerank_pool",
+      "value": 12,
+      "note": "重新排序前先取幾段候選"
+    },
+    {
+      "key": "enable_kg",
+      "value": false,
+      "note": "知識圖譜參與回答：開＝依問題比對圖譜節點（名稱、同義說法），沿關係擴一層，節點定義與實務要點放進回答 prompt 當背景；需要先在「知識圖譜」分頁匯入圖譜並標註段落"
+    },
+    {
+      "key": "kg_mode",
+      "value": "hybrid",
+      "note": "圖譜怎麼影響檢索：hybrid＝標到節點的段落加分，其他段落照常；only＝只用標到節點的段落，沒對到任何節點就視為沒有可用知識"
+    },
+    {
+      "key": "kg_boost",
+      "value": 0.08,
+      "note": "hybrid 模式下，標到命中節點（主要標籤）的段落加多少分；次要標籤與鄰居節點加一半"
+    },
+    {
+      "key": "kg_max_nodes",
+      "value": 3,
+      "note": "每題最多取幾個直接命中的節點（每個再帶最多 3 個相鄰節點）"
+    },
+    {
+      "key": "quota_min_actionable",
+      "value": 3,
+      "note": "採用的段落中，至少保留幾段「具體做法／案例／溝通範例」"
+    },
+    {
+      "key": "quota_max_principle",
+      "value": 2,
+      "note": "採用的段落中，「原則／背景」最多幾段"
+    },
+    {
+      "key": "default_skill",
+      "value": "",
+      "note": "沒有對應主題時預設載入的 Skill；留空＝不載入主題 Skill，依問題直接回答（「一律載入」的 Skill 仍會載入）"
+    },
+    {
+      "key": "hourly_limit",
+      "value": 300,
+      "note": "每個邀請碼每小時呼叫上限"
+    },
+    {
+      "key": "triage_rules",
+      "value": "轉介等級：\n- 緊急：現在就要找人，例如正在發生的安全或法律風險\n- 需要專人：這幾天內要找人，例如做法試了很久都無效、爭議升高\n- 建議諮詢：AI 可以回答，專人能幫更多\n服務範圍：與本系統的知識領域無關，算超出範圍。\n資訊足夠：至少知道問題發生的情境或經過其中一項；非常籠統時算不足。",
+      "note": "L4 分流規則：轉介等級怎麼判斷、什麼不算、資訊足夠的標準"
+    },
+    {
+      "key": "followup_prompt",
+      "value": "{user}的描述資訊不足。請先用一句話回應，再提出最多 2 個最關鍵、好回答的追問。",
+      "note": "資訊不足時，追問要怎麼問"
+    },
+    {
+      "key": "answer_rules",
+      "value": "有出處的建議 1–3 個；每個建議的 refs 只能用上面提供的 K 編號，至少一個；不得下專業判斷或使用標籤化用語。",
+      "note": "回答的硬性規則（策略數量、出處、用語）"
+    },
+    {
+      "key": "check_items",
+      "value": "依據＝每個建議是否大致能從它引用的知識推得；合理的延伸不算編造，只有知識完全沒提到、或與知識矛盾才算問題。\n轉介＝{user}描述中有明確需要專人的訊號（安全、法律、長期無效）而回答完全沒提。\n語氣＝說教、責怪{user}或{subject}、或下專業判斷。",
+      "note": "L5 檢查項目，一行一項「類型＝判斷說明」；可增減。類型名稱會出現在檢查結果與問題統計"
+    },
+    {
+      "key": "check_severe",
+      "value": "編造或違反知識、遺漏需要專人的訊號、下專業判斷。其他都算小問題。",
+      "note": "L5 什麼算嚴重（嚴重才會擋下回答並重寫，其他只記錄）"
+    },
+    {
+      "key": "full_answer_rounds",
+      "value": 2,
+      "note": "同一個個案給幾次完整回答；之後改成延續回覆（只回應新內容＋下一步選項）"
+    },
+    {
+      "key": "continue_prompt",
+      "value": "{user}已經拿到完整建議了，這次不要再重複完整格式。\n- reply：用兩三句話直接回應{user}這次說的（新的狀況、試過的結果、或要求），像同事對話一樣自然\n- {user}說某個做法有效或無效時，針對這點調整；有新的知識可用時，最多再給 1–2 個「之前沒給過」的做法\n- {user}要求特定東西時，只做那一件事，放在對應欄位\n- 最後提供下一步選項，讓{user}選要往哪個方向走",
+      "note": "延續回覆要怎麼回"
+    },
+    {
+      "key": "continue_options",
+      "value": "換一個不同的做法\n給我更詳細的步驟\n這個情況需要找誰協助？",
+      "note": "延續回覆提供的下一步選項（一行一個，AI 會挑適合的）"
+    },
+    {
+      "key": "msg_no_knowledge",
+      "value": "謝謝你說明這個狀況。目前知識庫裡沒有足夠、經過檢查的內容可以給你具體建議。建議先和{who}討論。",
+      "note": "知識庫查不到資料時的回覆；{who} 會換成轉介資源「系統能力不足」的對象"
+    },
+    {
+      "key": "msg_check_failed",
+      "value": "謝謝你說明這個狀況。我整理出的建議沒有通過依據檢查，為了避免給你不夠可靠的內容，這次先不提供具體做法。建議先和{who}討論。",
+      "note": "回答沒通過檢查時的回覆；{who} 同上"
+    },
+    {
+      "key": "msg_ai_fallback",
+      "value": "目前知識庫內容不足，以下由 AI 協助補足，尚未經審核，請斟酌使用；必要時請和{escalate}確認。",
+      "note": "知識不足、由 AI 補足時，放在回答最上方的提醒"
+    },
+    {
+      "key": "msg_out_of_scope",
+      "value": "這個問題超出本系統的服務範圍，建議洽詢相關人員。",
+      "note": "超出服務範圍時的回覆"
+    }
+  ],
+  "text_defaults": {
+    "answer_schema": "[\n{\"key\":\"reply\",\"type\":\"text\",\"label\":\"\",\"hint\":\"直接回應{user}的問題（兩三句）\",\"modes\":\"both\",\"required\":true,\"summary\":true},\n{\"key\":\"steps\",\"type\":\"items\",\"label\":\"建議做法\",\"label_continue\":\"可以再試試\",\"hint\":\"做法名稱／具體怎麼做（一兩句）\",\"modes\":\"both\",\"required\":true,\"summary\":true,\"count\":\"1-3\",\"count_continue\":\"0-2\"},\n{\"key\":\"notes\",\"type\":\"list\",\"label\":\"補充說明\",\"hint\":\"要留意的事項\",\"modes\":\"both\"}\n]",
+    "intents": "新問題＝換了一個完全不同的狀況或主題\n補充同一問題＝回答追問或補充細節、說試過的結果\n要求特定協助＝要範本、步驟清單、其他做法、找專人等具體東西\n與主題無關＝閒聊、算數、與本系統服務範圍無關",
+    "triage_focus_hint": "例如「某個流程的具體步驟」「怎麼跟對方說明」",
+    "fallback_rules": "只能提供低風險、一般常識範圍內的做法；不得下專業判斷；來自一般知識的建議 refs 填空陣列；最後建議{user}向{escalate}或專業人員確認。",
+    "triage_rules": "轉介等級：\n- 緊急：現在就要找人，例如正在發生的安全或法律風險\n- 需要專人：這幾天內要找人，例如做法試了很久都無效、爭議升高\n- 建議諮詢：AI 可以回答，專人能幫更多\n服務範圍：與本系統的知識領域無關，算超出範圍。\n資訊足夠：至少知道問題發生的情境或經過其中一項；非常籠統時算不足。",
+    "followup_prompt": "{user}的描述資訊不足。請先用一句話回應，再提出最多 2 個最關鍵、好回答的追問。",
+    "answer_rules": "有出處的建議 1–3 個；每個建議的 refs 只能用上面提供的 K 編號，至少一個；不得下專業判斷或使用標籤化用語。",
+    "check_items": "依據＝每個建議是否大致能從它引用的知識推得；合理的延伸不算編造，只有知識完全沒提到、或與知識矛盾才算問題。\n轉介＝{user}描述中有明確需要專人的訊號（安全、法律、長期無效）而回答完全沒提。\n語氣＝說教、責怪{user}或{subject}、或下專業判斷。",
+    "check_severe": "編造或違反知識、遺漏需要專人的訊號、下專業判斷。其他都算小問題。",
+    "continue_prompt": "{user}已經拿到完整建議了，這次不要再重複完整格式。\n- reply：用兩三句話直接回應{user}這次說的（新的狀況、試過的結果、或要求），像同事對話一樣自然\n- {user}說某個做法有效或無效時，針對這點調整；有新的知識可用時，最多再給 1–2 個「之前沒給過」的做法\n- {user}要求特定東西時，只做那一件事，放在對應欄位\n- 最後提供下一步選項，讓{user}選要往哪個方向走",
+    "continue_options": "換一個不同的做法\n給我更詳細的步驟\n這個情況需要找誰協助？",
+    "msg_no_knowledge": "謝謝你說明這個狀況。目前知識庫裡沒有足夠、經過檢查的內容可以給你具體建議。建議先和{who}討論。",
+    "msg_check_failed": "謝謝你說明這個狀況。我整理出的建議沒有通過依據檢查，為了避免給你不夠可靠的內容，這次先不提供具體做法。建議先和{who}討論。",
+    "msg_ai_fallback": "目前知識庫內容不足，以下由 AI 協助補足，尚未經審核，請斟酌使用；必要時請和{escalate}確認。",
+    "msg_out_of_scope": "這個問題超出本系統的服務範圍，建議洽詢相關人員。"
+  },
+  "tiers": {
+    "basic": {
+      "name": "基本",
+      "desc": "問答＋知識庫＋出處。單一 Skill（預設 Skill 一律載入），不分流、不追問、每次完整回答",
+      "set": {
+        "enable_triage": false,
+        "enable_case_flow": false,
+        "enable_rerank": false,
+        "enable_kg": false,
+        "max_followups": 0
+      }
+    },
+    "multi": {
+      "name": "多取向分流",
+      "desc": "＋多個 Skill、L4 分流（意圖、主題、轉介分級）、資訊不足時追問",
+      "set": {
+        "enable_triage": true,
+        "enable_case_flow": false,
+        "enable_rerank": false,
+        "enable_kg": false,
+        "max_followups": 1
+      }
+    },
+    "full": {
+      "name": "全功能",
+      "desc": "＋個案機制（延續回覆）、AI 重排與配額、知識圖譜參與回答",
+      "set": {
+        "enable_triage": true,
+        "enable_case_flow": true,
+        "enable_rerank": true,
+        "enable_kg": true,
+        "max_followups": 1
+      }
+    }
+  },
+  "role_defaults": {
+    "domain": "AI 知識問答系統",
+    "user": "使用者",
+    "subject": "對方",
+    "escalate": "主管"
+  },
+  "intent_keys": [
+    "new",
+    "more",
+    "specific",
+    "off"
+  ],
+  "schema_free": [
+    {
+      "key": "reply",
+      "type": "text",
+      "label": "",
+      "label_continue": "",
+      "hint": "用自然的段落直接回答，像同事對話；需要時可以分段",
+      "modes": "both",
+      "required": true,
+      "summary": true,
+      "copy": false,
+      "count": "0-3",
+      "count_continue": "0-2"
+    },
+    {
+      "key": "refs_items",
+      "type": "items",
+      "label": "參考做法",
+      "label_continue": "參考做法",
+      "hint": "有引用知識的具體做法；沒有就給空陣列",
+      "modes": "both",
+      "required": false,
+      "summary": false,
+      "copy": false,
+      "count": "0-3",
+      "count_continue": "0-2"
+    }
+  ],
+  "groups": [
+    {
+      "title": "版本與基本",
+      "keys": [
+        "tier",
+        "bot_name",
+        "welcome",
+        "default_skill",
+        "show_sources",
+        "enable_invite",
+        "daily_limit",
+        "hourly_limit"
+      ]
+    },
+    {
+      "title": "角色用詞",
+      "keys": [
+        "domain_desc",
+        "role_user",
+        "role_subject",
+        "role_escalate"
+      ]
+    },
+    {
+      "title": "模型",
+      "keys": [
+        "model_answer",
+        "model_triage",
+        "model_rerank",
+        "model_check",
+        "model_embed",
+        "embed_dim",
+        "temperature",
+        "model_eval_gen",
+        "model_eval_judge"
+      ]
+    },
+    {
+      "title": "流程開關",
+      "keys": [
+        "enable_triage",
+        "max_followups",
+        "enable_case_flow",
+        "full_answer_rounds",
+        "enable_rerank",
+        "enable_kg",
+        "kg_mode",
+        "enable_deid",
+        "deid_mode",
+        "deid_labels",
+        "enable_citation",
+        "knowledge_only",
+        "enable_answer_schema"
+      ]
+    },
+    {
+      "title": "檢查",
+      "keys": [
+        "enable_llm_check",
+        "check_items",
+        "check_severe",
+        "enable_relevance_check"
+      ]
+    },
+    {
+      "title": "提示詞與回答格式",
+      "keys": [
+        "system_prompt",
+        "answer_schema",
+        "answer_rules",
+        "fallback_rules",
+        "intents",
+        "triage_rules",
+        "triage_focus_hint",
+        "followup_prompt",
+        "continue_prompt",
+        "continue_options"
+      ]
+    },
+    {
+      "title": "檢索",
+      "keys": [
+        "top_k",
+        "min_score",
+        "rerank_pool",
+        "quota_min_actionable",
+        "quota_max_principle",
+        "kg_boost",
+        "kg_max_nodes"
+      ]
+    },
+    {
+      "title": "知識庫處理",
+      "keys": [
+        "chunk_size",
+        "chunk_overlap",
+        "enable_node_mapping"
+      ]
+    },
+    {
+      "title": "聊天介面文字",
+      "keys": [
+        "ui_gate_text",
+        "ui_input_placeholder",
+        "ui_waiting",
+        "ui_referral_title",
+        "ui_referral_note",
+        "ui_referral_heading",
+        "ui_ai_tag",
+        "ui_fb_up",
+        "ui_fb_down",
+        "ui_accent",
+        "msg_no_knowledge",
+        "msg_check_failed",
+        "msg_ai_fallback",
+        "msg_out_of_scope"
+      ]
+    }
+  ],
+  "flow_overridable": [
+    "answer_rules",
+    "answer_schema",
+    "check_items",
+    "check_severe",
+    "continue_options",
+    "continue_prompt",
+    "enable_answer_schema",
+    "enable_case_flow",
+    "enable_citation",
+    "enable_kg",
+    "enable_llm_check",
+    "enable_relevance_check",
+    "enable_rerank",
+    "enable_triage",
+    "fallback_rules",
+    "followup_prompt",
+    "full_answer_rounds",
+    "intents",
+    "kg_boost",
+    "kg_max_nodes",
+    "kg_mode",
+    "knowledge_only",
+    "max_followups",
+    "min_score",
+    "model_answer",
+    "model_check",
+    "model_rerank",
+    "model_triage",
+    "quota_max_principle",
+    "quota_min_actionable",
+    "rerank_pool",
+    "system_prompt",
+    "temperature",
+    "tier",
+    "top_k",
+    "triage_focus_hint",
+    "triage_rules"
+  ],
+  "kb_level": [
+    "chunk_overlap",
+    "chunk_size",
+    "embed_dim",
+    "enable_node_mapping",
+    "model_embed"
+  ]
+}
