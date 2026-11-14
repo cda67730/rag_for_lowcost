@@ -28,6 +28,10 @@ EMBED_TRIES = 3
 MSG_MODEL = "向量或分類服務暫時失敗，已處理的部分保留，可稍後按「修復」"
 
 
+class Cancelled(Exception):
+    pass
+
+
 class Duplicate(Exception):
     def __init__(self, doc: Document):
         super().__init__("同一個知識庫已有相同的檔案")
@@ -213,18 +217,40 @@ async def run_ingest_job(session_factory, llm: LLMClient, job_id: uuid.UUID) -> 
     """一個獨立 session 跑一份文件；進度與結果寫 jobs。例外一律收斂成 failed，不讓背景任務靜默消失"""
     with session_factory() as s:
         job = s.get(Job, job_id)
+        if job.status != "queued":          # 開始前就被取消了
+            doc = s.get(Document, uuid.UUID(job.target))
+            if job.status == "cancelled" and doc is not None and doc.status == "processing":
+                _fail(s, doc, "處理已取消，可重新處理")
+                s.commit()
+            return
         job.status = "running"
         s.commit()
 
         def progress(p, m):
+            s.refresh(job, ["status"])
+            if job.status == "cancelled":
+                raise Cancelled()
             job.progress, job.message = p, m
             s.commit()
 
         try:
             r = await process_document(s, llm, uuid.UUID(job.target), progress)
+            s.refresh(job, ["status"])
+            if job.status == "cancelled":       # 處理中被取消：結果保留，狀態不覆蓋
+                s.commit()
+                return
             job.status = "done" if r.status == "pending" else "failed"
             job.result = {"status": r.status, "chunks": r.chunks, "missingVectors": r.missing_vectors, "error": r.error}
             job.message = r.error or f"完成，{r.chunks} 段"
+        except Cancelled:
+            s.rollback()
+            job = s.get(Job, job_id)
+            job.status = "cancelled"
+            doc = s.get(Document, uuid.UUID(job.target))
+            if doc is not None and doc.status == "processing":
+                _fail(s, doc, "處理已取消，可重新處理")
+            s.commit()
+            return
         except Exception as e:
             s.rollback()
             job = s.get(Job, job_id)

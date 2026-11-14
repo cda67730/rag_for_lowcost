@@ -7,22 +7,27 @@ import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import auth
 from app.errors import ApiError, not_found
-from app.perms import ROLES, require
+from app.perms import ROLES, require, roles_of, ws_roles
 from app.routes.admin import DB, Me, audit, body, cursor_of, get_bot, get_doc, get_kb, kb_out, page, uid
 from app.routes.admin_bot import admin_bot
 from app.routes.chat import get_llm
-from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Feedback, Flow, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
+from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Feedback, Flow, Job, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
 from graph.chat_graph import Deps, run_chat
+from services import describe as describe_svc
 from services import ingest
 from services.llm import EMBED_MODELS, LLMClient, provider_of
 from services.retrieval import CHUNK_TYPES
-from settings.loader import SETTING_DEFAULTS, TEXT_DEFAULTS
+from settings.loader import SETTING_DEFAULTS, TEXT_DEFAULTS, load_config
 
 router = APIRouter(prefix="/api/admin")
 TEST_SESSION = "admin-test-"     # 測試對話的 session 前綴：紀錄與統計預設排除
@@ -480,3 +485,73 @@ def stats(bot: str, days: int | None = 30, include_test: bool = False, u: User =
     units = sorted({c.unit for c in all_ if c.unit})
     return {"stats": st, "gaps": gaps, "topDocs": [{"title": t, "n": n} for t, n in docs.most_common(10)],
             "quality": {"gapKinds": dict(gap_kinds), "l5": dict(l5)}, "stability": dict(ev), "units": units}
+
+
+# ───────── §4 用說的轉設定 ─────────
+
+@router.post("/bots/{bot}/describe")
+async def describe(bot: str, request: Request, u: User = Me, s: Session = DB, llm: LLMClient = Depends(get_llm)):
+    b = admin_bot(s, u, bot)
+    d = await body(request)
+    try:
+        return await describe_svc.describe(llm, load_config(s, b.id), str(d.get("kind") or ""), str(d.get("text") or ""), d.get("current"))
+    except describe_svc.DescribeError as e:
+        raise ApiError(422, "describe", str(e))
+
+
+@router.post("/bots/{bot}/describe-back")
+async def describe_back(bot: str, request: Request, u: User = Me, s: Session = DB, llm: LLMClient = Depends(get_llm)):
+    b = admin_bot(s, u, bot)
+    d = await body(request)
+    try:
+        return {"text": await describe_svc.describe_back(llm, load_config(s, b.id), str(d.get("kind") or ""))}
+    except describe_svc.DescribeError as e:
+        raise ApiError(422, "describe", str(e))
+
+
+# ───────── §10 紀錄匯出 ─────────
+
+CSV_COLS = [("id", "編號"), ("at", "時間"), ("session", "Session"), ("turn", "輪次"), ("unit", "單位"), ("message", "訊息（去識別化）"), ("type", "回應類型"),
+            ("intent", "意圖"), ("referral", "轉介"), ("retrieved", "檢索段數"), ("top", "最高相似度"), ("cited", "被引用段數"), ("skills", "Skill"),
+            ("rewritten", "重寫"), ("ms", "耗時ms"), ("fb", "回饋")]
+
+
+@router.get("/bots/{bot}/logs/export.csv")
+def export_logs(bot: str, days: int | None = None, unit: str | None = None, type: str | None = None, q: str | None = None, rewritten: bool | None = None,
+                include_test: bool = False, u: User = Me, s: Session = DB):
+    b = admin_bot(s, u, bot, {"analyst"})
+    rows = s.scalars(_log_query(b, days, unit, type, q, rewritten, include_test).order_by(Conversation.created_at).limit(50000)).all()
+    fb = _feedback(s, b.id)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([h for _, h in CSV_COLS])
+    for c in rows:
+        r = log_row(c, fb.get((c.session, c.turn)))
+        r["message"], r["skills"], r["rewritten"] = c.user_text, "、".join(r["skills"]), "是" if r["rewritten"] else ""
+        w.writerow([_csv_safe(r[k]) for k, _ in CSV_COLS])
+    audit(s, b.workspace_id, u, "logs.export", b.slug, {"rows": len(rows)}, bot_id=b.id)
+    s.commit()
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",      # BOM：Excel 才認得 UTF-8
+                    headers={"Content-Disposition": f'attachment; filename="{b.slug}-logs.csv"'})
+
+
+def _csv_safe(v):
+    """避免試算表把 = + - @ 開頭的內容當公式執行"""
+    v = "" if v is None else str(v)
+    return "'" + v if v[:1] in ("=", "+", "-", "@") else v
+
+
+# ───────── §12 取消工作 ─────────
+
+@router.post("/jobs/{job}/cancel")
+def cancel_job(job: str, u: User = Me, s: Session = DB):
+    j = s.get(Job, uid(job))
+    if j is None or not (ws_roles(s, u, j.workspace_id) or (j.bot_id and roles_of(s, u, j.workspace_id, j.bot_id))):
+        raise not_found()
+    require(s, u, j.workspace_id, {"admin"}, bot_id=j.bot_id, ws_level=j.bot_id is None)
+    if j.status in ("done", "failed", "cancelled"):
+        raise ApiError(409, "finished", "工作已經結束")
+    j.status, j.message, j.finished_at = "cancelled", "已取消（已完成的部分保留）", datetime.now(timezone.utc)
+    audit(s, j.workspace_id, u, "job.cancel", j.kind, {"job_id": str(j.id)}, bot_id=j.bot_id, kb_id=j.kb_id)
+    s.commit()
+    return {"status": "cancelled"}

@@ -140,3 +140,70 @@ def test_test_chat_logs_and_stats(env):  # noqa: F811
     assert st["topDocs"] == [{"title": "手冊", "n": 2}] and st["quality"]["gapKinds"] == {"沒有可用知識": 1} and st["quality"]["l5"] == {"語氣": 2}
     assert [g["message"] for g in st["gaps"]] == ["s1-2 丟積木"] and st["units"] == ["乙", "甲"] and st["stability"] == {"缺欄位": 3}
     assert c.get(f"/api/admin/bots/{bot2.id}/stats", headers=as_("ana")).status_code == 404
+
+
+def test_describe_endpoints(env):  # noqa: F811
+    c, db, ws, bot, bot2, users, as_ = env
+
+    class L:
+        async def generate_json(self, model, prompt, **kw):
+            if "改寫成一段給一般人看" in prompt:
+                return {"text": "目前會先回覆"}, None
+            return {"intents": [{"name": n, "desc": "d"} for n in "甲乙丙丁"]}, None
+    app.dependency_overrides[C.get_llm] = lambda: L()
+    h = as_("botadmin")
+    r = c.post(f"/api/admin/bots/{bot.id}/describe", headers=h, json={"kind": "intents", "text": "四種"}).json()
+    assert r["text"] == "甲＝d\n乙＝d\n丙＝d\n丁＝d"
+    assert c.post(f"/api/admin/bots/{bot.id}/describe", headers=h, json={"kind": "intents", "text": ""}).json()["error"] == "請先寫描述"
+    assert c.post(f"/api/admin/bots/{bot.id}/describe-back", headers=h, json={"kind": "answer_schema"}).json() == {"text": "目前會先回覆"}
+    assert c.post(f"/api/admin/bots/{bot.id}/describe-back", headers=as_("ana"), json={"kind": "intents"}).status_code == 403
+
+
+def test_csv_export(env):  # noqa: F811
+    c, db, ws, bot, bot2, users, as_ = env
+    db.add(m.Conversation(bot_id=bot.id, session="s", turn=1, unit="甲", user_text="=HYPERLINK(\"x\") 丟積木", rtype="answer", skills=["理解", "轉介"], rewritten=True))
+    db.add(m.Conversation(bot_id=bot.id, session="admin-test-1", turn=1, user_text="測試", rtype="answer"))
+    db.flush()
+    r = c.get(f"/api/admin/bots/{bot.id}/logs/export.csv", headers=as_("ana"))
+    assert r.headers["content-type"].startswith("text/csv") and r.text.startswith("﻿編號,時間")
+    lines = r.text.strip().split("\n")
+    assert len(lines) == 2 and "'=HYPERLINK" in lines[1] and "理解、轉介" in lines[1] and ",是," in lines[1]
+
+
+def test_cancel_job(env):  # noqa: F811
+    import asyncio
+    from sqlalchemy.orm import Session
+    from services import ingest
+    c, db, ws, bot, bot2, users, as_ = env
+    k = m.KnowledgeBase(workspace_id=ws.id, slug="k", name="k", embed_model="gemini-embedding-001", embed_dim=768); db.add(k); db.flush()
+    doc = ingest.create_document(db, k, filename="a.md", data=md())
+    j = m.Job(workspace_id=ws.id, kb_id=k.id, kind="ingest", target=str(doc.id)); db.add(j); db.flush()
+    assert c.post(f"/api/admin/jobs/{j.id}/cancel", headers=as_("rev")).status_code == 403
+    assert c.post(f"/api/admin/jobs/{j.id}/cancel", headers=as_("wsadmin")).json() == {"status": "cancelled"}
+    assert c.post(f"/api/admin/jobs/{j.id}/cancel", headers=as_("wsadmin")).status_code == 409
+    from test_ingest import FakeLLM
+    asyncio.run(ingest.run_ingest_job(lambda: Session(bind=db.connection(), join_transaction_mode="create_savepoint"), FakeLLM(), j.id))
+    db.expire_all()
+    assert db.get(m.Job, j.id).status == "cancelled" and db.get(m.Document, doc.id).status == "failed" and "取消" in db.get(m.Document, doc.id).error
+
+
+def test_cancel_while_running(env):  # noqa: F811
+    import asyncio
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+    from services import ingest
+    from test_ingest import FakeLLM
+    c, db, ws, bot, bot2, users, as_ = env
+    k = m.KnowledgeBase(workspace_id=ws.id, slug="k", name="k", embed_model="gemini-embedding-001", embed_dim=768); db.add(k); db.flush()
+    doc = ingest.create_document(db, k, filename="a.md", data=md())
+    j = m.Job(workspace_id=ws.id, kb_id=k.id, kind="ingest", target=str(doc.id)); db.add(j); db.flush()
+
+    class CancelDuring(FakeLLM):
+        async def generate_json(self, model, prompt, **kw):     # 分類進行中，有人按了取消
+            db.execute(text("UPDATE jobs SET status = 'cancelled' WHERE id = :i"), {"i": j.id})
+            return await super().generate_json(model, prompt, **kw)
+
+    asyncio.run(ingest.run_ingest_job(lambda: Session(bind=db.connection(), join_transaction_mode="create_savepoint"), CancelDuring(), j.id))
+    db.expire_all()
+    assert db.get(m.Job, j.id).status == "cancelled" and db.get(m.Document, doc.id).status == "failed"
+    assert db.query(m.Chunk).filter_by(doc_id=doc.id).count() == 0
