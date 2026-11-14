@@ -285,7 +285,7 @@ class BotConfig:
         for f in self.schema():
             if f.type == "items":
                 v = (answer or {}).get(f.key)
-                out.extend(v if isinstance(v, list) else ([] if v is None else [v]))
+                out.extend(v if isinstance(v, list) else ([v] if js_truthy(v) else []))   # [].concat(v || [])
         return out
 
     def answer_summary(self, answer: dict | None, rtype: str) -> str:

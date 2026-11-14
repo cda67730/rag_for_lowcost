@@ -109,6 +109,11 @@ judge_knowledge ─其他─────────────────▶ 
 
 LangGraph 原生支援的 `triage_and_embed` 並行用 `Send` 或在節點內 `asyncio.gather` 即可。
 
+## 與 Apps Script 版刻意不同的地方
+
+- 禁止用語的正規式寫錯：Apps Script 版整個回答失敗；Python 版略過該條規則，記一筆「設定錯誤」到穩定度紀錄。
+- 數字設定填 0（例如 `min_score`）：兩版都視為未填、用預設值（試算表裡的 0 是數字，在 JS 是假值）。
+
 ## 哪些東西直接搬、哪些重寫
 
 | 直接搬（邏輯一樣，改語法） | 重寫 |
