@@ -98,7 +98,7 @@ Flow 的開關覆蓋 Bot 設定：讀設定時先 Bot、再 Flow，Flow 有值�
 
 ## 8. 設定與範本
 
-- 設定 key 一字不改沿用 Apps Script 版（`enable_triage`、`answer_schema`、`role_user`…）。預設值表（`SETTINGS_DEFAULT`）搬成 Python 的一份常數，兩邊同步維護。
+- 設定 key 一字不改沿用 Apps Script 版（`enable_triage`、`answer_schema`、`role_user`…）。預設值只維護在 `apps-script/Setup.gs`，由 `tools/export-defaults.js` 匯出成 `server/settings/defaults.json` 給 Python 讀；測試會檢查兩邊同步，並用 node 跑 Apps Script 原版的解析函式（意圖、檢查項目、回答欄位…）與 Python 版比對同樣輸入的結果。
 - 專案範本 JSON 格式不變；多一個匯入目標：匯到哪個 Bot。範本裡沒有知識庫，知識庫另外建、另外掛。
 - 設定快照：每次請求開始時把 Bot＋Flow 設定合併成一個 dict 放進 state，圖裡所有節點只讀 state。評測的 `settings_override` 在這一步合併進去。
 
