@@ -1,10 +1,16 @@
 """資料庫連線。DATABASE_URL 從環境變數讀（見 server/.env.example）。"""
 import os
 from collections.abc import Iterator
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+
+# server/.env：伺服器、後台指令、遷移都會讀到（這個模組是共同的入口）。已經設定的環境變數優先，Docker／systemd 傳進來的值不會被蓋掉
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
 
 def database_url() -> str:

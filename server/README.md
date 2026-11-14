@@ -38,6 +38,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
 | `CHAT_TIMEOUT_SECONDS` | 否 | 一個回合最多幾秒，預設 50；超過改給保守回答並記錄（品質旗標 `timeout`）。要比反向代理的逾時短 |
+| `HOST` `PORT` | 否 | `start.sh`／`start.bat`／`run.py` 監聽的位址與埠，預設 `127.0.0.1`、`8000`（Docker 不看這兩個，固定 `0.0.0.0:8000`） |
 | `WEB_CONCURRENCY` | 否 | 同時開幾個程式，預設 1；建議設成 CPU 核心數（2～4）。uvicorn 直接讀這個變數，Docker 與一般安裝都適用。背景工作（文件處理、評測、圖譜草稿）在接到請求的那個程式裡跑，伺服器重啟時沒做完的工作會標成失敗、可重試 |
 | `DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT` | 否 | 資料庫連線池，預設 10／20／10 秒，每個程式各一份。連線只在讀寫時短暫持有，等模型時會先還回去。`WEB_CONCURRENCY` ×（POOL_SIZE＋MAX_OVERFLOW）要小於 PostgreSQL 的 `max_connections`（預設 100），例如 4 個程式就設 5／15 |
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90；0＝不清。伺服器啟動時和之後每天清一次，只清流程紀錄，對話內容與統計保留。也可手動跑 `python -m app.cli purge-traces` |
@@ -81,17 +82,28 @@ Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／1
 1. 資料庫二選一：
    - 自己裝：Ubuntu `sudo apt install postgresql-16 postgresql-16-pgvector`，建資料庫與帳號（`createdb rag`）。
    - 雲端託管：Supabase、Neon 等內建 pgvector 的 PostgreSQL，取得連線字串即可。
-2. 程式：
+2. 啟動（一個檔案搞定）：
+   - Linux／macOS：`./start.sh`
+   - Windows：在 `server` 資料夾裡雙擊 `start.bat`（或在命令提示字元執行）
+
+   第一次執行會建立虛擬環境、照 `requirements.txt` 安裝套件，並從 `.env.example` 複製出 `.env` 後停下來；填好 `DATABASE_URL`、`JWT_SECRET`、模型金鑰（需要時再加 `CORS_ORIGINS`）再執行一次。之後每次啟動都會先自動更新資料庫結構（第一次會建立 vector 擴充，帳號要有建立擴充的權限），再依 `WEB_CONCURRENCY` 開程式。
+
+   | 指令 | 用途 |
+   |---|---|
+   | `./start.sh`／`start.bat` | 正式執行 |
+   | `./start.sh --dev`／`start.bat --dev` | 開發模式：改程式自動重啟、只開一個程式 |
+   | `./start.sh --no-migrate` | 不自動更新資料庫結構 |
+
+   監聽位址與埠在 `.env` 設 `HOST`（預設 `127.0.0.1`，只讓本機的反向代理連）與 `PORT`（預設 8000）。兩個腳本都只是準備好虛擬環境後執行 `python run.py`，已經有虛擬環境時也可以直接跑它。
+
+   建第一個工作區與管理員（只要一次）：
    ```bash
-   cd server
-   python3 -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt && pip install --no-deps -e .   # 照測試過的確切版本安裝
-   cp .env.example .env     # 填 DATABASE_URL、GEMINI_API_KEY、JWT_SECRET、CORS_ORIGINS
-   alembic upgrade head     # 會自動建立 vector 擴充與資料表（帳號要有建立擴充的權限）
-   python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
-   uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+   .venv/bin/python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin      # Windows：.venv\Scripts\python -m app.cli ...
    ```
-3. 常駐：Linux 用 systemd（`ExecStart=/path/server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers`、`WorkingDirectory=/path/server`、`EnvironmentFile=/path/server/.env`）；Windows 用 NSSM 之類的服務包裝工具。
+   伺服器、`app.cli` 指令、`alembic` 都會自動讀 `server/.env`；同名的環境變數已經有值時以環境變數為準。
+3. 常駐：
+   - Linux（systemd）：`ExecStart=/path/server/.venv/bin/python /path/server/run.py`、`WorkingDirectory=/path/server`、`Restart=on-failure`。
+   - Windows：用 NSSM 之類的服務包裝工具，程式填 `C:\path\server\.venv\Scripts\python.exe`，參數填 `run.py`，啟動目錄填 `C:\path\server`。
 4. 對外：前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
 
 ### 套件版本
@@ -106,8 +118,7 @@ cd server
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # 只開資料庫，開到本機 5432
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt && pip install --no-deps -e .
-alembic upgrade head
-uvicorn app.main:app --reload
+./start.sh --dev                               # 自動更新資料庫結構後以開發模式啟動（Windows：start.bat --dev）
 export TEST_DATABASE_URL=postgresql+psycopg://rag:<密碼>@localhost:5432/postgres
 pytest                                         # 會自己建一個暫時資料庫跑遷移、測完刪掉；模型呼叫用假回應，不花 API 費用
 pytest -m live                                 # 需要真金鑰的整合測試，預設不跑
