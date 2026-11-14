@@ -3,10 +3,9 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 
-# 先裝相依（改程式不用重裝）
-COPY pyproject.toml ./
-RUN mkdir -p app db graph services settings && touch app/__init__.py db/__init__.py graph/__init__.py services/__init__.py settings/__init__.py \
- && pip install . && pip uninstall -y rag-server
+# 先裝相依（改程式不用重裝）：照 requirements.txt 的確切版本
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
 COPY . .
 RUN pip install --no-deps . \

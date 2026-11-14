@@ -84,7 +84,7 @@ Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／1
    ```bash
    cd server
    python3 -m venv .venv && source .venv/bin/activate
-   pip install -e .
+   pip install -r requirements.txt && pip install --no-deps -e .   # 照測試過的確切版本安裝
    cp .env.example .env     # 填 DATABASE_URL、GEMINI_API_KEY、JWT_SECRET、CORS_ORIGINS
    alembic upgrade head     # 會自動建立 vector 擴充與資料表（帳號要有建立擴充的權限）
    python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
@@ -93,13 +93,18 @@ Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／1
 3. 常駐：Linux 用 systemd（`ExecStart=/path/server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers`、`WorkingDirectory=/path/server`、`EnvironmentFile=/path/server/.env`）；Windows 用 NSSM 之類的服務包裝工具。
 4. 對外：前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
 
+### 套件版本
+
+- `pyproject.toml` 寫套件的可用範圍；`requirements.txt`（執行用）和 `requirements-dev.txt`（加測試工具）固定成測試通過的確切版本，安裝與 Docker 都用這兩份。
+- 升級套件：在新的虛擬環境 `pip install .` → 跑完測試 → `pip freeze --exclude rag-server > requirements.txt`（保留檔頭說明，並把 uvloop、tzdata 那兩行的平台條件加回去）。
+
 ### 本機開發（不用 Docker 跑 app）
 
 ```bash
 cd server
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # 只開資料庫，開到本機 5432
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt && pip install --no-deps -e .
 alembic upgrade head
 uvicorn app.main:app --reload
 export TEST_DATABASE_URL=postgresql+psycopg://rag:<密碼>@localhost:5432/postgres

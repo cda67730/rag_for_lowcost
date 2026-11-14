@@ -1,0 +1,75 @@
+# 執行用套件的確切版本（含間接相依），全部測試在這組版本下通過。
+# 安裝：pip install -r requirements.txt && pip install --no-deps -e .
+# 升級套件：改 pyproject.toml 的範圍 → 新的虛擬環境 pip install . → 跑測試 → pip freeze --exclude rag-server > requirements.txt
+# 產生環境：Python 3.13 / Linux；Docker 用 3.12。uvloop 不支援 Windows，已加條件
+alembic==1.20.1
+annotated-doc==0.0.6
+annotated-types==0.8.0
+anyio==4.16.0
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.2.0
+certifi==2026.10.23
+cffi==2.1.1
+charset-normalizer==3.5.2
+click==8.5.1
+distro==1.9.0
+et_xmlfile==2.0.0
+fastapi==0.162.7
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.16.0
+httptools==0.9.0
+httpx==0.28.1
+httpx2==2.16.0
+idna==3.20
+jsonpatch==1.47
+jsonpointer==3.12
+langchain-core==1.8.0
+langchain-protocol==0.0.21
+langgraph==1.2.22
+langgraph-checkpoint==4.3.2
+langgraph-prebuilt==1.1.2
+langgraph-sdk==0.4.14
+langsmith==0.14.17
+lxml==6.1.3
+Mako==1.4.3
+MarkupSafe==3.0.4
+openpyxl==3.1.5
+opentelemetry-api==1.45.2
+orjson==3.13.0
+ormsgpack==1.13.1
+packaging==26.3
+pgvector==0.5.1
+pillow==13.0.0
+psycopg==3.3.9
+psycopg-binary==3.3.9
+pycparser==3.12
+pydantic==2.14.3
+pydantic_core==2.50.4
+PyJWT==2.15.1
+pypdf==7.1.0
+python-docx==1.2.0
+python-dotenv==1.2.4
+python-multipart==0.0.33
+python-pptx==1.0.2
+PyYAML==6.0.3
+requests==2.34.2
+requests-toolbelt==1.0.0
+sniffio==1.3.1
+SQLAlchemy==2.1.8
+starlette==1.10.0
+tenacity==9.2.1
+truststore==0.10.5
+typing-inspection==0.4.5
+typing_extensions==4.16.0
+urllib3==2.8.0
+uuid_utils==0.19.0
+uvicorn==0.54.0
+uvloop==0.23.0 ; sys_platform != "win32" and platform_python_implementation == "CPython"
+watchfiles==1.3.0
+websockets==17.4
+xlsxwriter==3.3.1
+xxhash==4.1.0
+zstandard==0.25.0
+# Windows 才需要（psycopg 讀時區）
+tzdata==2026.6 ; sys_platform == "win32"
