@@ -22,7 +22,7 @@
 - 前綴 `/api/admin`。請求與回應 JSON；上傳用 `multipart/form-data`。
 - 認證：`Authorization: Bearer <JWT>`。JWT 內含 `sub`（user id）與 `tv`（token_version），有效 8 小時；`POST /auth/refresh` 換新。使用者 `token_version` 加一即讓舊 token 全部失效（改密碼、停用、強制登出）。
 - 錯誤：HTTP 狀態碼＋`{ "error": "給人看的一句話", "code": "機器讀的代碼" }`。`401` 未登入／過期，`403` 沒權限，`404` 不存在或看不到（不區分，避免探測），`409` 衝突（例如知識庫被掛著不能刪），`422` 欄位驗證失敗（附 `fields`）。
-- 列表一律分頁：`?limit=50&cursor=<上一頁回傳的 next>`，回應 `{ items: [], next: "…" | null }`。
+- 列表一律分頁：`?limit=50&cursor=<上一頁回傳的 next>`，回應 `{ items: [], next: "…" | null }`。cursor 是不透明字串，照原樣帶回即可；對話紀錄列表的 cursor 記的是上一頁最後一筆（時間＋編號），從那裡接著往下讀，翻到多後面都一樣快；格式不對回 422 `bad_cursor`。
 - 所有寫入動作寫 `audit_log`。
 - 路徑裡的 `{ws}`、`{bot}`、`{kb}` 用 id（uuid）；`slug` 只用在聊天頁。
 

@@ -411,7 +411,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (
         UniqueConstraint("bot_id", "session", "turn"),
-        Index("ix_conv_bot_at", "bot_id", sql("created_at DESC")),
+        Index("ix_conv_bot_at_id", "bot_id", sql("created_at DESC"), sql("id DESC")),     # 紀錄列表從上一頁最後一筆往下讀
         Index("ix_conv_bot_type_at", "bot_id", "rtype", sql("created_at DESC")),
     )
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -444,7 +444,7 @@ class Conversation(Base):
 
 class Feedback(Base):
     __tablename__ = "feedback"
-    __table_args__ = (Index("ix_feedback_bot_at", "bot_id", sql("created_at DESC")),)
+    __table_args__ = (Index("ix_feedback_bot_at", "bot_id", sql("created_at DESC")), Index("ix_feedback_bot_turn", "bot_id", "session", "turn"))
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     bot_id: Mapped[uuid.UUID] = fk("bots.id", "CASCADE")
     session: Mapped[str] = mapped_column(Text, nullable=False)

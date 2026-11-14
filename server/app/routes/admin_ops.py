@@ -1,6 +1,7 @@
 """後台 API 第三批：Workspace 與成員、稽核（§2）、刪 Bot（§3）、模型（§4）、知識庫管理（§7）、文件與段落管理（§8）、測試對話與紀錄統計（§10）。"""
 from __future__ import annotations
 
+import base64
 import secrets
 import time
 import uuid
@@ -11,8 +12,8 @@ import io
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, literal, or_, select, tuple_
+from sqlalchemy.orm import Session, defer
 
 from app import auth
 from app.errors import ApiError, not_found
@@ -424,9 +425,15 @@ def log_row(c: Conversation, fb: list[str] | None = None) -> dict:
             "fb": "up" if "有幫助" in fb else "down" if "沒幫助" in fb else "", "copied": any(k.startswith("複製") for k in fb)}
 
 
-def _feedback(s: Session, bot_id) -> dict[tuple[str, int], list[str]]:
+def _feedback(s: Session, bot_id, keys: list[tuple[str, int]] | None = None) -> dict[tuple[str, int], list[str]]:
+    """{(session, turn): [回饋種類]}；給 keys 時只讀那幾輪的回饋"""
     out: dict = {}
-    for f in s.scalars(select(Feedback).where(Feedback.bot_id == bot_id)):
+    q = select(Feedback.session, Feedback.turn, Feedback.kind).where(Feedback.bot_id == bot_id)
+    if keys is not None:
+        if not keys:
+            return out
+        q = q.where(tuple_(Feedback.session, Feedback.turn).in_(list(set(keys))))
+    for f in s.execute(q):
         out.setdefault((f.session, f.turn), []).append(f.kind)
     return out
 
@@ -435,10 +442,35 @@ def _feedback(s: Session, bot_id) -> dict[tuple[str, int], list[str]]:
 def list_logs(bot: str, days: int | None = None, unit: str | None = None, type: str | None = None, q: str | None = None, rewritten: bool | None = None,
               include_test: bool = False, limit: int = 50, cursor: str | None = None, u: User = Me, s: Session = DB):
     b = admin_bot(s, u, bot, {"analyst"})
-    _, off, lim = page([], limit, cursor)
-    rows = s.scalars(_log_query(b, days, unit, type, q, rewritten, include_test).order_by(Conversation.created_at.desc(), Conversation.id.desc()).offset(off).limit(lim + 1)).all()
-    fb = _feedback(s, b.id)
-    return {"items": [log_row(c, fb.get((c.session, c.turn))) for c in rows[:lim]], "next": cursor_of(off, lim, len(rows))}
+    lim = max(1, min(int(limit or 50), 200))
+    x = _log_query(b, days, unit, type, q, rewritten, include_test).options(*(defer(getattr(Conversation, k)) for k in _HEAVY))
+    if cursor:      # 從上一頁最後一筆接著往下讀（走索引），不用「跳過前 N 筆」，翻到多後面都一樣快
+        at, last = _log_cursor_decode(cursor)
+        x = x.where(tuple_(Conversation.created_at, Conversation.id) < tuple_(literal(at), literal(last)))
+    rows = s.scalars(x.order_by(Conversation.created_at.desc(), Conversation.id.desc()).limit(lim + 1)).all()
+    page_rows = rows[:lim]
+    fb = _feedback(s, b.id, [(c.session, c.turn) for c in page_rows])      # 只讀這一頁用得到的回饋
+    return {"items": [log_row(c, fb.get((c.session, c.turn))) for c in page_rows],
+            "next": _log_cursor(page_rows[-1]) if len(rows) > lim else None}
+
+
+# 列表用不到、又可能很大的欄位（流程紀錄、回答全文等），列表查詢時不讀
+_HEAVY = ("trace", "answer", "triage", "checks", "sources", "quality", "stability")
+
+
+def _log_cursor(c: Conversation) -> str:
+    return base64.urlsafe_b64encode(f"{c.created_at.isoformat()}|{c.id}".encode()).decode()
+
+
+def _log_cursor_decode(cursor: str) -> tuple[datetime, int]:
+    try:
+        at, last = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
+        t = datetime.fromisoformat(at)
+        if t.tzinfo is None:
+            raise ValueError
+        return t, int(last)
+    except (ValueError, UnicodeDecodeError):
+        raise ApiError(422, "bad_cursor", "翻頁位置不正確，請重新查詢")
 
 
 @router.get("/logs/{log_id}")
@@ -447,7 +479,7 @@ def log_detail(log_id: int, u: User = Me, s: Session = DB):
     if c is None:
         raise not_found()
     admin_bot(s, u, str(c.bot_id), {"analyst"})
-    fb = _feedback(s, c.bot_id).get((c.session, c.turn))
+    fb = _feedback(s, c.bot_id, [(c.session, c.turn)]).get((c.session, c.turn))
     return {**log_row(c, fb), "message": c.user_text, "triage": c.triage, "answer": c.answer, "sources": c.sources, "checks": c.checks, "trace": c.trace,
             "stability": c.stability, "quality": c.quality, "referral": c.referral}
 

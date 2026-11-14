@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from db.models import Chunk, Document, KgCandidate, KgDef, KgEdge, KgLink, KgNode, KgSource
@@ -383,7 +383,11 @@ def overview(session: Session, kb_id: uuid.UUID) -> dict:
     pairs = pairs_of(types_by, [(e.subj_id, e.rel, e.obj_id) for e in edges])
     key_to = {n.node_key: n for n in nodes}
     cands = []
-    for c in session.scalars(select(KgCandidate).where(KgCandidate.kb_id == kb_id, KgCandidate.status == "pending")):
+    pend = session.scalars(select(KgCandidate).where(KgCandidate.kb_id == kb_id, KgCandidate.status == "pending")).all()
+    # 候選對應的段落與文件一次查完，不要每個候選各查一次
+    texts = dict(session.execute(select(Chunk.id, Chunk.text).where(Chunk.id.in_({c.chunk_id for c in pend if c.chunk_id}))).all()) if pend else {}
+    titles = dict(session.execute(select(Document.id, Document.title).where(Document.id.in_({c.doc_id for c in pend if c.doc_id}))).all()) if pend else {}
+    for c in pend:
         rel = json.loads(c.rel_hint) if c.rel_hint else None
         parent = key_to.get(c.parent_hint)
         warns = []
@@ -396,18 +400,18 @@ def overview(session: Session, kb_id: uuid.UUID) -> dict:
             w = rel_warn(pairs, defs, rel["type"], c.ntype, tgt.ntype)
             if w:
                 warns.append("建議關係：" + w)
-        ch = session.get(Chunk, c.chunk_id) if c.chunk_id else None
-        doc = session.get(Document, c.doc_id) if c.doc_id else None
+        text, title = texts.get(c.chunk_id), titles.get(c.doc_id)
         cands.append({"id": str(c.id), "name": c.name, "def": c.definition, "parent": c.parent_hint, "parentLabel": parent.name if parent else "", "type": c.ntype,
                       "rel": {"type": rel["type"], "label": rel_label(defs, rel["type"]), "target": rel["target"], "targetLabel": tgt.name if tgt else rel["target"]} if rel else None,
-                      "warns": warns, "doc": doc.title if doc else "", "count": c.hits, "reason": c.reason, "snippet": _u16cut(ch.text, 160) if ch else ""})
+                      "warns": warns, "doc": title if title is not None else "", "count": c.hits, "reason": c.reason, "snippet": _u16cut(text, 160) if text is not None else ""})
     cands.sort(key=lambda x: -x["count"])
-    done = done_chunks(session, kb_id)
-    todo = []
-    for d in session.scalars(select(Document).where(Document.kb_id == kb_id, Document.status.not_in(("disabled", "failed", "processing"))).order_by(Document.uploaded_at)):
-        n = sum(1 for cid in session.scalars(select(Chunk.id).where(Chunk.doc_id == d.id)) if cid not in done)
-        if n:
-            todo.append({"id": str(d.id), "title": d.title, "status": d.status, "todo": n})
+    # 每份文件還沒標註的段落數：一個查詢算完（已標註＝至少掛到一個目前存在的節點，同 done_chunks）
+    done = select(KgLink.chunk_id).join(KgNode, KgNode.id == KgLink.node_id).where(KgNode.kb_id == kb_id, KgLink.chunk_id == Chunk.id)
+    todo = [{"id": str(i), "title": t, "status": st, "todo": n} for i, t, st, n in session.execute(
+        select(Document.id, Document.title, Document.status, func.count(Chunk.id))
+        .join(Chunk, Chunk.doc_id == Document.id)
+        .where(Document.kb_id == kb_id, Document.status.not_in(("disabled", "failed", "processing")), ~done.exists())
+        .group_by(Document.id).order_by(Document.uploaded_at, Document.id))]
     srcs = session.scalars(select(KgSource.source_key).where(KgSource.kb_id == kb_id)).all()
     return {"stats": {"nodes": sum(1 for n in nodes if n.status == "active"), "edges": len(edges), "sources": len(srcs), "links": len(rows),
                       "covered": sum(1 for x in lst if x["ok"] > 0), "pending": len(cands)},
