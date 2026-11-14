@@ -164,4 +164,4 @@ users / memberships / workspaces
 5. `app/`：`/api/ui`、`/api/check`、`/api/chat`、`/api/feedback`——到這裡 `web/chat/` 可以直接接
 6. `services/ingest.py`＋`POST /api/admin/kbs/{kb}/documents`（規格見 ingest.md）
 7. 後台 API 與介面
-8. 評測與 Langfuse 接線
+8. 評測（外部觀測工具如 Langfuse 暫不接）

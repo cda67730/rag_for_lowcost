@@ -226,7 +226,7 @@ A.views.bot = async function (botId, tab) {
     async function detail(id) {
       const r = await A.api("GET", `/logs/${id}`);
       A.side.open("紀錄 #" + id, `<div class="msg me">${A.esc(r.message)}</div><div class="note">${A.fmtTime(r.at)}｜${A.esc(r.unit)}｜第 ${r.turn} 輪｜${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</div>
-        <h4 style="margin-top:12px">流程紀錄</h4>${TraceView.render({ ...r, trace: r.trace, metrics: { retrieved: r.retrieved, top: r.top, cited: r.cited, skills: r.skills }, rewritten: r.rewritten })}`);
+        <h4 style="margin-top:12px">流程紀錄</h4>${r.trace == null ? '<p class="note">流程紀錄已超過保留天數而清除（對話內容與統計仍保留）</p>' : ""}${TraceView.render({ ...r, trace: r.trace, metrics: { retrieved: r.retrieved, top: r.top, cited: r.cited, skills: r.skills }, rewritten: r.rewritten })}`);
     }
     A.$("#lg").onclick = () => load(true);
     A.$("#lm").onclick = () => load(false);

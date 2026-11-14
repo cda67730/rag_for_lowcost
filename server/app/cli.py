@@ -49,7 +49,17 @@ def main(argv=None) -> None:
     i.add_argument("--xlsx", required=True, help="Google 試算表「檔案 › 下載 › Microsoft Excel」存下的檔案")
     i.add_argument("--with-logs", action="store_true", help="一併搬對話紀錄與回饋（預設不搬）")
     i.add_argument("--no-embed", action="store_true", help="先不算向量，之後在後台按「補算缺少的向量」")
+    r = sub.add_parser("purge-traces", help="清掉超過保留天數的流程紀錄（伺服器每天也會自動清一次）")
+    r.add_argument("--days", type=int, help="保留天數，預設讀 TRACE_RETENTION_DAYS（沒設是 90）")
     a = p.parse_args(argv)
+    if a.cmd == "purge-traces":
+        from services import retention
+        days = a.days if a.days is not None else retention.retention_days()
+        if not days or days < 1:
+            raise SystemExit("保留天數是 0：不清除")
+        with session() as s:
+            print(f"已清除 {retention.purge_traces(s, days)} 筆超過 {days} 天的流程紀錄")
+        return
     if a.cmd == "import-apps-script":
         import asyncio
         from pathlib import Path

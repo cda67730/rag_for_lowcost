@@ -257,4 +257,4 @@
 | --- | --- |
 | 知識庫掛載（標籤、最少段數、權重、啟用） | `bot_knowledge`，Bot 後台「知識庫」分頁 |
 | 知識庫可見範圍 | `knowledge_bases.visibility` ＋ `kb_allowed_bots` |
-| 模型供應商金鑰、資料庫連線、JWT 密鑰、CORS、Langfuse | 伺服器環境變數（見 `server/README.md`） |
+| 模型供應商金鑰、資料庫連線、JWT 密鑰、CORS、紀錄保留天數 | 伺服器環境變數（見 `server/README.md`） |

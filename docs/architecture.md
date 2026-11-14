@@ -7,7 +7,7 @@
 - 一台伺服器服務**多個機器人**，每個機器人有自己的設定、知識、Skill、紀錄、聊天頁入口、後台權限。
 - 一個機器人可以有**多條流程**（例如「問答」與「現場問題收集」），流程由節點組成，開關決定走哪些節點。
 - 設定語意、專案範本、聊天頁與 Apps Script 版相同；Apps Script 版的一份試算表 = 這裡的一個機器人。
-- 可觀測：每一步的輸入輸出、耗時、token 都留紀錄，可接 Langfuse。
+- 可觀測：每一步的輸入輸出、耗時都留紀錄（對話紀錄裡的流程紀錄），後台可查。
 - 金鑰只在伺服器環境變數，前端與資料庫都不碰。
 
 ## 2. 名詞與階層
@@ -41,16 +41,16 @@ Workspace（工作區／租戶）
 │ web/admin/   │           │  graph/   LangGraph 圖（每條 Flow 一張）      │
 └──────────────┘           │  services/ llm、embedding、ingest、kg、deid   │
                            │  settings/ Bot 設定快照、範本匯入            │
-                           └──────┬───────────────┬──────────────┬───────┘
-                                  │               │              │
-                        PostgreSQL + pgvector   Gemini/OpenAI   Langfuse（選用）
-                        （所有資料，含向量）      （模型 API）    （trace）
+                           └──────┬───────────────┬──────────────────────┘
+                                  │               │
+                        PostgreSQL + pgvector   Gemini/OpenAI
+                        （所有資料，含向量）      （模型 API）
 ```
 
 - **單一服務**：FastAPI 進程內跑 LangGraph，不另開 worker。文件匯入與評測這類長工作用背景任務（FastAPI `BackgroundTasks` 起步，量大再換 arq／Celery）。
 - **資料庫一個**：所有表帶 `workspace_id`，Bot 相關的再帶 `bot_id`。向量直接在 `chunks.embedding`（pgvector，HNSW 索引）。
 - **後台**是獨立的靜態 SPA（`web/admin/`），只打 `/api/admin/**`；跟聊天頁一樣部署在 GitHub Pages 或任何靜態空間。Apps Script 版的 `AdminUI.html` 功能照搬，介面重寫。
-- **部署**：`docker-compose.yml` 兩個容器（`db`、`app`）。環境變數：`DATABASE_URL`、`GEMINI_API_KEY`、`OPENAI_API_KEY`、`JWT_SECRET`、`CORS_ORIGINS`、`LANGFUSE_*`（選用）。
+- **部署**：`docker-compose.yml` 兩個容器（`db`、`app`）。環境變數：`DATABASE_URL`、`GEMINI_API_KEY`、`OPENAI_API_KEY`、`JWT_SECRET`、`CORS_ORIGINS`。
 
 ## 4. 多機器人怎麼路由
 
@@ -105,7 +105,8 @@ Flow 的開關覆蓋 Bot 設定：讀設定時先 Bot、再 Flow，Flow 有值�
 ## 9. 可觀測與紀錄
 
 - 每個節點進出寫一筆 `trace`（與 Apps Script 的流程紀錄同格式），存在 `conversations.trace`，觀測邀請碼開啟時回給前端。
-- 接 Langfuse：LangGraph 的 callback 直接送，不另外寫程式；沒設 `LANGFUSE_*` 就不送。
+- 流程紀錄保留 `TRACE_RETENTION_DAYS` 天（預設 90），過期只清流程紀錄，對話內容與統計保留。
+- 外部觀測工具（例如 Langfuse）目前不接；要接時只送去識別化後的內容。
 - 對話紀錄只存去識別化後的文字；`name_map` 不落地。
 
 ## 10. 與 Apps Script 版的差異（刻意的）
@@ -118,7 +119,7 @@ Flow 的開關覆蓋 Bot 設定：讀設定時先 Bot、再 Flow，Flow 有值�
 | 權限 | 單一層級 | 四種角色 |
 | PDF 解析 | 模型讀 | `pypdf`／`pdfplumber`，掃描檔再 OCR |
 | 向量 | 試算表 int8 | pgvector HNSW |
-| 可觀測 | 自製流程面板 | 同格式 trace＋Langfuse |
+| 可觀測 | 自製流程面板 | 同格式 trace（存資料庫，後台可查） |
 | 長工作 | 分批＋觸發器 | 背景任務 |
 
 ## 11. 目錄
@@ -174,7 +175,7 @@ web/admin/                 後台 SPA（原生 JS，靜態部署；呼叫 /api/a
 | 向量模型更換 | 重建知識庫，不做線上轉換；維度在建庫時固定。向量模型可選 Gemini 或 OpenAI，維度 768／1536 |
 | 文件解析 | 第一版：PDF（`pypdf`／`pdfplumber`）、Word（`python-docx`）、PowerPoint（`python-pptx`）、Excel（`openpyxl`）、TXT／Markdown。掃描檔 OCR 第一版不做 |
 | 長工作 | FastAPI 背景任務起步，量大再換佇列 |
-| 可觀測 | 自家 trace 必做；Langfuse 選用，有 `LANGFUSE_*` 環境變數才送 |
+| 可觀測 | 自家 trace 必做；外部觀測工具（Langfuse）暫不接 |
 | 資料庫 | PostgreSQL 17 + pgvector，Docker Compose |
 | 出處顯示 | 新增 Bot 設定 `show_sources`（預設開）：關閉時使用者端不顯示出處按鈕與來源清單；後端仍要求引用、仍做 P09、紀錄仍保留出處。與 `enable_citation`（模型要不要引用）分開 |
 

@@ -1,4 +1,5 @@
 """FastAPI 入口：健康檢查、聊天 API（app/routes/chat.py）、後台 API（app/routes/admin.py）。"""
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.errors import ApiError, handler
+from app.logsetup import setup_logging
 from app.routes.admin import fail_stale_jobs
 from app.routes.admin import router as admin_router
 from app.routes.admin_bot import router as admin_bot_router
@@ -17,6 +19,7 @@ from app.routes.admin_kg import router as admin_kg_router
 from app.routes.admin_eval import router as admin_eval_router
 from app.routes.chat import router as chat_router
 from db.session import engine, session
+from services import retention
 
 
 
@@ -29,9 +32,22 @@ async def lifespan(app):
                 logging.getLogger("app").warning("重新啟動：%d 個中斷的背景工作標為失敗", n)
     except Exception:   # 資料庫還沒好（例如遷移前）不擋啟動，/healthz 會回 503
         logging.getLogger("app").exception("啟動時無法整理背景工作")
+    task = asyncio.create_task(retention_loop())
     yield
+    task.cancel()
 
 
+async def retention_loop(every: float = 24 * 3600):
+    """啟動時清一次超過保留天數的流程紀錄，之後每天一次。多個程序同時跑也沒關係（清過的不會再清）"""
+    while True:
+        try:
+            await asyncio.to_thread(retention.run_once, session)
+        except Exception:
+            logging.getLogger("app").exception("清除過期流程紀錄失敗")
+        await asyncio.sleep(every)
+
+
+setup_logging()
 app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.add_exception_handler(ApiError, handler)
 app.include_router(chat_router)
