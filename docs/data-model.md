@@ -553,10 +553,14 @@ CREATE TABLE jobs (
   result        jsonb,
   created_by    uuid REFERENCES users(id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
-  finished_at   timestamptz
+  finished_at   timestamptz,
+  worker        text NOT NULL DEFAULT '',           -- 負責的伺服器執行個體：主機:主行程 pid:啟動時間
+  updated_at    timestamptz NOT NULL DEFAULT now()  -- 最後一次進度或心跳（執行中每分鐘更新）
 );
 CREATE INDEX ON jobs (workspace_id, created_at DESC);
 ```
+
+多開程式時（`WEB_CONCURRENCY`），工作在接到請求的那個程式裡跑。伺服器啟動時，同一台機器上已經結束的執行個體留下的工作標為失敗；另外每 5 分鐘把超過 15 分鐘沒有心跳的工作標為失敗（`services/jobs.py`）。
 
 伺服器啟動時把 `running` 的工作標為 `failed`（`message='伺服器重啟'`），前端可重試。
 

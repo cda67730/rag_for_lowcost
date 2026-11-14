@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.models import Conversation, Referral, Skill
+from db.session import release
 from graph import prompts as P
 from graph.check import clean_answer, load_forbidden, run_checks, validate_answer
 from services import deid as D
@@ -134,12 +135,6 @@ def load_referrals(session: Session, bot_id: uuid.UUID) -> dict[str, dict]:
 
 
 # ───────── 節點 ─────────
-
-def release(session: Session) -> None:
-    """結束目前的交易、把連線還給連線池。等模型的那幾十秒不佔資料庫連線，同時上線的人才不會把連線池用光"""
-    if session.in_transaction():
-        session.commit()
-
 
 def n_load_config(st: ChatState, config) -> dict:
     d, tn = deps_of(config), st["turn"]

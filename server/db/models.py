@@ -14,6 +14,7 @@ from sqlalchemy import (
     BigInteger, Boolean, CheckConstraint, Computed, DateTime, ForeignKey, Identity, Index, Integer,
     REAL, LargeBinary, MetaData, PrimaryKeyConstraint, SmallInteger, Text, UniqueConstraint,
 )
+from sqlalchemy import func
 from sqlalchemy import text as sql   # 不直接用 text：chunks 有個欄位叫 text，類別內會被遮蔽
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -550,6 +551,14 @@ class Job(Base):
     created_by: Mapped[uuid.UUID | None] = fk("users.id", "SET NULL", nullable=True)
     created_at: Mapped[datetime] = created()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 哪個伺服器執行個體建立／執行（主機:主行程 pid:啟動時間），與最後一次進度或心跳的時間：多開時判斷工作是否還有人在做（services/jobs.py）
+    worker: Mapped[str] = mapped_column(Text, nullable=False, server_default=sql("''"), default=lambda: _job_worker())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=NOW, onupdate=func.now())
+
+
+def _job_worker() -> str:
+    from services.jobs import INSTANCE
+    return INSTANCE
 
 
 # 每種向量維度一條 HNSW 部分運算式索引；新增維度要寫遷移補一條（見 docs/data-model.md）

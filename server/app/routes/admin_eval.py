@@ -15,11 +15,13 @@ from app.routes.admin import DB, Me, audit, body, get_session_factory, uid
 from app.routes.admin_bot import admin_bot
 from app.routes.chat import get_llm
 from db.models import Chunk, Conversation, Document, EvalQuestion, EvalResult, EvalRun, Flow, Job, User
+from db.session import release
 from graph.chat_graph import Deps, run_chat
 from graph.check import load_forbidden
 from services import evaluation as E
 from services.llm import LLMClient
 from services.retrieval import mounts
+from services import jobs
 from settings.loader import SETTING_DEFAULTS, TEXT_DEFAULTS, load_config
 
 router = APIRouter(prefix="/api/admin")
@@ -194,6 +196,7 @@ async def _gen_job(factory, llm: LLMClient, job_id, max_chunks: int, special_n: 
             nb = (len(pick) + E.GEN_BATCH - 1) // E.GEN_BATCH
             for i in range(nb):
                 group = pick[i * E.GEN_BATCH:(i + 1) * E.GEN_BATCH]
+                release(s)      # 等模型時不佔連線
                 try:
                     r, _ = await llm.generate_json(model, E.gen_prompt(group))
                     added += add_questions(s, job.bot_id, [dict(x, expect_chunks=[uuid.UUID(c) for c in x["expect_chunks"]],
@@ -206,6 +209,7 @@ async def _gen_job(factory, llm: LLMClient, job_id, max_chunks: int, special_n: 
                 refs = [k for k in load_referral_names(s, job.bot_id) if k and k != "系統能力不足"]
                 titles = list(dict.fromkeys(c["title"] for c in approved_chunks(s, job.bot_id)))[:40]
                 n = max(2, min(20, special_n))
+                release(s)
                 try:
                     r, _ = await llm.generate_json(model, E.special_prompt(n, refs, titles, cfg.str("system_prompt")))
                     added += add_questions(s, job.bot_id, E.special_parse(refs, r), v)
@@ -235,7 +239,7 @@ async def generate(bot: str, request: Request, tasks: BackgroundTasks, u: User =
     job = Job(workspace_id=b.workspace_id, bot_id=b.id, kind="eval_generate", target=str(b.id), created_by=u.id)
     s.add(job)
     s.commit()
-    tasks.add_task(_gen_job, factory, llm, job.id, mc, sn)
+    tasks.add_task(jobs.run, factory, job.id, _gen_job, factory, llm, job.id, mc, sn)
     return {"job_id": str(job.id)}
 
 
@@ -272,6 +276,7 @@ async def _run_job(factory, llm: LLMClient, job_id, run_id, qids: list[uuid.UUID
                                              {"message": q.question, "history": [], "nameMap": {}, "followups": 0, "answered": 0, "session": f"eval-{run.id}", "unit": "自動評測"})
                     except Exception as e:
                         err, res = str(e)[:200] or type(e).__name__, {"type": "error"}
+                    release(s)      # 評分要再等模型（評審）：先把連線還回去
                     o = await E.score(cfg, llm, {"question": q.question, "expect_chunks": q.expect_chunks, "expect_docs": q.expect_docs, "key_points": q.key_points,
                                                  "expect_referral": q.expect_referral, "expect_rtype": q.expect_rtype}, res, err, forbidden, rnd=random.random)
                     s.add(EvalResult(run_id=run.id, question_id=q.id, attempt=k, rtype=o["rtype"], found=o["found"], rank=o["rank"], on_topic=o["on_topic"],
@@ -338,7 +343,7 @@ async def start_run(bot: str, request: Request, tasks: BackgroundTasks, u: User 
     s.add(job)
     audit(s, b.workspace_id, u, "eval.run", b.slug, {"run": str(run.id), "questions": len(qs), "repeat": repeat}, bot_id=b.id)
     s.commit()
-    tasks.add_task(_run_job, factory, llm, job.id, run.id, [x.id for x in qs])
+    tasks.add_task(jobs.run, factory, job.id, _run_job, factory, llm, job.id, run.id, [x.id for x in qs])
     return {"run_id": str(run.id), "job_id": str(job.id), "questions": len(qs), "repeat": repeat}
 
 

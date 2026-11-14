@@ -45,3 +45,9 @@ def get_session() -> Iterator[Session]:
     """FastAPI 相依注入用：每個請求一個 session，結束自動關閉"""
     with session() as s:
         yield s
+
+
+def release(s: Session) -> None:
+    """結束目前的交易、把連線還給連線池。在等模型的那段時間之前呼叫：等幾秒到幾分鐘都不佔資料庫連線"""
+    if s.in_transaction():
+        s.commit()

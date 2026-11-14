@@ -38,7 +38,8 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
 | `CHAT_TIMEOUT_SECONDS` | 否 | 一個回合最多幾秒，預設 50；超過改給保守回答並記錄（品質旗標 `timeout`）。要比反向代理的逾時短 |
-| `DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT` | 否 | 資料庫連線池，預設 10／20／10 秒。連線只在讀寫時短暫持有，等模型時會先還回去 |
+| `WEB_CONCURRENCY` | 否 | 同時開幾個程式，預設 1；建議設成 CPU 核心數（2～4）。uvicorn 直接讀這個變數，Docker 與一般安裝都適用。背景工作（文件處理、評測、圖譜草稿）在接到請求的那個程式裡跑，伺服器重啟時沒做完的工作會標成失敗、可重試 |
+| `DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT` | 否 | 資料庫連線池，預設 10／20／10 秒，每個程式各一份。連線只在讀寫時短暫持有，等模型時會先還回去。`WEB_CONCURRENCY` ×（POOL_SIZE＋MAX_OVERFLOW）要小於 PostgreSQL 的 `max_connections`（預設 100），例如 4 個程式就設 5／15 |
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90；0＝不清。伺服器啟動時和之後每天清一次，只清流程紀錄，對話內容與統計保留。也可手動跑 `python -m app.cli purge-traces` |
 | `LOG_LEVEL` | 否 | 伺服器 log 詳細程度：`debug`／`info`／`warning`／`error`，預設 `info`。uvicorn 本身的存取紀錄另用 `--log-level` 控制 |
 | `APP_TIMEZONE` | 否 | 每日、每小時用量上限以哪個時區換日，預設 `Asia/Taipei` |

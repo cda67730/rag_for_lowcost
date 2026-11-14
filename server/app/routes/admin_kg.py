@@ -16,6 +16,7 @@ from app.routes.chat import get_llm
 from db.models import BotKnowledge, Job, KgCandidate, User
 from services import kg_admin
 from services.llm import LLMClient
+from services import jobs
 from settings.loader import build_config, load_config
 
 router = APIRouter(prefix="/api/admin")
@@ -87,7 +88,7 @@ async def kg_tag(doc: str, u: User = Me, s: Session = DB, llm: LLMClient = Depen
     d, k = get_doc(s, u, doc)
     require(s, u, k.workspace_id, {"admin"}, ws_level=True)
     model, _, domain, _ = _ctx(s, k.id)
-    out = await kg_admin.map_document(s, llm, model, domain, d.id)
+    out = await kg_admin.map_document(s, llm, model, domain, d.id, release_db=True)    # 等模型時不佔連線
     audit(s, k.workspace_id, u, "kg.tag", d.title, out, kb_id=k.id)
     s.commit()
     return out
@@ -125,5 +126,5 @@ def kg_generate(kb: str, tasks: BackgroundTasks, u: User = Me, s: Session = DB, 
     s.add(job)
     audit(s, k.workspace_id, u, "kg.generate", k.slug, kb_id=k.id)
     s.commit()
-    tasks.add_task(_gen_job, factory, llm, job.id, u.login)
+    tasks.add_task(jobs.run, factory, job.id, _gen_job, factory, llm, job.id, u.login)
     return {"job_id": str(job.id)}

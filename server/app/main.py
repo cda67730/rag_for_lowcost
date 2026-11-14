@@ -11,7 +11,6 @@ from sqlalchemy import text
 
 from app.errors import ApiError, handler
 from app.logsetup import setup_logging
-from app.routes.admin import fail_stale_jobs
 from app.routes.admin import router as admin_router
 from app.routes.admin_bot import router as admin_bot_router
 from app.routes.admin_ops import router as admin_ops_router
@@ -19,7 +18,7 @@ from app.routes.admin_kg import router as admin_kg_router
 from app.routes.admin_eval import router as admin_eval_router
 from app.routes.chat import router as chat_router
 from db.session import engine, session
-from services import retention
+from services import jobs, retention
 
 
 
@@ -27,14 +26,16 @@ from services import retention
 async def lifespan(app):
     try:
         with session() as s:
-            n = fail_stale_jobs(s)
+            n = jobs.recover(s, startup=True)
             if n:
                 logging.getLogger("app").warning("重新啟動：%d 個中斷的背景工作標為失敗", n)
     except Exception:   # 資料庫還沒好（例如遷移前）不擋啟動，/healthz 會回 503
         logging.getLogger("app").exception("啟動時無法整理背景工作")
-    task = asyncio.create_task(retention_loop())
+    logging.getLogger("app").info("伺服器執行個體 %s（行程 %d）", jobs.INSTANCE, os.getpid())
+    tasks = [asyncio.create_task(retention_loop()), asyncio.create_task(jobs.monitor(session))]
     yield
-    task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 async def retention_loop(every: float = 24 * 3600):

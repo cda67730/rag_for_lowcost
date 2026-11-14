@@ -23,6 +23,7 @@ from db.session import get_session
 from services import ingest
 from services.llm import LLMClient, validate_embed_config
 from services.parsers import ParseError
+from services import jobs
 from settings.loader import FLOW_OVERRIDABLE, GROUPS, KB_LEVEL, SETTING_DEFAULTS, SETTING_NOTES, TEXT_DEFAULTS, TIERS, load_config
 from settings.store import SettingsError, apply_tier, save_bot_settings
 
@@ -434,7 +435,7 @@ async def upload_document(kb: str, request: Request, tasks: BackgroundTasks, u: 
     s.add(job)
     audit(s, k.workspace_id, u, "document.upload", doc.title, {"doc_id": str(doc.id), "filename": doc.filename}, kb_id=k.id)
     s.commit()
-    tasks.add_task(ingest.run_ingest_job, factory, llm, job.id)
+    tasks.add_task(jobs.run, factory, job.id, ingest.run_ingest_job, factory, llm, job.id)
     return {"doc_id": str(doc.id), "job_id": str(job.id), "status": "processing"}
 
 
@@ -508,16 +509,3 @@ def get_job(job: str, u: User = Me, s: Session = DB):
     if j is None or not (ws_roles(s, u, j.workspace_id) or (j.bot_id and roles_of(s, u, j.workspace_id, j.bot_id))):
         raise not_found()
     return {"id": str(j.id), "kind": j.kind, "status": j.status, "progress": j.progress, "message": j.message, "result": j.result}
-
-
-def fail_stale_jobs(s: Session) -> int:
-    """伺服器重啟時，還在 queued／running 的工作已經沒人做了：標成 failed，前端可重試"""
-    jobs = s.scalars(select(Job).where(Job.status.in_(("queued", "running")))).all()
-    for j in jobs:
-        j.status, j.message, j.finished_at = "failed", "伺服器重新啟動，工作中斷，請重試", datetime.now(timezone.utc)
-        if j.kind == "ingest":
-            d = s.get(Document, uid(j.target)) if j.target else None
-            if d is not None and d.status == "processing":
-                d.status, d.error = "failed", "伺服器重新啟動，處理中斷，請重新處理"
-    s.commit()
-    return len(jobs)

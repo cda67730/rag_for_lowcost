@@ -199,5 +199,20 @@ def test_stale_jobs_marked_failed(env):
     c, db, ws, *_ = env
     k = m.KnowledgeBase(workspace_id=ws.id, slug="k", name="k", embed_model="gemini-embedding-001", embed_dim=768); db.add(k); db.flush()
     d = m.Document(kb_id=k.id, title="d", status="processing"); db.add(d); db.flush()
-    db.add(m.Job(workspace_id=ws.id, kind="ingest", target=str(d.id), status="running")); db.flush()
-    assert A.fail_stale_jobs(db) == 1 and d.status == "failed" and "重新啟動" in d.error
+    import socket
+    from datetime import datetime, timedelta, timezone
+    from services import jobs
+    host = socket.gethostname()
+    now = datetime.now(timezone.utc)
+    mine = m.Job(workspace_id=ws.id, kind="eval_run", status="running")                                    # 這個執行個體正在做
+    other_live = m.Job(workspace_id=ws.id, kind="eval_run", status="running", worker=f"{host}:1:{jobs._start_time(1) or ''}")   # 同機器、還活著
+    remote = m.Job(workspace_id=ws.id, kind="eval_run", status="queued", worker="別台機器:123:456")           # 別台機器、有心跳
+    dead = m.Job(workspace_id=ws.id, kind="ingest", target=str(d.id), status="running", worker=f"{host}:999999:1")   # 同機器、行程已不在
+    reused = m.Job(workspace_id=ws.id, kind="eval_run", status="running", worker=f"{host}:1:不同的啟動時間")       # pid 被重用
+    stale = m.Job(workspace_id=ws.id, kind="eval_run", status="running", worker="別台機器:1:1", updated_at=now - timedelta(minutes=20))
+    done = m.Job(workspace_id=ws.id, kind="eval_run", status="done", worker=f"{host}:999999:1")
+    db.add_all([mine, other_live, remote, dead, reused, stale, done]); db.flush()
+    assert mine.worker == jobs.INSTANCE
+    assert jobs.recover(db) == 1 and stale.status == "failed" and dead.status == "running"            # 定期檢查只看心跳
+    assert jobs.recover(db, startup=True) == 2 and dead.status == "failed" and reused.status == "failed" and d.status == "failed" and "重新啟動" in d.error
+    assert (mine.status, other_live.status, remote.status, done.status) == ("running", "running", "queued", "done")

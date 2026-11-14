@@ -16,6 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from db.models import BotKnowledge, Chunk, Document, DocumentFile, Job, KnowledgeBase
+from db.session import release
 from services import parsers
 from services.chunking import chunk_units
 from services.llm import LLMClient, LLMError
@@ -155,8 +156,9 @@ def _fail(session: Session, doc: Document, msg: str) -> Result:
     return Result("failed", error=doc.error)
 
 
-async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, progress=None) -> Result:
-    """解析原始檔並（重新）產生段落；呼叫端負責 commit"""
+async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, progress=None, release_db: bool = False) -> Result:
+    """解析原始檔並（重新）產生段落；呼叫端負責 commit。
+    release_db=True（背景任務）：等模型前先提交、把連線還回去；段落寫好就提交，圖譜標註另外一個交易"""
     doc = session.get(Document, doc_id)
     if doc is None:
         raise LookupError("找不到文件")
@@ -176,8 +178,12 @@ async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, 
         return _fail(session, doc, "沒有讀到任何文字")
     step(0.3, f"切成 {len(pieces)} 段")
     model, role_user = _bot_context(session, kb.id)
+    if release_db:
+        release(session)
     types, bad_batches = await classify(llm, model, role_user, [p.text for p in pieces])
     step(0.6, "段落類型完成")
+    if release_db:
+        release(session)
     try:
         vecs = await embed_all(llm, kb.embed_model, kb.embed_dim, [embed_text(doc.title, p.page, p.text) for p in pieces])
     except Exception as e:   # 設定錯誤（缺金鑰、維度不符）等：整份失敗
@@ -197,8 +203,11 @@ async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, 
     if kb.auto_kg_tag:      # 有圖譜就順便標註；失敗不影響匯入
         from services import kg_admin
         try:
-            with session.begin_nested():
-                r = await kg_admin.map_document(session, llm, model, _domain(session, kb.id), doc.id)
+            if release_db:      # 段落會先提交（文件仍是「處理中」），標註在等模型時不佔連線；標註寫入失敗只回滾標註
+                r = await kg_admin.map_document(session, llm, model, _domain(session, kb.id), doc.id, release_db=True)
+            else:
+                with session.begin_nested():
+                    r = await kg_admin.map_document(session, llm, model, _domain(session, kb.id), doc.id)
             if r.get("candidates"):
                 notes.append(f"圖譜標註提出 {r['candidates']} 個新節點候選")
         except Exception:
@@ -254,7 +263,7 @@ async def run_ingest_job(session_factory, llm: LLMClient, job_id: uuid.UUID) -> 
             s.commit()
 
         try:
-            r = await process_document(s, llm, uuid.UUID(job.target), progress)
+            r = await process_document(s, llm, uuid.UUID(job.target), progress, release_db=True)
             s.refresh(job, ["status"])
             if job.status == "cancelled":       # 處理中被取消：結果保留，狀態不覆蓋
                 s.commit()

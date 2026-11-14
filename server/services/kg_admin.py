@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from db.models import Chunk, Document, KgCandidate, KgDef, KgEdge, KgLink, KgNode, KgSource
+from db.session import release
 from graph.prompts import js_json
 from services.llm import LLMClient
 from settings.loader import js_str
@@ -321,7 +322,8 @@ def done_chunks(session: Session, kb_id) -> set:
     return set(session.scalars(q))
 
 
-async def map_document(session: Session, llm: LLMClient, model: str, domain: str, doc_id: uuid.UUID) -> dict:
+async def map_document(session: Session, llm: LLMClient, model: str, domain: str, doc_id: uuid.UUID, release_db: bool = False) -> dict:
+    """release_db=True：讀完資料先提交、把連線還回去再等模型（呼叫端沒有未提交、需要一起回滾的寫入時才用）"""
     doc = session.get(Document, doc_id)
     if not session.scalar(select(KgNode.id).where(KgNode.kb_id == doc.kb_id).limit(1)):
         return {"skipped": "尚未匯入知識圖譜"}
@@ -330,7 +332,13 @@ async def map_document(session: Session, llm: LLMClient, model: str, domain: str
     if not chunks:
         return {"links": 0, "main": 0, "candidates": 0, "candidateHits": 0}
     defs = load_defs(session, doc.kb_id)
-    res = await map_chunks(llm, model, defs, domain, node_dicts(_graph_nodes(session, doc.kb_id)), doc.title, chunks)
+    nodes, title, kb_id = node_dicts(_graph_nodes(session, doc.kb_id)), doc.title, doc.kb_id
+    if release_db:
+        release(session)
+    res = await map_chunks(llm, model, defs, domain, nodes, title, chunks)
+    if release_db:
+        with session.begin_nested():        # 寫入一半失敗就整批不寫
+            return save_mapping(session, kb_id, doc_id, res)
     return save_mapping(session, doc.kb_id, doc_id, res)
 
 
@@ -725,6 +733,7 @@ async def generate(session: Session, llm: LLMClient, model: str, domain: str, ro
                            .where(Chunk.kb_id == kb_id, Document.status == "approved").order_by(Document.uploaded_at, Chunk.seq)).all()
     chunks = [{"id": str(c.id), "docId": str(d.id), "title": d.title, "text": c.text} for c, d in rows]
     docs = {str(d.id): {"title": d.title, "publisher": d.source_note, "scope": d.evidence} for _, d in rows}
+    release(session)        # 之後幾十批都在等模型，只讀不寫：先把連線還回去
     items: list[dict] = []
     nb = (len(chunks) + GEN_BATCH - 1) // GEN_BATCH
     for b in range(nb):
@@ -739,6 +748,7 @@ async def generate(session: Session, llm: LLMClient, model: str, domain: str, ro
     keep, lst = gen_merge(items)
     if not keep:
         raise ValueError("沒有抽出任何概念（已核可的文件太少或模型失敗）")
+    release(session)
     h, _ = await llm.generate_json(model, hierarchy_prompt(domain, keep), temperature=0)
     now = datetime.now(timezone.utc)
     pre = "g" + now.strftime("%y%m%d%H%M") + "_"
