@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>後台</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">後台</a>
+  <nav id="crumbs" class="crumbs"></nav>
+  <span class="me" id="me"></span>
+</header>
+<main id="view" class="view"><p class="note">載入中…</p></main>
+<aside id="side" class="side" aria-hidden="true">
+  <div class="side-h"><b id="sideTitle"></b><button class="btn" id="sideClose" type="button">關閉</button></div>
+  <div class="side-b" id="sideBody"></div>
+</aside>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="config.js"></script>
+<script src="../chat/trace.js"></script>
+<script src="../chat/answer.js"></script>
+<script src="lib.js"></script>
+<script src="views/auth.js"></script>
+<script src="views/workspace.js"></script>
+<script src="views/settings.js"></script>
+<script src="views/bot.js"></script>
+<script src="views/kb.js"></script>
+<script src="views/eval.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人，每個機器人有自己的設定、Skill、紀錄與聊天入口；知識庫獨立、可以被多個機器人掛載。
 
-> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）、文件匯入、後台 API（全部，見 `docs/admin-api.md`）已完成並有測試；後台頁面開發中。下面標「規劃」的指令尚未實作。
+> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）、文件匯入、後台 API（全部，見 `docs/admin-api.md`）與後台頁面（`web/admin/`）已完成並有測試。下面標「規劃」的指令尚未實作。
 
 ## 文件
 
@@ -110,7 +110,7 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 
 ## 第一次設定
 
-1. 開後台（`web/admin/`，部署方式同聊天頁），`config.js` 填 API 網址，用剛建的 owner 帳號登入。
+1. 開後台（`web/admin/`，部署方式同聊天頁；推上 GitHub 後網址是 `https://<帳號>.github.io/<repo>/admin/`），`web/admin/config.js` 的 `API_URL` 填 API 網址，用剛建的 owner 帳號登入。`CORS_ORIGINS` 要包含後台所在的網址。
 2. **建知識庫**：Workspace → 知識庫 → 新增。選向量模型與維度（之後不能改）、可見範圍（整個 Workspace／只給指定 Bot）。向量模型可選 Gemini（`gemini-embedding-001`）或 OpenAI（`text-embedding-3-small`／`-large`），維度 768 或 1536；完整清單見 `docs/data-model.md`。同一個機器人掛的知識庫要用同一個向量模型。
 3. **上傳文件**到知識庫 → 等處理完 → 看段落 → 核可。
 4. **建機器人**：Workspace → 機器人 → 新增，填 slug（聊天頁網址會用到）與名稱，可直接選一份專案範本。

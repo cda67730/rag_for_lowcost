@@ -23,7 +23,7 @@ from db.session import get_session
 from services import ingest
 from services.llm import LLMClient, validate_embed_config
 from services.parsers import ParseError
-from settings.loader import FLOW_OVERRIDABLE, GROUPS, SETTING_DEFAULTS, SETTING_NOTES, TEXT_DEFAULTS, TIERS, load_config
+from settings.loader import FLOW_OVERRIDABLE, GROUPS, KB_LEVEL, SETTING_DEFAULTS, SETTING_NOTES, TEXT_DEFAULTS, TIERS, load_config
 from settings.store import SettingsError, apply_tier, save_bot_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -236,7 +236,7 @@ def get_settings(bot: str, u: User = Me, s: Session = DB):
     items = []
     for k, dflt in list(SETTING_DEFAULTS.items()) + [(k, v) for k, v in TEXT_DEFAULTS.items() if k not in SETTING_DEFAULTS]:
         items.append({"key": k, "value": stored.get(k, dflt), "default": dflt, "is_default": k not in own, "note": SETTING_NOTES.get(k, ""),
-                      "flow_overridable": k in FLOW_OVERRIDABLE, "text": k in TEXT_DEFAULTS})
+                      "flow_overridable": k in FLOW_OVERRIDABLE, "text": k in TEXT_DEFAULTS, "kb_level": k in KB_LEVEL})
     return {"items": items, "groups": GROUPS, "tiers": TIERS, "schema": [f.to_public() for f in cfg.schema()], "notes": cfg.notes}
 
 
