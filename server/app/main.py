@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.errors import ApiError, handler
 from app.routes.admin import fail_stale_jobs
 from app.routes.admin import router as admin_router
+from app.routes.admin_bot import router as admin_bot_router
 from app.routes.chat import router as chat_router
 from db.session import engine, session
 
@@ -32,6 +33,7 @@ app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None, lifespan=
 app.add_exception_handler(ApiError, handler)
 app.include_router(chat_router)
 app.include_router(admin_router)
+app.include_router(admin_bot_router)
 
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 if origins:

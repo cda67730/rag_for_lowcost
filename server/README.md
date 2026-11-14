@@ -31,7 +31,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | 變數 | 必要 | 說明 |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | 是 | 資料庫密碼；docker compose 用它建資料庫並自動組出 app 容器的連線字串 |
-| `DATABASE_URL` | 本機開發才要 | 本機直接跑 uvicorn／alembic／pytest 時用，例如 `postgresql+psycopg://rag:<密碼>@localhost:5432/rag`；compose 裡的 app 不讀這個 |
+| `DATABASE_URL` | 不用 Docker 時要 | 直接跑 uvicorn／alembic／pytest 時用（不用 Docker 安裝、本機開發），例如 `postgresql+psycopg://rag:<密碼>@localhost:5432/rag`；compose 裡的 app 不讀這個 |
 | `GEMINI_API_KEY` | 是 | Gemini 金鑰 |
 | `OPENAI_API_KEY` | 否 | 要用 OpenAI 的生成或向量模型才填 |
 | `JWT_SECRET` | 是 | 後台登入用，至少 32 個隨機字元（`openssl rand -hex 32`） |
@@ -71,6 +71,26 @@ docker compose exec app python -m app.cli create-workspace --slug main --name "�
 ```
 
 API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS，並在 `.env` 設 `FORWARDED_ALLOW_IPS=<代理的 IP>`（映像檔已開 `--proxy-headers`），邀請碼錯誤次數才會依使用者的真實 IP 計算。
+
+### 不用 Docker 安裝（正式環境也可以）
+
+Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／17（含 pgvector；0.8 以上較好，0.6 也能跑）。
+
+1. 資料庫二選一：
+   - 自己裝：Ubuntu `sudo apt install postgresql-16 postgresql-16-pgvector`，建資料庫與帳號（`createdb rag`）。
+   - 雲端託管：Supabase、Neon 等內建 pgvector 的 PostgreSQL，取得連線字串即可。
+2. 程式：
+   ```bash
+   cd server
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -e .
+   cp .env.example .env     # 填 DATABASE_URL、GEMINI_API_KEY、JWT_SECRET、CORS_ORIGINS
+   alembic upgrade head     # 會自動建立 vector 擴充與資料表（帳號要有建立擴充的權限）
+   python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
+   uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+   ```
+3. 常駐：Linux 用 systemd（`ExecStart=/path/server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers`、`WorkingDirectory=/path/server`、`EnvironmentFile=/path/server/.env`）；Windows 用 NSSM 之類的服務包裝工具。
+4. 對外：前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
 
 ### 本機開發（不用 Docker 跑 app）
 
