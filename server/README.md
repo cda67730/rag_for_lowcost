@@ -2,7 +2,7 @@
 
 LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人，每個機器人有自己的設定、Skill、紀錄與聊天入口；知識庫獨立、可以被多個機器人掛載。
 
-> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）已完成，並與 Apps Script 版逐項比對測試；後台、文件匯入開發中。下面標「規劃」的指令尚未實作。
+> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）、文件匯入、後台 API 第一批（登入、機器人、設定、知識庫與掛載、文件上傳與審核、背景任務）已完成並有測試；後台其餘 API 與後台頁面開發中。下面標「規劃」的指令尚未實作。
 
 ## 文件
 
@@ -66,7 +66,7 @@ git clone <repo> && cd <repo>/server
 cp .env.example .env          # 填入上表的變數
 docker compose up -d          # 啟動 db（Postgres 17 + pgvector）與 app
 docker compose exec app alembic upgrade head          # 建立資料表
-docker compose exec app python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin   # 規劃
+docker compose exec app python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
 # 會提示輸入 owner 的密碼
 ```
 

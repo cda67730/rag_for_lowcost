@@ -2,6 +2,10 @@
 
 後台 SPA（`web/admin/`）只打這些端點。聊天端點見 `api.md`；資料表見 `data-model.md`。
 
+## 實作狀態
+
+已完成（`server/app/routes/admin.py`）：§1 全部；§3 的 Bot 列表、建立、讀取、修改；§4 的設定讀寫與套用版本；§7 的知識庫列表、建立、讀取與 Bot 掛載；§8 的文件列表、上傳、讀取、審核、段落、原始檔、修復；§12 的查詢工作。其餘端點開發中。
+
 ## 通則
 
 - 前綴 `/api/admin`。請求與回應 JSON；上傳用 `multipart/form-data`。

@@ -1,16 +1,37 @@
-"""FastAPI 入口：健康檢查、聊天 API（app/routes/chat.py）；後台路由依 docs/architecture.md 的順序陸續加入。"""
+"""FastAPI 入口：健康檢查、聊天 API（app/routes/chat.py）、後台 API（app/routes/admin.py）。"""
+import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.errors import ApiError, handler
+from app.routes.admin import fail_stale_jobs
+from app.routes.admin import router as admin_router
 from app.routes.chat import router as chat_router
-from db.session import engine
+from db.session import engine, session
 
-app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    try:
+        with session() as s:
+            n = fail_stale_jobs(s)
+            if n:
+                logging.getLogger("app").warning("重新啟動：%d 個中斷的背景工作標為失敗", n)
+    except Exception:   # 資料庫還沒好（例如遷移前）不擋啟動，/healthz 會回 503
+        logging.getLogger("app").exception("啟動時無法整理背景工作")
+    yield
+
+
+app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_exception_handler(ApiError, handler)
 app.include_router(chat_router)
+app.include_router(admin_router)
 
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 if origins:
