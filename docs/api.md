@@ -26,7 +26,7 @@ window.CHAT_CONFIG = {
 };
 ```
 
-`chat.js` 只有一個送出函式：`apps-script` 時 POST 到 `GAS_URL` 並把動作放在 `action` 欄位；`server` 時 POST 到 `API_URL + "/api/" + action` 並附上 `bot`。其他程式不分後端。（目前 `chat.js` 只實作 `apps-script`；`server` 模式隨 Python 版第一支聊天端點一起加。）
+`chat.js` 只有一個送出函式 `callBackend`：`apps-script` 時 POST 到 `GAS_URL` 並把動作放在 `action` 欄位；`server` 時 POST 到 `API_URL + "/api/" + action` 並附上 `bot`（與網址的 `flow`）。其他程式不分後端。兩種都用 `Content-Type: text/plain`，屬於「簡單請求」，瀏覽器不會先送 CORS 預檢。
 
 ---
 

@@ -2,7 +2,7 @@
 
 LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人，每個機器人有自己的設定、Skill、紀錄與聊天入口；知識庫獨立、可以被多個機器人掛載。
 
-> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）已完成，並與 Apps Script 版逐項比對測試；聊天 API、後台、文件匯入開發中。下面標「規劃」的指令尚未實作。
+> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）已完成，並與 Apps Script 版逐項比對測試；後台、文件匯入開發中。下面標「規劃」的指令尚未實作。
 
 ## 文件
 
@@ -40,6 +40,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90 |
 | `LANGFUSE_HOST` `LANGFUSE_PUBLIC_KEY` `LANGFUSE_SECRET_KEY` | 否 | 三個都有才會送 trace 到 Langfuse |
 | `LOG_LEVEL` | 否 | 預設 `info` |
+| `APP_TIMEZONE` | 否 | 每日、每小時用量上限以哪個時區換日，預設 `Asia/Taipei` |
 
 ### API 金鑰放哪裡
 
@@ -69,7 +70,7 @@ docker compose exec app python -m app.cli create-workspace --slug main --name "�
 # 會提示輸入 owner 的密碼
 ```
 
-API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS。
+API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS，並在 `.env` 設 `FORWARDED_ALLOW_IPS=<代理的 IP>`（映像檔已開 `--proxy-headers`），邀請碼錯誤次數才會依使用者的真實 IP 計算。
 
 ### 本機開發（不用 Docker 跑 app）
 
@@ -97,7 +98,7 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 6. 「機器人設定」選版本、填角色用詞、選模型並測試。
 7. 「邀請碼」新增一組，或關閉邀請碼（記得設每日上限）。
 8. 「測試對話」試問，看流程紀錄。
-9. 聊天頁：`web/chat/config.js` 填 API 網址；使用者開 `https://<聊天頁網址>/?bot=<slug>`。
+9. 聊天頁：`web/chat/config.js` 設 `BACKEND: "server"`、`API_URL` 填 API 網址；使用者開 `https://<聊天頁網址>/?bot=<slug>`。
 
 再開一個機器人：重複 4–8，可以掛同一個知識庫。
 

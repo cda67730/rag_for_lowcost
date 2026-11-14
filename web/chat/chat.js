@@ -7,9 +7,18 @@
   const ui = (k, d) => (UI[k] != null && UI[k] !== "" ? UI[k] : d);
   let S = { code: "", session: newSession(), history: [], nameMap: {}, followups: 0, answered: 0, turn: 0, welcome: "", trace: false, replies: [], view: -1 };
 
+  // 兩種後端（docs/api.md）：apps-script＝POST 到 GAS_URL、動作放 action；server＝POST 到 API_URL/api/<動作>、附 bot（網址 ?bot= 優先）
+  const Q = new URLSearchParams(location.search);
+  const SERVER = C.BACKEND === "server";
+  function callBackend(action, body) {
+    const url = SERVER ? String(C.API_URL || "").replace(/\/+$/, "") + "/api/" + action : C.GAS_URL;
+    if (!url || url.includes("請替換") || (SERVER && !C.API_URL)) throw new Error("尚未設定後端網址（chat/config.js）");
+    const b = SERVER ? Object.assign({ bot: Q.get("bot") || C.BOT || "" }, Q.get("flow") ? { flow: Q.get("flow") } : {}, body) : Object.assign({ action }, body);
+    // text/plain 是「簡單請求」，瀏覽器不會先送 CORS 預檢；兩種後端都接受
+    return fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(b) });
+  }
   async function api(action, payload) {
-    if (!C.GAS_URL || C.GAS_URL.includes("請替換")) throw new Error("尚未設定後端網址（chat/config.js）");
-    const res = await fetch(C.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ action, code: S.code, session: S.session }, payload || {})) });
+    const res = await callBackend(action, Object.assign({ code: S.code, session: S.session }, payload || {}));
     const d = await res.json().catch(() => ({ ok: false, error: "伺服器回應無法解析" }));
     if (!d.ok) throw new Error(d.error || "發生錯誤，請稍後再試");
     return d;
@@ -166,7 +175,7 @@
   // 載入時先拿介面設定；後台關閉邀請碼時直接進聊天（不顯示邀請碼頁）
   (async () => {
     try {
-      const r = await fetch(C.GAS_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "ui" }) }).then((x) => x.json());
+      const r = await callBackend("ui", {}).then((x) => x.json());
       if (r && r.ok) { applyUi(r.ui); if (r.invite === false) { $("gate").hidden = true; enter(""); } }
     } catch (e) {}
   })();

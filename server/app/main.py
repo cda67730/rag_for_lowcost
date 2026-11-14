@@ -1,4 +1,4 @@
-"""FastAPI 入口。目前只有健康檢查；聊天與後台路由依 docs/architecture.md 的順序陸續加入。"""
+"""FastAPI 入口：健康檢查、聊天 API（app/routes/chat.py）；後台路由依 docs/architecture.md 的順序陸續加入。"""
 import os
 
 from fastapi import FastAPI
@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.routes.chat import router as chat_router
 from db.session import engine
 
 app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None)
+app.include_router(chat_router)
 
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 if origins:

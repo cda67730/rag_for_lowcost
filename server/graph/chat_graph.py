@@ -553,7 +553,8 @@ def log_turn(d: Deps, req: dict, res: dict, trace: list[dict]) -> None:
     turn = _js_number(req.get("turn")) or len(history) // 2 + 1
     ans = res.get("answer") or ({"questions": res["questions"], "empathy": res.get("empathy")} if "questions" in res else {"message": res["message"]} if "message" in res else None)
     d.session.add(Conversation(
-        bot_id=d.bot_id, flow_id=d.flow_id, session=js_str(req.get("session")), turn=turn, unit=js_str(req.get("unit")), user_text=res.get("deidText") or "",
+        bot_id=d.bot_id, flow_id=d.flow_id, session=js_str(req.get("session")), turn=turn, invite_code_id=req.get("invite_code_id"),
+        unit=js_str(req.get("unit")), user_text=res.get("deidText") or "",
         rtype=res["type"], intent=res.get("intent") or "", triage=res.get("triage"), referral=res.get("referral"), answer=ans,
         sources=res.get("sources") or [], checks=res.get("checks") or [], rewritten=bool(res.get("rewritten")), skills=m.get("skills") or [],
         hits=m.get("retrieved") or 0, top_score=m.get("top") or 0, cited=m.get("cited") or 0, ms=res.get("ms") or 0,
