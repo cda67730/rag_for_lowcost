@@ -5,7 +5,6 @@ prompt、評分規則、摘要算法與 Apps Script 逐項比對（tests/test_ev
 """
 from __future__ import annotations
 
-import json
 import math
 import random
 import re

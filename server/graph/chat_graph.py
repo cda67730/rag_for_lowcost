@@ -6,14 +6,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import operator
+import os
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.models import Conversation, Referral, Skill
@@ -25,6 +29,7 @@ from services.llm import LLMClient
 from services.retrieval import SearchResult, expand_query, load_synonyms, mounts, rerank_select, search
 from settings.loader import BotConfig, js_str, js_truthy, load_config
 
+log = logging.getLogger("chat")
 
 # ───────── 依賴與 state ─────────
 
@@ -47,6 +52,11 @@ class Turn:
     stage: str = ""
     ev: list[dict] = field(default_factory=list)
     rewrite_why: list[str] = field(default_factory=list)
+    # 資料庫連線只在讀寫的那一小段時間持有（見 db_phase）；逾時處理要用 session 前也得拿這把鎖，避免和還在執行緒裡跑的查詢搶同一個 session
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    cfg: Any = None          # 逾時改給保守回答時要用：設定、轉介資源、去識別化結果
+    refs: dict = field(default_factory=dict)
+    deid: dict | None = None
 
     def ms(self) -> int:
         return int((time.monotonic() - self.t0) * 1000)
@@ -125,11 +135,20 @@ def load_referrals(session: Session, bot_id: uuid.UUID) -> dict[str, dict]:
 
 # ───────── 節點 ─────────
 
+def release(session: Session) -> None:
+    """結束目前的交易、把連線還給連線池。等模型的那幾十秒不佔資料庫連線，同時上線的人才不會把連線池用光"""
+    if session.in_transaction():
+        session.commit()
+
+
 def n_load_config(st: ChatState, config) -> dict:
-    d = deps_of(config)
-    cfg = load_config(d.session, d.bot_id, d.flow_id, d.override)
-    data = {"mounts": mounts(d.session, d.bot_id), "skills": load_skills(d.session, d.bot_id), "refs": load_referrals(d.session, d.bot_id),
-            "synonyms": load_synonyms(d.session, d.bot_id), "forbidden": load_forbidden(d.session, d.bot_id)}
+    d, tn = deps_of(config), st["turn"]
+    with tn.lock:
+        cfg = load_config(d.session, d.bot_id, d.flow_id, d.override)
+        data = {"mounts": mounts(d.session, d.bot_id), "skills": load_skills(d.session, d.bot_id), "refs": load_referrals(d.session, d.bot_id),
+                "synonyms": load_synonyms(d.session, d.bot_id), "forbidden": load_forbidden(d.session, d.bot_id)}
+        release(d.session)
+    tn.cfg, tn.refs = cfg, data["refs"]
     for k, m in cfg.notes:      # 設定讀取時發現的問題也記進穩定度
         st["turn"].note(k, m)
     return {"cfg": cfg, "data": data, "metrics": {"retrieved": None, "top": None, "cited": None, "skills": []}, "quality": {"gap": None, "l5": []}}
@@ -154,6 +173,8 @@ async def n_deid(st: ChatState, config) -> dict:
         d = {"text": r.text, "map": r.map}
         p03 = {"step": "P03 去識別化", "kind": "text",
                "detail": ("規則" if mode == "rule" else "AI") + (f"（AI 失敗改用規則：{r.fallback}）" if r.fallback else "") + "｜" + _deid_note(d["map"]), "ms": tn.ms()}
+    if not merge:
+        tn.deid = d          # 併入 L4 的情況要等 L4 回報新名字才算去識別化完成
     history = list(req.get("history") or [])[-8:]
     prev = [js_str(h.get("text")) for h in history if isinstance(h, dict) and h.get("role") == "teacher"]
     return {"deid": d, "merge_deid": merge, "p03": p03, "history": history, "prev": prev}
@@ -236,6 +257,7 @@ def n_apply_deid_result(st: ChatState, config) -> dict:
             tri["referral"] = {**rf, "reason": D.apply(js_str(rf["reason"]), d["map"])}
         p03["ms"] = tn.ms()
         upd = {"deid": d}
+        tn.deid = d
     rf = tri.get("referral") if isinstance(tri.get("referral"), dict) else {}
     ref = rf if (js_truthy(rf.get("category")) and rf.get("category") != "none" and js_truthy(rf.get("level")) and rf.get("level") != "none") else None
     # 意圖：new 只看這一則；enable_case_flow 關閉時整段對話當同一個案、每次都完整回答
@@ -341,7 +363,10 @@ def n_kg_match(st: ChatState, config) -> dict:
     if not cfg.flag("enable_kg"):
         return {"kg": None, "focus": focus}
     exp = st["exp_new"] if st["is_new"] else st["exp_all"]
-    kg = kg_match(deps_of(config).session, cfg, [m.kb_id for m in st["data"]["mounts"]], st["case_text"] + "\n" + focus, exp["concepts"])
+    d = deps_of(config)
+    with st["turn"].lock:
+        kg = kg_match(d.session, cfg, [m.kb_id for m in st["data"]["mounts"]], st["case_text"] + "\n" + focus, exp["concepts"])
+        release(d.session)
     mode = cfg.str("kg_mode") or "hybrid"
     tr = [T(st, "知識圖譜", {"mode": mode, "nodes": [("↳ " if n["hop"] else "") + n["name"] + "（" + n["type"] + "）" for n in kg["nodes"]], "chunks": len(kg["chunks"]), "note": kg["note"]}, "json")]
     if mode == "only" and not kg["chunks"]:
@@ -356,7 +381,13 @@ async def n_retrieve(st: ChatState, config) -> dict:
     qvec = vecs[1] if st["is_new"] else vecs[0]
     pool = max(cfg.int("rerank_pool") or 12, cfg.int("top_k") or 6)
     if qvec:
-        sd = search(d.session, cfg, st["data"]["mounts"], qvec, st["case_text"], exp["concepts"], pool=pool, kg=st["kg"])
+        def db():
+            with st["turn"].lock:
+                try:
+                    return search(d.session, cfg, st["data"]["mounts"], qvec, st["case_text"], exp["concepts"], pool=pool, kg=st["kg"])
+                finally:
+                    release(d.session)
+        sd = await asyncio.to_thread(db)     # 不在事件迴圈裡跑同步的資料庫查詢
     else:   # 沒有掛知識庫
         sd = SearchResult(cfg.num("min_score") or 0.45, pool, 0, [], [], None, ["沒有掛載知識庫"])
     for n in sd.notes:
@@ -537,7 +568,9 @@ def n_finish(st: ChatState, config) -> dict:
                                    "check": cfg.str("model_check"), "rerank": cfg.str("model_rerank")}, "ev": tn.ev, "rewriteWhy": tn.rewrite_why}
     trace = st.get("trace") or []
     if d.log:
-        log_turn(d, st["req"], res, trace)
+        with tn.lock:
+            log_turn(d, st["req"], res, trace)
+            release(d.session)     # 在這裡就提交：不要等回到事件迴圈、再排隊拿執行緒時才把連線還回去
     if d.with_trace:
         res["trace"] = trace
     if d.with_hits:
@@ -552,14 +585,31 @@ def log_turn(d: Deps, req: dict, res: dict, trace: list[dict]) -> None:
     history = req.get("history") or []
     turn = _js_number(req.get("turn")) or len(history) // 2 + 1
     ans = res.get("answer") or ({"questions": res["questions"], "empathy": res.get("empathy")} if "questions" in res else {"message": res["message"]} if "message" in res else None)
-    d.session.add(Conversation(
+    row = dict(
         bot_id=d.bot_id, flow_id=d.flow_id, session=js_str(req.get("session")), turn=turn, invite_code_id=req.get("invite_code_id"),
         unit=js_str(req.get("unit")), user_text=res.get("deidText") or "",
         rtype=res["type"], intent=res.get("intent") or "", triage=res.get("triage"), referral=res.get("referral"), answer=ans,
         sources=res.get("sources") or [], checks=res.get("checks") or [], rewritten=bool(res.get("rewritten")), skills=m.get("skills") or [],
         hits=m.get("retrieved") or 0, top_score=m.get("top") or 0, cited=m.get("cited") or 0, ms=res.get("ms") or 0,
-        trace=tr, stability=res.get("stability"), quality=res.get("quality")))
-    d.session.flush()
+        trace=tr, stability=res.get("stability"), quality=res.get("quality"))
+    save_conversation(d.session, row)
+
+
+def save_conversation(session: Session, row: dict) -> None:
+    """寫一筆對話紀錄。同一段對話的同一輪已經有了（使用者重送、重新整理後再問）就往後排一輪；
+    寫紀錄失敗只記 log，不讓已經生成好的回答變成錯誤"""
+    for attempt in range(3):
+        try:
+            with session.begin_nested():
+                session.add(Conversation(**row))
+            return
+        except IntegrityError:
+            last = session.scalar(select(func.max(Conversation.turn)).where(Conversation.bot_id == row["bot_id"], Conversation.session == row["session"])) or 0
+            row = {**row, "turn": last + 1}
+        except Exception:
+            log.exception("寫對話紀錄失敗")
+            return
+    log.error("寫對話紀錄失敗：同一輪一直衝突")
 
 
 # ───────── 組圖 ─────────
@@ -588,7 +638,52 @@ def build_graph():
 GRAPH = build_graph()
 
 
-async def run_chat(deps: Deps, req: dict) -> dict:
-    """一個回合；回傳與 Apps Script runChat_ 相同結構的 payload"""
-    st = await GRAPH.ainvoke({"req": req, "turn": Turn(time.monotonic()), "trace": []}, config={"configurable": {"deps": deps}, "recursion_limit": 60})
-    return st["result"]
+def turn_timeout() -> float:
+    """整回合的時間上限（秒）。要比反向代理的逾時短，使用者才會拿到保守回答而不是連線被切斷"""
+    try:
+        return float(os.environ.get("CHAT_TIMEOUT_SECONDS", "50"))
+    except ValueError:
+        return 50.0
+
+
+async def run_chat(deps: Deps, req: dict, timeout: float | None = None) -> dict:
+    """一個回合；回傳與 Apps Script runChat_ 相同結構的 payload。超過時間上限改給保守回答"""
+    tn = Turn(time.monotonic())
+    try:
+        st = await asyncio.wait_for(GRAPH.ainvoke({"req": req, "turn": tn, "trace": []}, config={"configurable": {"deps": deps}, "recursion_limit": 60}),
+                                    timeout or turn_timeout())
+        return st["result"]
+    except asyncio.TimeoutError:
+        return await asyncio.to_thread(_timed_out, deps, req, tn)
+
+
+def _fallback_deid(cfg, req: dict) -> dict:
+    """還沒做完去識別化就逾時：用規則處理一次，紀錄裡才不會留下原始姓名"""
+    raw, nm = js_str(req.get("message")), dict(req.get("nameMap") or {})
+    if not cfg.flag("enable_deid"):
+        return {"text": raw, "map": {}}
+    r = D.rule(D.apply(D.scrub(raw), nm), nm, cfg.deid_labels())
+    return {"text": r.text, "map": r.map}
+
+
+def _timed_out(d: Deps, req: dict, tn: Turn) -> dict:
+    with tn.lock:            # 等還在執行緒裡的查詢結束，才用 session
+        if d.session.in_transaction():
+            d.session.rollback()
+        cfg = tn.cfg or load_config(d.session, d.bot_id, d.flow_id, d.override)
+        refs = tn.refs if tn.cfg else load_referrals(d.session, d.bot_id)
+        deid = tn.deid or _fallback_deid(cfg, req)
+        tn.stage = "逾時"
+        tn.note("逾時", f"超過 {turn_timeout():g} 秒，改給保守回答")
+        res = {"nameMap": deid["map"], "deidText": deid["text"], "triage": {}, "metrics": {"retrieved": None, "top": None, "cited": None, "skills": []},
+               "intent": "", "newCase": True, "answered": _js_number(req.get("answered")), "type": "conservative",
+               "message": P.conservative_msg(cfg, refs), "sources": [], "ms": tn.ms(), "quality": {"gap": None, "l5": [], "timeout": True},
+               "schema": [f.to_public() for f in cfg.schema()],
+               "stability": {"models": {"answer": cfg.str("model_answer")}, "ev": tn.ev, "rewriteWhy": tn.rewrite_why}}
+        trace = [{"step": "P10 降級", "kind": "text", "detail": f"整回合超過 {turn_timeout():g} 秒 → 保守回答", "ms": tn.ms()}]
+        if d.log:
+            log_turn(d, req, res, trace)
+        release(d.session)
+    if d.with_trace:
+        res["trace"] = trace
+    return res

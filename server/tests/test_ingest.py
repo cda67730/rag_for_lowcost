@@ -1,6 +1,5 @@
 """文件匯入：段落類型與 Apps Script 比對；上傳、處理、修復、背景任務用真資料庫＋假模型。"""
 import asyncio
-import io
 import json
 import shutil
 import subprocess
@@ -107,6 +106,24 @@ def test_upload_process_and_reprocess(kb, monkeypatch):
     k.chunk_size = 2000; db.flush()                                     # 換參數重新處理：舊段落整批換掉
     r2 = run(I.process_document(db, FakeLLM(), doc.id))
     assert r2.chunks < r.chunks and db.query(m.Chunk).filter_by(doc_id=doc.id).count() == r2.chunks
+
+
+def test_parsing_runs_off_event_loop(kb, monkeypatch):
+    """解析與切段在執行緒裡跑：大檔案解析時，同一個程序裡的聊天請求不會被卡住"""
+    import threading
+    db, k = kb
+    doc = I.create_document(db, k, filename="手冊.md", data=md())
+    seen, orig = {}, I.parsers.parse
+
+    def spy(name, data):
+        seen["parse"] = threading.current_thread()
+        return orig(name, data)
+    monkeypatch.setattr(I.parsers, "parse", spy)
+
+    async def go():
+        seen["loop"] = threading.current_thread()
+        return await I.process_document(db, FakeLLM(), doc.id)
+    assert run(go()).status == "pending" and seen["parse"] is not seen["loop"]
 
 
 def test_duplicates_and_bad_files(kb):

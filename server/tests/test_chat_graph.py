@@ -253,7 +253,6 @@ def test_rerank_and_kg_only(bot):
     save_bot_settings(db, b.id, {"enable_kg": False})
     llm = FakeLLM(rerank={"scores": [3, 0, 1]})
     r = chat(bot, llm, log=False)
-    print("DBG", r["metrics"], [t["detail"] for t in r["trace"] if t["step"] == "重新排序與配額"])
     assert llm.kinds()[:2] == ["triage", "rerank"] and r["metrics"]["direct"] == 1 and r["metrics"]["retrieved"] == 2
 
 
@@ -265,6 +264,94 @@ def test_turn_number_and_unique_log(bot):
     assert [x.turn for x in logs(db, b)] == [5, 2]
     json.dumps([x.trace for x in logs(db, b)], ensure_ascii=False)
 
+
+
+def test_duplicate_turn_logged_as_next_turn(bot):
+    """使用者重送或重新整理後再問：同一輪已經有紀錄，就排到下一輪，回答照常回傳"""
+    db, b = bot
+    assert chat(bot, FakeLLM(), turn=5)["type"] == "answer"
+    assert chat(bot, FakeLLM(), turn=5)["type"] == "answer"
+    assert chat(bot, FakeLLM(), turn=5)["type"] == "answer"
+    assert [x.turn for x in logs(db, b)] == [5, 6, 7]
+
+
+def test_log_failure_does_not_fail_answer(bot, monkeypatch):
+    import graph.chat_graph as G
+    def boom(**kw):
+        raise ValueError("寫不進去")
+    monkeypatch.setattr(G, "Conversation", boom)
+    assert chat(bot, FakeLLM())["type"] == "answer"
+    db, b = bot
+    assert logs(db, b) == [] and db.scalar(__import__("sqlalchemy").text("select 1")) == 1     # session 還能用
+
+
+class SlowLLM(FakeLLM):
+    """指定的呼叫種類要等很久；順便記下每次呼叫模型時是不是還握著資料庫交易"""
+
+    def __init__(self, db, slow=(), **resp):
+        super().__init__(**resp)
+        self.db, self.slow, self.in_tx = db, slow, []
+
+    async def generate_json(self, model, prompt, **kw):
+        self.in_tx.append(self.db.in_transaction())
+        if self.kind(prompt) in self.slow:
+            await asyncio.sleep(5)
+        return await super().generate_json(model, prompt, **kw)
+
+    async def embed(self, model, texts, *, dim, task="document"):
+        self.in_tx.append(self.db.in_transaction())
+        return await super().embed(model, texts, dim=dim, task=task)
+
+
+def test_no_db_transaction_held_while_waiting_for_model(bot):
+    db, b = bot
+    llm = SlowLLM(db)
+    db.commit()
+    r = chat(bot, llm)
+    assert r["type"] == "answer" and len(llm.in_tx) >= 4 and not any(llm.in_tx)
+
+
+def test_turn_timeout_gives_conservative_and_logs(bot):
+    db, b = bot
+    llm = SlowLLM(db, slow=("answer",), triage=dict(TRI, deid=[{"text": "小宇", "type": "subject"}]))
+    r = asyncio.run(run_chat(Deps(db, llm, b.id, with_trace=True), {"message": "小宇收玩具時一直丟積木", "session": "s1", "turn": 3}, timeout=0.5))
+    assert r["type"] == "conservative" and r["quality"]["timeout"] is True and r["sources"] == []
+    assert "輔導老師" in r["message"]                         # 保守回答帶「系統能力不足」的轉介對象
+    assert r["trace"][-1]["step"] == "P10 降級" and r["nameMap"] == {"小宇": "孩子A"}
+    assert any(e["kind"] == "逾時" for e in r["stability"]["ev"])
+    (row,) = logs(db, b)
+    assert row.rtype == "conservative" and row.turn == 3 and "小宇" not in row.user_text and row.quality["timeout"] is True
+
+
+def test_turn_timeout_keeps_names_found_by_model(bot):
+    """L4 已經回報了規則抓不到的名字，之後才逾時：紀錄要用 L4 的去識別化結果"""
+    db, b = bot
+    llm = SlowLLM(db, slow=("answer",), triage=dict(TRI, deid=[{"text": "王大同", "type": "subject"}]))
+    r = asyncio.run(run_chat(Deps(db, llm, b.id), {"message": "今天王大同收玩具時一直丟積木", "session": "s1"}, timeout=0.5))
+    assert r["type"] == "conservative" and r["nameMap"] == {"王大同": "孩子A"}
+    (row,) = logs(db, b)
+    assert "王大同" not in row.user_text
+
+
+def test_turn_timeout_after_separate_ai_deid(bot):
+    """不併入 L4、單獨呼叫去識別化的情況，一樣保留模型找出的名字"""
+    db, b = bot
+    save_bot_settings(db, b.id, {"enable_triage": False})
+    llm = SlowLLM(db, slow=("answer",), deid={"items": [{"text": "王大同", "type": "subject"}]})
+    r = asyncio.run(run_chat(Deps(db, llm, b.id), {"message": "今天王大同收玩具時一直丟積木", "session": "s1"}, timeout=0.5))
+    assert r["type"] == "conservative" and "deid" in llm.kinds()
+    (row,) = logs(db, b)
+    assert "王大同" not in row.user_text
+
+
+def test_turn_timeout_before_deid_finished_uses_rule(bot):
+    """分流（含去識別化）就逾時：紀錄改用規則去識別化，已知代稱照樣套用"""
+    db, b = bot
+    llm = SlowLLM(db, slow=("triage",))
+    r = asyncio.run(run_chat(Deps(db, llm, b.id), {"message": "小宇跟小明搶玩具", "session": "s1", "nameMap": {"小宇": "孩子A"}}, timeout=0.5))
+    assert r["type"] == "conservative" and "trace" not in r and r["deidText"].startswith("孩子A")
+    (row,) = logs(db, b)
+    assert "小宇" not in row.user_text and "小明" not in row.user_text      # 新出現的名字也用規則處理掉
 
 
 def test_case_flow_off_always_full_with_whole_conversation(bot):

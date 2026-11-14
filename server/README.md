@@ -37,6 +37,8 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `JWT_SECRET` | 是 | 後台登入用，至少 32 個隨機字元（`openssl rand -hex 32`） |
 | `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
+| `CHAT_TIMEOUT_SECONDS` | 否 | 一個回合最多幾秒，預設 50；超過改給保守回答並記錄（品質旗標 `timeout`）。要比反向代理的逾時短 |
+| `DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT` | 否 | 資料庫連線池，預設 10／20／10 秒。連線只在讀寫時短暫持有，等模型時會先還回去 |
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90 |
 | `LANGFUSE_HOST` `LANGFUSE_PUBLIC_KEY` `LANGFUSE_SECRET_KEY` | 否 | 三個都有才會送 trace 到 Langfuse |
 | `LOG_LEVEL` | 否 | 預設 `info` |

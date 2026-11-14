@@ -14,6 +14,13 @@ def database_url() -> str:
     return url
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except ValueError:
+        return default
+
+
 _engine: Engine | None = None
 _Session: sessionmaker[Session] | None = None
 
@@ -21,7 +28,9 @@ _Session: sessionmaker[Session] | None = None
 def engine() -> Engine:
     global _engine, _Session
     if _engine is None:
-        _engine = create_engine(database_url(), pool_pre_ping=True)
+        # 連線只在讀寫的短時間持有（等模型時會先還回去），池子不用很大；等不到連線時 10 秒內就失敗，不要讓請求一直排隊
+        _engine = create_engine(database_url(), pool_pre_ping=True, pool_size=_env_int("DB_POOL_SIZE", 10),
+                                max_overflow=_env_int("DB_MAX_OVERFLOW", 20), pool_timeout=_env_int("DB_POOL_TIMEOUT", 10))
         _Session = sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

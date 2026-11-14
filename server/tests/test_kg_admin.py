@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from db import models as m
 from services import kg_admin as K
 
 HERE = Path(__file__).parent

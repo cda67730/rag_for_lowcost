@@ -4,7 +4,6 @@ from __future__ import annotations
 import secrets
 import time
 import uuid
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import csv
@@ -461,29 +460,64 @@ def _pct(a, b):
 def stats(bot: str, days: int | None = 30, include_test: bool = False, u: User = Me, s: Session = DB):
     """對應 Apps Script adminLogs 的統計部分"""
     b = admin_bot(s, u, bot, {"analyst"})
-    all_ = s.scalars(_log_query(b, days, None, None, None, None, include_test).order_by(Conversation.created_at)).all()
-    fb = _feedback(s, b.id)
-    rows = [log_row(c, fb.get((c.session, c.turn))) for c in all_]
-    answered = [r for r in rows if r["type"] in ("answer", "continue", "ai_fallback")]
-    ret = [r for r in rows if r["type"] in ("answer", "continue", "ai_fallback", "conservative")]
-    ups, downs = sum(1 for r in rows if r["fb"] == "up"), sum(1 for r in rows if r["fb"] == "down")
+    return stats_of(s, b, days, include_test)
+
+
+# 統計全部在資料庫裡算：不把每一筆紀錄（含整包 trace）載進 Python
+_STATS_SQL = """
+WITH c AS (
+  SELECT c.id, c.created_at, c.session, c.unit, c.user_text, c.rtype, c.hits, c.top_score::text::float8 AS top, c.top_score, c.cited, c.rewritten, c.ms,
+         c.sources, c.quality, c.stability,
+         EXISTS (SELECT 1 FROM feedback f WHERE f.bot_id = c.bot_id AND f.session = c.session AND f.turn = c.turn AND f.kind = '有幫助') AS up,
+         EXISTS (SELECT 1 FROM feedback f WHERE f.bot_id = c.bot_id AND f.session = c.session AND f.turn = c.turn AND f.kind = '沒幫助') AS down,
+         EXISTS (SELECT 1 FROM feedback f WHERE f.bot_id = c.bot_id AND f.session = c.session AND f.turn = c.turn AND f.kind LIKE '複製%%') AS copied
+  FROM conversations c
+  WHERE c.bot_id = :bot AND (CAST(:since AS timestamptz) IS NULL OR c.created_at >= :since) AND (CAST(:test AS text) IS NULL OR c.session NOT LIKE CAST(:test AS text))
+)
+"""
+_ARR = "CASE WHEN jsonb_typeof({0}) = 'array' THEN {0} ELSE '[]'::jsonb END"
+_OBJ = "CASE WHEN jsonb_typeof({0}) = 'object' THEN {0} ELSE '{{}}'::jsonb END"
+
+
+def stats_of(s: Session, b: Bot, days: int | None, include_test: bool) -> dict:
+    from sqlalchemy import text
+    p = {"bot": b.id, "since": datetime.now(timezone.utc) - timedelta(days=days) if days else None, "test": None if include_test else TEST_SESSION + "%"}
+    q = lambda body: s.execute(text(_STATS_SQL + body), p).all()
+    ANS, RET = "('answer','continue','ai_fallback')", "('answer','continue','ai_fallback','conservative')"
+    (n, sessions, n_ret, ret_hit, top_sum, n_ans, cited, retrieved, rewr, ups, downs, copied, ms_sum), = q(f"""
+      SELECT count(*), count(DISTINCT session),
+             count(*) FILTER (WHERE rtype IN {RET}), count(*) FILTER (WHERE rtype IN {RET} AND hits > 0), coalesce(sum(top) FILTER (WHERE rtype IN {RET}), 0),
+             count(*) FILTER (WHERE rtype IN {ANS}), coalesce(sum(cited) FILTER (WHERE rtype IN {ANS}), 0), coalesce(sum(hits) FILTER (WHERE rtype IN {ANS}), 0),
+             count(*) FILTER (WHERE rtype IN {ANS} AND rewritten),
+             count(*) FILTER (WHERE up), count(*) FILTER (WHERE down AND NOT up), count(*) FILTER (WHERE copied), coalesce(sum(ms), 0)
+      FROM c""")
     st = {
-        "turns": len(rows), "sessions": len({r["session"] for r in rows}), "byType": dict(Counter(r["type"] for r in rows)),
-        "retrievalTurns": len(ret), "hitRate": _pct(sum(1 for r in ret if r["retrieved"] > 0), len(ret)),
-        "citeRate": _pct(sum(r["cited"] for r in answered), sum(r["retrieved"] for r in answered)),
-        "avgTop": round(sum(r["top"] for r in ret) / len(ret), 3) if ret else None,
-        "rewriteRate": _pct(sum(1 for r in answered if r["rewritten"]), len(answered)),
-        "upRate": _pct(ups, ups + downs), "ups": ups, "downs": downs, "copied": sum(1 for r in rows if r["copied"]),
-        "avgMs": round(sum(r["ms"] for r in rows) / len(rows)) if rows else None,
+        "turns": n, "sessions": sessions, "byType": {t: k for t, k in q("SELECT rtype, count(*) FROM c GROUP BY rtype ORDER BY min(created_at), min(id)")},
+        "retrievalTurns": n_ret, "hitRate": _pct(ret_hit, n_ret), "citeRate": _pct(cited, retrieved),
+        "avgTop": round(top_sum / n_ret, 3) if n_ret else None, "rewriteRate": _pct(rewr, n_ans),
+        "upRate": _pct(ups, ups + downs), "ups": ups, "downs": downs, "copied": copied, "avgMs": round(ms_sum / n) if n else None,
     }
-    gaps = [{"id": r["id"], "at": r["at"], "message": r["message"], "top": r["top"]} for r in rows
-            if (r["type"] in ("conservative", "ai_fallback") or (r["type"] in ("answer", "continue") and r["retrieved"] == 0))][-30:][::-1]
-    docs = Counter(src.get("title", "") for c in all_ for src in (c.sources or []) if isinstance(src, dict))
-    gap_kinds = Counter((c.quality or {}).get("gap", {}).get("kind") for c in all_ if isinstance(c.quality, dict) and (c.quality.get("gap") or {}).get("kind"))
-    l5 = Counter(i.get("type", "其他") for c in all_ if isinstance(c.quality, dict) for a in c.quality.get("l5") or [] for i in a.get("issues") or [])
-    ev = Counter(e.get("kind") for c in all_ if isinstance(c.stability, dict) for e in c.stability.get("ev") or [])
-    units = sorted({c.unit for c in all_ if c.unit})
-    return {"stats": st, "gaps": gaps, "topDocs": [{"title": t, "n": n} for t, n in docs.most_common(10)],
+    gaps = [{"id": i, "at": at.isoformat(), "message": m[:120], "top": t} for i, at, m, t in q("""
+      SELECT id, created_at, user_text, top_score FROM c
+      WHERE rtype IN ('conservative','ai_fallback') OR (rtype IN ('answer','continue') AND hits = 0)
+      ORDER BY created_at DESC, id DESC LIMIT 30""")]
+    docs = q(f"""
+      SELECT coalesce(e.v->>'title', ''), count(*) FROM c, jsonb_array_elements({_ARR.format('c.sources')}) WITH ORDINALITY AS e(v, i)
+      WHERE jsonb_typeof(e.v) = 'object' GROUP BY 1 ORDER BY 2 DESC, min(c.created_at), min(c.id), min(e.i) LIMIT 10""")
+    gap_kinds = q(f"""
+      SELECT {_OBJ.format("c.quality->'gap'")}->>'kind' AS k, count(*) FROM c WHERE jsonb_typeof(c.quality) = 'object'
+      GROUP BY 1 HAVING coalesce({_OBJ.format("c.quality->'gap'")}->>'kind', '') <> '' ORDER BY min(c.created_at), min(c.id)""")
+    l5 = q(f"""
+      SELECT CASE WHEN i.v ? 'type' THEN i.v->>'type' ELSE '其他' END, count(*)
+      FROM c, jsonb_array_elements({_ARR.format("c.quality->'l5'")}) WITH ORDINALITY a(v, n),
+              jsonb_array_elements({_ARR.format("a.v->'issues'")}) WITH ORDINALITY i(v, m)
+      WHERE jsonb_typeof(c.quality) = 'object' AND jsonb_typeof(a.v) = 'object' AND jsonb_typeof(i.v) = 'object'
+      GROUP BY 1 ORDER BY min(c.created_at), min(c.id), min(a.n), min(i.m)""")
+    ev = q(f"""
+      SELECT e.v->>'kind', count(*) FROM c, jsonb_array_elements({_ARR.format("c.stability->'ev'")}) WITH ORDINALITY e(v, i)
+      WHERE jsonb_typeof(c.stability) = 'object' AND jsonb_typeof(e.v) = 'object' GROUP BY 1 ORDER BY min(c.created_at), min(c.id), min(e.i)""")
+    units = sorted(u for (u,) in q("SELECT DISTINCT unit FROM c WHERE coalesce(unit, '') <> ''"))
+    return {"stats": st, "gaps": gaps, "topDocs": [{"title": t, "n": k} for t, k in docs],
             "quality": {"gapKinds": dict(gap_kinds), "l5": dict(l5)}, "stability": dict(ev), "units": units}
 
 

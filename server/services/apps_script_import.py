@@ -21,7 +21,7 @@ from db.models import (SUPPORTED_EMBED_DIMS, Bot, BotKnowledge, Chunk, Conversat
 from services.evaluation import EVAL_EXPECT
 from services.ingest import embed_all, embed_text
 from services.llm import EMBED_MODELS
-from settings.loader import KB_LEVEL, SETTING_DEFAULTS, TEXT_DEFAULTS, js_str
+from settings.loader import KB_LEVEL, SETTING_DEFAULTS, TEXT_DEFAULTS
 from settings.store import SettingsError, save_bot_settings
 
 # 與 apps-script/Store.gs 的 SHEETS、HEADER_ALIAS 相同

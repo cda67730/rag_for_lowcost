@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from db.models import BotKnowledge, Chunk, Document, DocumentFile, Job, KnowledgeBase
 from services import parsers
-from services.chunking import Piece, chunk_units
+from services.chunking import chunk_units
 from services.llm import LLMClient, LLMError
 from services.retrieval import CHUNK_TYPES
 from settings.loader import ROLE_DEFAULTS, load_config
@@ -163,11 +163,15 @@ async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, 
     kb = session.get(KnowledgeBase, doc.kb_id)
     f = session.get(DocumentFile, doc.id)
     step = progress or (lambda p, m: None)
+    content, name, size, overlap = f.content, doc.filename, kb.chunk_size, kb.chunk_overlap    # 先在這裡讀出來，執行緒裡不碰 session
+
+    def cpu():   # 解析 PDF／Word 和切段是吃 CPU 的同步工作，放到執行緒裡，不卡住同一個程序裡的聊天請求
+        parsed = parsers.parse(name, content)
+        return parsed, chunk_units(parsed.units, size, overlap)
     try:
-        parsed = parsers.parse(doc.filename, f.content)
+        parsed, pieces = await asyncio.to_thread(cpu)
     except parsers.ParseError as e:
         return _fail(session, doc, str(e))
-    pieces: list[Piece] = chunk_units(parsed.units, kb.chunk_size, kb.chunk_overlap)
     if not pieces:
         return _fail(session, doc, "沒有讀到任何文字")
     step(0.3, f"切成 {len(pieces)} 段")
