@@ -1,0 +1,28 @@
+[project]
+name = "rag-server"
+version = "0.1.0"
+description = "多機器人 RAG 知識問答後端（LangGraph + FastAPI + PostgreSQL/pgvector）"
+requires-python = ">=3.12"
+dependencies = [
+  "sqlalchemy>=2.0.36",
+  "alembic>=1.14",
+  "psycopg[binary]>=3.2",
+  "pgvector>=0.3.6",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "db*", "graph*", "services*", "settings*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: 需要真的模型金鑰的整合測試，預設不跑（pytest -m live）"]
+addopts = "-m 'not live'"

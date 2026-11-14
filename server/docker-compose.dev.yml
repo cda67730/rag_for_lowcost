@@ -1,0 +1,6 @@
+# 本機開發：只把資料庫開到本機 127.0.0.1:5432，app 用 uvicorn --reload 在本機跑
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"

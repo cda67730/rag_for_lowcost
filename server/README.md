@@ -2,7 +2,7 @@
 
 LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人，每個機器人有自己的設定、Skill、紀錄與聊天入口；知識庫獨立、可以被多個機器人掛載。
 
-> **狀態**：架構與規格已定，程式開發中。下面的安裝與操作步驟是完成後的使用方式，實作以這份為準；與實際不符時以程式為準並回頭修正本文件。
+> **狀態**：資料庫層（資料表、遷移、向量索引）與健康檢查已完成並有測試；聊天流程、後台、匯入開發中。下面標「規劃」的指令尚未實作。
 
 ## 文件
 
@@ -30,7 +30,8 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 
 | 變數 | 必要 | 說明 |
 | --- | --- | --- |
-| `DATABASE_URL` | 是 | `postgresql+psycopg://user:pass@db:5432/rag` |
+| `POSTGRES_PASSWORD` | 是 | 資料庫密碼；docker compose 用它建資料庫並自動組出 app 容器的連線字串 |
+| `DATABASE_URL` | 本機開發才要 | 本機直接跑 uvicorn／alembic／pytest 時用，例如 `postgresql+psycopg://rag:<密碼>@localhost:5432/rag`；compose 裡的 app 不讀這個 |
 | `GEMINI_API_KEY` | 是 | Gemini 金鑰 |
 | `OPENAI_API_KEY` | 否 | 要用 OpenAI 模型才填 |
 | `JWT_SECRET` | 是 | 後台登入用，至少 32 個隨機字元（`openssl rand -hex 32`） |
@@ -64,22 +65,23 @@ git clone <repo> && cd <repo>/server
 cp .env.example .env          # 填入上表的變數
 docker compose up -d          # 啟動 db（Postgres 17 + pgvector）與 app
 docker compose exec app alembic upgrade head          # 建立資料表
-docker compose exec app python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
+docker compose exec app python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin   # 規劃
 # 會提示輸入 owner 的密碼
 ```
 
-API 在 `http://localhost:8000`，健康檢查 `GET /healthz`。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS。
+API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS。
 
 ### 本機開發（不用 Docker 跑 app）
 
 ```bash
 cd server
-docker compose up -d db                       # 只開資料庫
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # 只開資料庫，開到本機 5432
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 alembic upgrade head
 uvicorn app.main:app --reload
-pytest                                         # 單元測試用假的模型回應，不花 API 費用
+export TEST_DATABASE_URL=postgresql+psycopg://rag:<密碼>@localhost:5432/postgres
+pytest                                         # 會自己建一個暫時資料庫跑遷移、測完刪掉；模型呼叫用假回應，不花 API 費用
 pytest -m live                                 # 需要真金鑰的整合測試，預設不跑
 ```
 
@@ -117,7 +119,7 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 一份試算表 → 一個 Bot ＋ 一個同名知識庫：
 
 ```bash
-docker compose exec app python -m app.cli import-apps-script \
+docker compose exec app python -m app.cli import-apps-script \   # 規劃
   --workspace main --slug <bot-slug> --xlsx <下載的試算表.xlsx>
 ```
 
@@ -147,9 +149,11 @@ server/
 ├── services/     llm、embedding、ingest、retrieval、deid、kg、templates
 ├── settings/     defaults.py（與 apps-script/Setup.gs 同步）、loader.py
 ├── db/           models.py、session.py、migrations/
-├── tests/
+├── tests/        pytest；需要 TEST_DATABASE_URL
+├── alembic.ini
 ├── pyproject.toml
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml       正式：db＋app，資料庫不對外
+├── docker-compose.dev.yml   本機開發：把 db 開到 127.0.0.1:5432
 └── .env.example
 ```

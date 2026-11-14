@@ -1,7 +1,9 @@
+*.egg-info/
 *.log
 *.pyc
 .DS_Store
 .clasp.json
+.pytest_cache/
 .venv/
 __pycache__/
 node_modules/

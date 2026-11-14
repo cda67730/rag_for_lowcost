@@ -258,7 +258,7 @@ CREATE INDEX ON documents (kb_id, status);
 
 CREATE TABLE document_files (                       -- 原始檔，獨立一張表避免列表查詢載到大欄位
   doc_id        uuid PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
-  bytes         bytea NOT NULL                      -- 上限 50 MB（應用層檢查）
+  content       bytea NOT NULL                      -- 上限 50 MB（應用層檢查）
 );
 
 CREATE TABLE chunks (
@@ -272,6 +272,7 @@ CREATE TABLE chunks (
   audience      text[] NOT NULL DEFAULT '{}',
   age_range     text NOT NULL DEFAULT '',
   context       text NOT NULL DEFAULT '',
+  active        boolean NOT NULL DEFAULT false,     -- 文件已核可的冗餘，由觸發器維護，程式不要寫
   embed_dim     smallint NOT NULL,                  -- 冗餘一份，給部分索引用
   embedding     vector,                             -- 不定維度，見下方索引
   tsv           tsvector GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED,
@@ -280,18 +281,30 @@ CREATE TABLE chunks (
 CREATE INDEX ON chunks (kb_id);
 CREATE INDEX ON chunks USING gin (tsv);
 -- 每種維度一個部分＋運算式索引；新增其他維度的知識庫時，遷移腳本補一條
-CREATE INDEX chunks_emb_768 ON chunks USING hnsw ((embedding::vector(768)) vector_cosine_ops) WHERE embed_dim = 768;
+CREATE INDEX chunks_emb_768 ON chunks USING hnsw ((embedding::vector(768)) vector_cosine_ops)
+  WHERE embed_dim = 768 AND active;
 ```
+
+**`chunks.active` 觸發器**（定義在初始遷移）：
+
+- `chunks_active_on_insert`（BEFORE INSERT ON chunks）：新段落的 `active` 取自所屬文件是否 `approved`。
+- `documents_status_sync`（AFTER UPDATE OF status ON documents）：文件狀態一改，它的段落 `active` 跟著改。
+
+為什麼不 join `documents`：查詢裡一有 join 加過濾，規劃器就不會用 HNSW 索引（驗證時實測確認），而且近似搜尋先取前 k 再過濾，會少回結果。把核可狀態放進段落、放進部分索引的條件，查詢只碰一張表。
 
 **向量查詢**必須帶相同的轉型與條件才會用到索引：
 
 ```sql
 SELECT id, 1 - (embedding::vector(768) <=> $1::vector(768)) AS score
-FROM chunks c JOIN documents d ON d.id = c.doc_id
-WHERE c.embed_dim = 768 AND c.kb_id = ANY($2) AND d.status = 'approved'
+FROM chunks
+WHERE embed_dim = 768 AND active AND kb_id = ANY($2)
 ORDER BY embedding::vector(768) <=> $1::vector(768)
 LIMIT $3;
 ```
+
+- 知識庫小（幾千段以內）時規劃器會選 `kb_id` 索引做精確比對，這是對的，結果也比近似搜尋準；知識庫大時才會選 HNSW。
+- 一個 Bot 掛多個知識庫時，`kb_id = ANY(...)` 在 HNSW 之後過濾；pgvector 0.8 以上在查詢前設 `SET LOCAL hnsw.iterative_scan = relaxed_order`，索引會繼續往下找直到湊滿 k 筆。檢索服務會在支援時自動設定。每個知識庫各自的「至少取幾段」由檢索服務對該庫另查一次。
+- 文件名稱、頁碼等要顯示的欄位，拿到段落 id 後再查 `documents`。
 
 不同維度的知識庫可以並存在同一張表（pgvector 支援不定維度欄位＋部分運算式索引），但同一個 Bot 掛的庫必須同一個向量模型。
 
@@ -488,7 +501,10 @@ CREATE TABLE eval_results (
   rtype         text NOT NULL DEFAULT '',
   found         boolean,                            -- 找對段落
   rank          smallint,
-  on_topic      real, coverage real, grounded real, safe real,
+  on_topic      real,                               -- 對題
+  coverage      real,                               -- 涵蓋重點
+  grounded      real,                               -- 依據
+  safe          real,                               -- 安全
   safe_note     text NOT NULL DEFAULT '',
   format_issues text NOT NULL DEFAULT '',
   answer_model  text NOT NULL DEFAULT '',
@@ -534,7 +550,7 @@ CREATE INDEX ON jobs (workspace_id, created_at DESC);
 | 設定 | `bot_settings`（＋`flow_settings`） | `model_embed`、`embed_dim`、`chunk_size`、`chunk_overlap`、`enable_node_mapping` 改成 `knowledge_bases` 的欄位 |
 | Skill／Skill版本 | `skills`／`skill_versions` | `對應主題` 由逗號字串改陣列 |
 | 文件 | `documents`（＋`document_files`） | 多一層 `kb_id` |
-| 知識段落 | `chunks` | 向量由 base64 int8 改 pgvector；`類型` → `ctype` |
+| 知識段落 | `chunks` | 向量由 base64 int8 改 pgvector；`類型` → `ctype`；多 `active`（文件核可的冗餘） |
 | 同義詞／禁止用語／轉介資源 | `synonyms`／`forbidden_rules`／`referrals` | |
 | 邀請碼 | `invite_codes` | |
 | 管理員 | `users`＋`memberships` | 單一層級 → 四種角色 |
