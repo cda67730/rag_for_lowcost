@@ -78,7 +78,18 @@ class SearchResult:
     notes: list[str] = field(default_factory=list)
 
 
+def _pgvector_version(session: Session) -> tuple[int, ...]:
+    """每個連線查一次，存在 session.info"""
+    v = session.info.get("pgvector_version")
+    if v is None:
+        raw = session.execute(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'")).scalar() or "0"
+        v = session.info["pgvector_version"] = tuple(int(x) for x in raw.split(".") if x.isdigit())
+    return v
+
+
 def _vector_candidates(session: Session, m: Mount, qvec: list[float], limit: int, only_ids: list[str] | None) -> list[dict]:
+    """HNSW 先取近鄰再套 kb_id 等條件，別的知識庫或已刪除的段落會佔掉名額。
+    對策：調高 ef_search；（relaxed_order 的回傳可能略為亂序，search() 會再排序）pgvector 0.8 以上開 iterative_scan；仍不足 limit 筆時改用精確搜尋重查一次。"""
     dim = int(m.embed_dim)
     sql = (f"SELECT id::text AS id, doc_id::text AS doc_id, text, page, ctype, 1 - (embedding::vector({dim}) <=> CAST(:q AS vector({dim}))) AS vec "
            f"FROM chunks WHERE embed_dim = {dim} AND active AND kb_id = :kb" + (" AND id = ANY(CAST(:ids AS uuid[]))" if only_ids is not None else "") +
@@ -86,7 +97,15 @@ def _vector_candidates(session: Session, m: Mount, qvec: list[float], limit: int
     params: dict[str, Any] = {"q": str(list(qvec)), "kb": m.kb_id, "n": limit}
     if only_ids is not None:
         params["ids"] = only_ids
-    return [dict(r._mapping) for r in session.execute(text(sql), params)]
+    session.execute(text("SELECT set_config('hnsw.ef_search', :v, true)"), {"v": str(min(1000, max(100, limit * 2)))})
+    if _pgvector_version(session) >= (0, 8):
+        session.execute(text("SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true)"))
+    rows = [dict(r._mapping) for r in session.execute(text(sql), params)]
+    if len(rows) < limit:
+        # 排序式加上「+ 0」讓 HNSW 索引用不上，變成精確搜尋（只掃這個知識庫的段落）
+        exact = sql.replace(f"ORDER BY embedding::vector({dim}) <=> CAST(:q AS vector({dim}))", f"ORDER BY (embedding::vector({dim}) <=> CAST(:q AS vector({dim}))) + 0")
+        rows = [dict(r._mapping) for r in session.execute(text(exact), params)]
+    return rows
 
 
 def search(session: Session, cfg: BotConfig, ms: list[Mount], qvec: list[float], raw_text: str, concepts: list[str],

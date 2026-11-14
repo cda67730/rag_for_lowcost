@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlalchemy import text as sql_text
+
 from db import models as m
 from services.retrieval import expand_query, keywords, mounts, search
 from settings.loader import build_config
@@ -137,3 +139,23 @@ def test_min_hits_from_several_kbs_resorted(world):
     mount(db, bot, low, label="低", min_hits=1, sort=0); mount(db, bot, kbs["cls"], label="班級", min_hits=1, sort=1); mount(db, bot, kbs["dev"], label="發展", sort=2)
     r = search(db, build_config({"min_score": 0.1}), mounts(db, bot.id), q, "x", [], pool=3)
     assert [h["label"] for h in r.hits] == ["發展", "班級", "低"] and [h["ref"] for h in r.hits] == ["K1", "K2", "K3"]
+
+
+def test_small_kb_not_crowded_out_by_big_kb(world):
+    """HNSW 先取近鄰再過濾 kb_id：大庫的段落比較近時，小庫仍要拿到自己的段落"""
+    db, bot, kbs, q = world
+    rnd = random.Random(9)
+    big = m.KnowledgeBase(workspace_id=bot.workspace_id, slug="big", name="big", embed_model="gemini-embedding-001", embed_dim=768); db.add(big); db.flush()
+    doc = m.Document(kb_id=big.id, title="big", status="approved"); db.add(doc); db.flush()
+    db.add_all([m.Chunk(kb_id=big.id, doc_id=doc.id, seq=i, text=f"b{i}", embed_dim=768, embedding=at(q, 0.99 - i * 0.0001, rnd)) for i in range(300)]); db.flush()
+    db.execute(sql_text("ANALYZE chunks"))
+    # 資料量小時規劃器不會用 HNSW；在這個測試的交易裡拿掉其他索引、關掉循序掃描，強迫走 HNSW 才測得到（測完回滾）
+    for (ix,) in db.execute(sql_text("SELECT indexname FROM pg_indexes WHERE tablename = 'chunks' AND indexname NOT LIKE 'chunks_emb_%' AND indexname NOT LIKE 'pk_%' AND indexname NOT LIKE 'uq_%'")).all():
+        db.execute(sql_text(f'DROP INDEX "{ix}"'))
+    for k in ("enable_seqscan", "enable_bitmapscan"):
+        db.execute(sql_text(f"SELECT set_config('{k}', 'off', true)"))
+    plan = "\n".join(r[0] for r in db.execute(sql_text("EXPLAIN SELECT id FROM chunks WHERE embed_dim = 768 AND active AND kb_id = :kb ORDER BY embedding::vector(768) <=> CAST(:q AS vector(768)) LIMIT 6"), {"kb": kbs["cls"].id, "q": str(q)}))
+    assert "chunks_emb_768" in plan
+    mount(db, bot, kbs["cls"], label="班級")
+    r = search(db, build_config({"min_score": 0.1}), mounts(db, bot.id), q, "x", [], pool=6)
+    assert len(r.hits) == 6 and {h["label"] for h in r.hits} == {"班級"}

@@ -80,7 +80,7 @@ class ChatState(TypedDict, total=False):
 | `assemble` | `assemble_()` / `assembleContinue_()` | 五層 prompt；依 `mode` 與 `schema` 產生輸出格式 | `generate` |
 | `generate` | `genJson_(C.model_answer, prompt)` | 一次模型呼叫；`validateAnswer_`、`cleanAnswer_`；回報 `knowledge_gap` 時依規則轉 `finish_conservative` 或重寫 | `check` |
 | `check` | `checks_()` | P08 禁止用語（程式）、P09 出處核對（程式，`enable_citation`）、L5 AI 檢查＋回應度（一次模型呼叫，可關） | `route_check` |
-| `route_check` | 重寫迴圈 | 通過→`finish_answer`；未通過且 `attempt=0`→`attempt=1` 回 `assemble`（帶 feedback）；仍未通過→`finish_conservative` | 見右 |
+| `next_attempt` | 重寫迴圈 | 未通過（含回覆不是 JSON）→`attempt+1` 回 `assemble`（帶 feedback）；次數用完→保守回答。知識不足改由 AI 補足時多給一次 | 見右 |
 | `finish_*` | `finish({...})` | 組 API payload、寫對話紀錄（評測時不寫）、附 trace | END |
 
 ### 圖
@@ -92,10 +92,11 @@ load_config → deid → expand_query → triage_and_embed → apply_deid_result
    route_state ─資訊不足────────▶ followup ─▶ finish
    route_state ─其他────────────▶ load_skills → kg_match → retrieve → judge_knowledge
 judge_knowledge ─沒知識且 knowledge_only─▶ finish_conservative
-judge_knowledge ─其他─────────────────▶ assemble → generate → check → route_check
-   route_check ─通過───────────▶ finish_answer
-   route_check ─重寫一次───────▶ assemble（attempt=1）
-   route_check ─仍不過─────────▶ finish_conservative
+judge_knowledge ─其他─────────────────▶ assemble → generate → check ─通過─▶ finish_answer → finish
+   generate ─不是 JSON／知識不足改 AI 補足─▶ next_attempt
+   generate ─模型回報知識不足且 knowledge_only─▶ finish（保守）
+   check ─未通過───────────────▶ next_attempt ─還有次數─▶ assemble
+                                  next_attempt ─用完────▶ finish（保守，附 checks）
 ```
 
 ## 模型呼叫數（與 Apps Script 相同）
@@ -108,6 +109,12 @@ judge_knowledge ─其他─────────────────▶ 
 | 重寫 | ＋ 生成 1 ＋ L5 1 |
 
 LangGraph 原生支援的 `triage_and_embed` 並行用 `Send` 或在節點內 `asyncio.gather` 即可。
+
+## 實作
+
+`server/graph/chat_graph.py`。`finish_referral`、`finish_out_of_scope`、`followup`、`judge_knowledge`（保守）、`next_attempt`（保守）、`finish_answer` 都只產生 `out`，最後統一由 `finish` 組回應、寫對話紀錄。資料庫連線與模型客戶端從 `config["configurable"]["deps"]` 傳入，不放進 state。
+
+`tests/test_chat_parity.py` 用 node 跑 Apps Script 原版 `runChat_`，模型回覆與檢索結果兩邊給一樣的，逐項比對 22 個情境的回傳內容、流程紀錄，以及每次模型呼叫的模型、temperature、no_think。
 
 ## 與 Apps Script 版刻意不同的地方
 
