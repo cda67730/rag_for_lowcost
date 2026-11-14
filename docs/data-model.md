@@ -283,6 +283,8 @@ CREATE INDEX ON chunks USING gin (tsv);
 -- 每種維度一個部分＋運算式索引；新增其他維度的知識庫時，遷移腳本補一條
 CREATE INDEX chunks_emb_768 ON chunks USING hnsw ((embedding::vector(768)) vector_cosine_ops)
   WHERE embed_dim = 768 AND active;
+CREATE INDEX chunks_emb_1536 ON chunks USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
+  WHERE embed_dim = 1536 AND active;      -- 第二個遷移加的
 ```
 
 **`chunks.active` 觸發器**（定義在初始遷移）：
@@ -307,6 +309,17 @@ LIMIT $3;
 - 文件名稱、頁碼等要顯示的欄位，拿到段落 id 後再查 `documents`。
 
 不同維度的知識庫可以並存在同一張表（pgvector 支援不定維度欄位＋部分運算式索引），但同一個 Bot 掛的庫必須同一個向量模型。
+
+**支援的向量模型與維度**（`db/models.py` 的 `SUPPORTED_EMBED_DIMS`；建知識庫時由 `validate_embed_config` 檢查）：
+
+| 模型 | 供應商 | 可用維度 |
+| --- | --- | --- |
+| `gemini-embedding-001` | Gemini | 768、1536 |
+| `text-embedding-3-small` | OpenAI | 768、1536（原生） |
+| `text-embedding-3-large` | OpenAI | 768、1536 |
+| `text-embedding-ada-002` | OpenAI | 1536（不能指定維度） |
+
+HNSW 索引上限 2000 維，3072 維要改用 `halfvec` 型別，第一版不支援。新增維度＝寫一個遷移加一條 `chunks_emb_<維度>` 索引並更新 `SUPPORTED_EMBED_DIMS`；有測試確認兩者一致。
 
 關鍵字分數：中文沒有斷詞，`tsv` 用 `simple` 設定只對英數有用；中文關鍵字加分沿用 Apps Script 做法（同義詞擴充後的詞在段落裡出現幾次），在應用層算，不靠全文索引。
 

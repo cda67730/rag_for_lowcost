@@ -33,7 +33,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `POSTGRES_PASSWORD` | 是 | 資料庫密碼；docker compose 用它建資料庫並自動組出 app 容器的連線字串 |
 | `DATABASE_URL` | 本機開發才要 | 本機直接跑 uvicorn／alembic／pytest 時用，例如 `postgresql+psycopg://rag:<密碼>@localhost:5432/rag`；compose 裡的 app 不讀這個 |
 | `GEMINI_API_KEY` | 是 | Gemini 金鑰 |
-| `OPENAI_API_KEY` | 否 | 要用 OpenAI 模型才填 |
+| `OPENAI_API_KEY` | 否 | 要用 OpenAI 的生成或向量模型才填 |
 | `JWT_SECRET` | 是 | 後台登入用，至少 32 個隨機字元（`openssl rand -hex 32`） |
 | `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
@@ -90,7 +90,7 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 ## 第一次設定
 
 1. 開後台（`web/admin/`，部署方式同聊天頁），`config.js` 填 API 網址，用剛建的 owner 帳號登入。
-2. **建知識庫**：Workspace → 知識庫 → 新增。選向量模型與維度（之後不能改）、可見範圍（整個 Workspace／只給指定 Bot）。
+2. **建知識庫**：Workspace → 知識庫 → 新增。選向量模型與維度（之後不能改）、可見範圍（整個 Workspace／只給指定 Bot）。向量模型可選 Gemini（`gemini-embedding-001`）或 OpenAI（`text-embedding-3-small`／`-large`），維度 768 或 1536；完整清單見 `docs/data-model.md`。同一個機器人掛的知識庫要用同一個向量模型。
 3. **上傳文件**到知識庫 → 等處理完 → 看段落 → 核可。
 4. **建機器人**：Workspace → 機器人 → 新增，填 slug（聊天頁網址會用到）與名稱，可直接選一份專案範本。
 5. 進機器人 →「知識庫」分頁 → 掛載剛才的知識庫，設標籤與最少段數。

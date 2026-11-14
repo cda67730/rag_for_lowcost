@@ -72,7 +72,9 @@ AI 分類，一次 20 段；失敗的留空（視為未分類，不受配額限�
 
 - 模型與維度取自知識庫（建庫時固定）。一批 100 段，失敗重試 3 次（指數退避）；仍失敗的段落 `embedding` 為 NULL，文件照樣進 `pending`，後台顯示「n 段缺向量」，可用「修復」補算。
 - 向量化的文字＝段落文字前面加上文件標題與位置（`標題｜p.3｜段落內容`），讓短段落也有上下文；存進 `chunks.text` 的只有段落內容。
-- Gemini 向量 `task_type` 用 `RETRIEVAL_DOCUMENT`；查詢時用 `RETRIEVAL_QUERY`。
+- 供應商依知識庫的 `embed_model` 自動判斷（Gemini 或 OpenAI，規則同生成模型；可用 `gemini:`／`openai:` 前綴明確指定）。可選的模型與維度見 `data-model.md`。
+- Gemini 向量 `task_type` 用 `RETRIEVAL_DOCUMENT`；查詢時用 `RETRIEVAL_QUERY`。OpenAI 沒有這個參數，用 `dimensions` 指定維度（`ada-002` 不能指定）。
+- 向量一律正規化後儲存，並檢查回傳維度與知識庫設定相同；不符就整批失敗，不寫入錯誤維度的向量。
 
 ## 7. 圖譜標註（選用）
 

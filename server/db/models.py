@@ -553,4 +553,4 @@ class Job(Base):
 
 
 # 每種向量維度一條 HNSW 部分運算式索引；新增維度要寫遷移補一條（見 docs/data-model.md）
-SUPPORTED_EMBED_DIMS = (768,)
+SUPPORTED_EMBED_DIMS = (768, 1536)   # HNSW 上限 2000 維；3072 要改用 halfvec，另行評估

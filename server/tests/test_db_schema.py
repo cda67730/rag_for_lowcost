@@ -190,3 +190,24 @@ def test_vector_index_is_usable(db):
     q = str(unit([rnd.gauss(0, 1) for _ in range(768)]))
     plan = "\n".join(r[0] for r in db.execute(text("EXPLAIN " + VECTOR_SQL), {"q": q, "kbs": [kb.id], "k": 5}))
     assert "chunks_emb_768" in plan, plan
+
+
+def test_every_supported_dim_has_an_index(db):
+    """SUPPORTED_EMBED_DIMS 加了維度卻忘了寫遷移，這裡會失敗"""
+    have = set(db.scalars(text("select indexname from pg_indexes where tablename='chunks' and indexname like 'chunks_emb_%'")))
+    assert have == {f"chunks_emb_{d}" for d in m.SUPPORTED_EMBED_DIMS}
+
+
+def test_1536_query_uses_its_index(db):
+    rnd = random.Random(3)
+    ws = mk_ws(db); kb = mk_kb(db, ws, dim=1536); doc = mk_doc(db, kb)
+    vecs = [unit([rnd.gauss(0, 1) for _ in range(1536)]) for _ in range(120)]
+    db.add_all([m.Chunk(kb_id=kb.id, doc_id=doc.id, seq=i, text="x", embed_dim=1536, embedding=v) for i, v in enumerate(vecs)]); db.flush()
+    sql = VECTOR_SQL.replace("768", "1536")
+    res = db.execute(text(sql), {"q": str(vecs[9]), "kbs": [kb.id], "k": 3}).all()
+    assert res[0].score > 0.999
+    db.execute(text("ANALYZE chunks"))
+    for opt in ("enable_seqscan", "enable_bitmapscan", "enable_sort"):
+        db.execute(text(f"SET LOCAL {opt} = off"))
+    plan = "\n".join(r[0] for r in db.execute(text("EXPLAIN " + sql), {"q": str(vecs[9]), "kbs": [kb.id], "k": 3}))
+    assert "chunks_emb_1536" in plan, plan

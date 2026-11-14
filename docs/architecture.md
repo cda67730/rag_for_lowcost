@@ -171,7 +171,7 @@ web/admin/                 後台 SPA（原生 JS，靜態部署；呼叫 /api/a
 | 後台 | 獨立靜態 SPA（`web/admin/`），原生 JS，不引入建置工具；跟聊天頁一樣放靜態空間 |
 | 權限 | owner／admin／reviewer／analyst 四種；知識庫內容由 Workspace 的 admin／reviewer 管，Bot 的 admin 只決定掛不掛 |
 | 登入 | 第一版帳號密碼＋JWT；OIDC／AD 留位置 |
-| 向量模型更換 | 重建知識庫，不做線上轉換；維度在建庫時固定 |
+| 向量模型更換 | 重建知識庫，不做線上轉換；維度在建庫時固定。向量模型可選 Gemini 或 OpenAI，維度 768／1536 |
 | 文件解析 | 第一版：PDF（`pypdf`／`pdfplumber`）、Word（`python-docx`）、PowerPoint（`python-pptx`）、Excel（`openpyxl`）、TXT／Markdown。掃描檔 OCR 第一版不做 |
 | 長工作 | FastAPI 背景任務起步，量大再換佇列 |
 | 可觀測 | 自家 trace 必做；Langfuse 選用，有 `LANGFUSE_*` 環境變數才送 |
