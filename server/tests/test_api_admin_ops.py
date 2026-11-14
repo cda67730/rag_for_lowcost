@@ -207,3 +207,27 @@ def test_cancel_while_running(env):  # noqa: F811
     db.expire_all()
     assert db.get(m.Job, j.id).status == "cancelled" and db.get(m.Document, doc.id).status == "failed"
     assert db.query(m.Chunk).filter_by(doc_id=doc.id).count() == 0
+
+
+def test_flow_stats_and_trial(env):  # noqa: F811
+    c, db, ws, bot, bot2, users, as_ = env
+    tr = [{"step": "P03 去識別化", "ms": 5}, {"step": "L4 分流", "ms": 300}, {"step": "P06 檢索", "ms": 500}, {"step": "重新排序與配額", "detail": {"used": True}, "ms": 900},
+          {"step": "A1 生成", "ms": 2900}, {"step": "檢查", "ms": 3500}, {"step": "A1 重寫", "ms": 5000}, {"step": "檢查", "ms": 5600}, {"step": "P10 組合", "ms": 5601}]
+    db.add(m.Conversation(bot_id=bot.id, session="s", turn=1, user_text="x", rtype="answer", ms=5601, trace=tr, hits=3, top_score=0.8, rewritten=True,
+                          quality={"gap": None, "l5": [{"issues": [{"severe": True}]}], "l5Final": None}, stability={"ev": [{"at": "A1", "kind": "缺欄位"}]}))
+    db.add(m.Conversation(bot_id=bot.id, session="s", turn=2, user_text="y", rtype="conservative", ms=1000, hits=0, top_score=0.2,
+                          trace=[{"step": "P06 檢索", "ms": 400}, {"step": "重新排序與配額", "detail": {"used": False, "why": "重排失敗"}, "ms": 600}, {"step": "P10 降級", "ms": 610}],
+                          quality={"gap": {"kind": "沒有可用知識", "outcome": "保守回答"}, "l5": []}))
+    db.add(m.Conversation(bot_id=bot.id, session="admin-test-1", turn=1, user_text="z", rtype="answer", trace=[]))
+    db.add(m.Skill(bot_id=bot.id, skill_key="s1", name="a", always_on=True)); db.flush()
+    r = c.get(f"/api/admin/bots/{bot.id}/flow-stats", headers=as_("ana")).json()
+    assert r["turns"] == 2 and r["types"] == {"answer": 1, "conservative": 1} and r["avgMs"] == 3300
+    assert r["steps"]["answer"] == {"runs": 1, "ms": 3500, "avg": 3500} and r["steps"]["check"]["runs"] == 1 and r["steps"]["check"]["ms"] == 1200
+    assert r["retrieval"] == {"n": 2, "hit": 1, "top": 1.0, "topN": 2} and r["rerank"] == {"n": 2, "used": 1, "failed": 1, "off": 0}
+    assert r["gap"]["byKind"] == {"沒有可用知識": 1} and r["answer"] == {"n": 1, "rewrite": 1, "format": 1} and r["check"] == {"n": 1, "l5": 1, "severe": 1, "conservative": 0}
+    assert r["skills"] == 1 and r["skillsAlways"] == 1
+    llm = ChatLLM()
+    app.dependency_overrides[C.get_llm] = lambda: llm
+    t = c.post(f"/api/admin/bots/{bot.id}/flow-trial", headers=as_("botadmin"), json={"message": "小宇丟積木"}).json()
+    assert t["type"] in ("answer", "conservative") and t["steps"][0]["key"] in ("deid", "triage") and all(s["ms"] >= 0 for s in t["steps"])
+    assert c.post(f"/api/admin/bots/{bot.id}/flow-trial", headers=as_("ana"), json={"message": "x"}).status_code == 403

@@ -14,6 +14,7 @@ from app.routes.admin import router as admin_router
 from app.routes.admin_bot import router as admin_bot_router
 from app.routes.admin_ops import router as admin_ops_router
 from app.routes.admin_kg import router as admin_kg_router
+from app.routes.admin_eval import router as admin_eval_router
 from app.routes.chat import router as chat_router
 from db.session import engine, session
 
@@ -38,6 +39,7 @@ app.include_router(admin_router)
 app.include_router(admin_bot_router)
 app.include_router(admin_ops_router)
 app.include_router(admin_kg_router)
+app.include_router(admin_eval_router)
 
 origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 if origins:

@@ -555,3 +555,101 @@ def cancel_job(job: str, u: User = Me, s: Session = DB):
     audit(s, j.workspace_id, u, "job.cancel", j.kind, {"job_id": str(j.id)}, bot_id=j.bot_id, kb_id=j.kb_id)
     s.commit()
     return {"status": "cancelled"}
+
+
+# ───────── §10 流程控制台 ─────────
+
+FLOW_STEP_OF = (("P03", "deid"), ("L4", "triage"), ("P04", "state"), ("P05", "skill"), ("P06", "retrieve"), ("重新排序", "rerank"), ("P07", "assemble"),
+                ("A1", "answer"), ("檢查", "check"), ("P10", "final"), ("知識圖譜", "kg"))
+
+
+def step_key(step) -> str:
+    s = str(step or "")
+    return next((k for p, k in FLOW_STEP_OF if s.startswith(p)), "")
+
+
+def flow_stats_of(rows: list[Conversation]) -> dict:
+    """每一步的執行次數與平均耗時，加上檢索、重排、知識缺口、生成、檢查的運作數據（對應 Apps Script adminFlowStats）"""
+    st: dict[str, dict] = {}
+    out = {"turns": len(rows), "ms": 0, "types": {}, "retrieval": {"n": 0, "hit": 0, "top": 0.0, "topN": 0}, "rerank": {"n": 0, "used": 0, "failed": 0, "off": 0},
+           "gap": {"n": 0, "byKind": {}, "byOutcome": {}}, "answer": {"n": 0, "rewrite": 0, "format": 0}, "check": {"n": 0, "l5": 0, "severe": 0, "conservative": 0}, "steps": st}
+    for r in rows:
+        out["types"][r.rtype] = out["types"].get(r.rtype, 0) + 1
+        out["ms"] += r.ms or 0
+        prev, seen = 0, set()
+        for t in r.trace if isinstance(r.trace, list) else []:
+            k = step_key(t.get("step"))
+            ms = int(t.get("ms") or 0)
+            d, prev = max(0, ms - prev), ms
+            if not k:
+                continue
+            o = st.setdefault(k, {"runs": 0, "ms": 0})
+            o["ms"] += d
+            if k not in seen:
+                o["runs"] += 1
+                seen.add(k)
+            det = t.get("detail")
+            if k == "rerank" and isinstance(det, dict):
+                out["rerank"]["n"] += 1
+                why = str(det.get("why") or "")
+                if det.get("used"):
+                    out["rerank"]["used"] += 1
+                elif "失敗" in why:
+                    out["rerank"]["failed"] += 1
+                elif "關閉" in why:
+                    out["rerank"]["off"] += 1
+        if "retrieve" in seen:
+            out["retrieval"]["n"] += 1
+            out["retrieval"]["hit"] += 1 if (r.hits or 0) > 0 else 0
+            out["retrieval"]["top"] += r.top_score or 0
+            out["retrieval"]["topN"] += 1
+        q = r.quality if isinstance(r.quality, dict) else {}
+        g = q.get("gap")
+        if isinstance(g, dict):
+            out["gap"]["n"] += 1
+            out["gap"]["byKind"][g.get("kind")] = out["gap"]["byKind"].get(g.get("kind"), 0) + 1
+            out["gap"]["byOutcome"][g.get("outcome")] = out["gap"]["byOutcome"].get(g.get("outcome"), 0) + 1
+        if "answer" in seen:
+            out["answer"]["n"] += 1
+            out["answer"]["rewrite"] += 1 if r.rewritten else 0
+            ev = (r.stability or {}).get("ev") or [] if isinstance(r.stability, dict) else []
+            out["answer"]["format"] += 1 if any(e.get("at") == "A1" for e in ev if isinstance(e, dict)) else 0
+        if "check" in seen:
+            out["check"]["n"] += 1
+            l5 = q.get("l5") or []
+            out["check"]["l5"] += 1 if l5 else 0
+            out["check"]["severe"] += 1 if any(any(i.get("severe") for i in x.get("issues") or []) or x.get("relevance") for x in l5) else 0
+            out["check"]["conservative"] += 1 if q.get("l5Final") == "保守回答" else 0
+    for o in st.values():
+        o["avg"] = round(o["ms"] / o["runs"]) if o["runs"] else None
+    out["avgMs"] = round(out["ms"] / len(rows)) if rows else None
+    out["retrieval"]["top"] = round(out["retrieval"]["top"], 4)
+    return out
+
+
+@router.get("/bots/{bot}/flow-stats")
+def flow_stats(bot: str, days: int | None = 30, include_test: bool = False, u: User = Me, s: Session = DB):
+    from db.models import ForbiddenRule, Referral, Skill, Synonym
+    from services.retrieval import mounts
+    b = admin_bot(s, u, bot, {"analyst"})
+    rows = s.scalars(_log_query(b, days, None, None, None, None, include_test).order_by(Conversation.created_at.desc()).limit(500)).all()
+    out = flow_stats_of(list(reversed(rows)))
+    count = lambda model: s.scalar(select(func.count()).select_from(model).where(model.bot_id == b.id)) or 0
+    kbs = [m.kb_id for m in mounts(s, b.id)]
+    out.update(skills=s.scalar(select(func.count()).select_from(Skill).where(Skill.bot_id == b.id, Skill.enabled)) or 0,
+               skillsAlways=s.scalar(select(func.count()).select_from(Skill).where(Skill.bot_id == b.id, Skill.enabled, Skill.always_on)) or 0,
+               chunks=s.scalar(select(func.count()).select_from(Chunk).where(Chunk.kb_id.in_(kbs), Chunk.active)) or 0 if kbs else 0,
+               synonyms=count(Synonym), forbidden=count(ForbiddenRule), referral=count(Referral))
+    return out
+
+
+@router.post("/bots/{bot}/flow-trial")
+async def flow_trial(bot: str, request: Request, u: User = Me, s: Session = DB, llm: LLMClient = Depends(get_llm)):
+    """流程控制台「試跑」：跑一次測試對話，只回走過的節點與每一步耗時"""
+    r = await test_chat(bot, request, u, s, llm)
+    prev, steps = 0, []
+    for t in r.get("trace") or []:
+        ms = int(t.get("ms") or 0)
+        steps.append({"step": t["step"], "key": step_key(t["step"]), "ms": max(0, ms - prev)})
+        prev = ms
+    return {"type": r["type"], "ms": r["ms"], "steps": steps}
