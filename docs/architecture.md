@@ -34,9 +34,9 @@ Workspace（工作區／租戶）
 ```
 ┌──────────────┐   HTTPS    ┌─────────────────────────────────────────────┐
 │ web/chat/    │──────────▶│ FastAPI（app/）                              │
-│ ?bot=<id>    │           │  /api/ui /api/check /api/chat /api/feedback  │
+│ ?bot=<slug>  │           │  /api/ui /api/check /api/chat /api/feedback  │
 └──────────────┘           │  /api/admin/**（JWT，角色權限）               │
-┌──────────────┐           │  /api/ingest  /api/eval/**                   │
+┌──────────────┐           │  後台 API 含文件匯入、評測、背景任務          │
 │ 後台 SPA      │──────────▶│                                             │
 │ web/admin/   │           │  graph/   LangGraph 圖（每條 Flow 一張）      │
 └──────────────┘           │  services/ llm、embedding、ingest、kg、deid   │
@@ -54,9 +54,9 @@ Workspace（工作區／租戶）
 
 ## 4. 多機器人怎麼路由
 
-- 聊天頁網址帶 `?bot=<bot_id>`（或子路徑 `/b/<slug>/`）；`config.js` 只填伺服器網址，不再填機器人。
-- 每個 API 請求帶 `bot_id`；伺服器查 Bot → 載入該 Bot 的設定快照 → 跑該 Bot 的 `chat` 流程。
-- 邀請碼屬於 Bot；關閉邀請碼時 `bot_id` 本身就是入口（搭配每日上限）。
+- 聊天頁網址帶 `?bot=<slug>`；`config.js` 填伺服器網址，可另填預設的 `BOT`（只服務一個機器人的部署就不用帶參數）。
+- 每個聊天 API 請求帶 `bot`（slug）；伺服器查 Bot → 載入該 Bot 的設定快照 → 跑該 Bot 的預設流程（或請求指定的 `flow`）。後台 API 一律用 uuid。
+- 邀請碼屬於 Bot；關閉邀請碼時 slug 本身就是入口（搭配每日上限）。
 - 後台登入後看到自己有權限的 Workspace 與 Bot 清單，切換 Bot 就切換所有分頁的資料。
 
 ## 5. 流程（Flow）
@@ -82,25 +82,17 @@ Flow 的開關覆蓋 Bot 設定：讀設定時先 Bot、再 Flow，Flow 有值�
 
 ## 7. 資料表
 
-與 `langgraph-mapping.md` 的最小集合相同，加上多機器人需要的幾張：
+完整定義（欄位、型別、索引、刪除行為、向量查詢寫法）在 [`data-model.md`](data-model.md)。分組：
 
-```
-workspaces          id, name
-users               id, login, pw_hash, display_name, disabled
-memberships         user_id, workspace_id, bot_id (nullable=整個 workspace), role
-bots                id, workspace_id, slug, name, created_at
-flows               id, bot_id, kind('chat'|'collect'), name, is_default
-bot_settings        bot_id, key, value            ← Apps Script 的「設定」表
-flow_settings       flow_id, key, value           ← 覆蓋 bot_settings
-knowledge_bases     id, workspace_id, name, visibility('workspace'|'restricted'), embed_model, embed_dim
-kb_allowed_bots     kb_id, bot_id
-bot_knowledge       bot_id, kb_id, label, min_hits, weight, enabled
-documents           kb_id, …     chunks  kb_id, …, embedding vector(n)
-skills / skill_history / synonyms / forbidden / referrals / invite_codes   皆帶 bot_id
-kg_*                kb_id（圖譜跟著知識庫走）
-conversations       bot_id, flow_id, session, turn, …   feedback  bot_id, …
-eval_banks / eval_questions / eval_runs / eval_results   bot_id, flow_id
-```
+| 組 | 表 |
+| --- | --- |
+| 租戶與帳號 | `workspaces`、`users`、`memberships`、`audit_log` |
+| 機器人 | `bots`、`flows`、`bot_settings`、`flow_settings`、`skills`、`skill_versions`、`synonyms`、`forbidden_rules`、`referrals`、`invite_codes` |
+| 知識庫 | `knowledge_bases`、`kb_allowed_bots`、`bot_knowledge`、`documents`、`document_files`、`chunks` |
+| 知識圖譜 | `kg_defs`、`kg_sources`、`kg_nodes`、`kg_edges`、`kg_links`、`kg_candidates`（皆帶 `kb_id`） |
+| 紀錄與用量 | `conversations`、`feedback`、`usage_counters` |
+| 評測 | `eval_questions`、`eval_runs`、`eval_results` |
+| 背景任務 | `jobs` |
 
 所有查詢都以 `bot_id`（或 `kb_id`）為第一個條件；跨 Bot 的只有 Workspace 層的統計。
 
@@ -137,7 +129,8 @@ server/
 │   ├── main.py            FastAPI 建立、CORS、路由掛載
 │   ├── routes/            chat.py admin_*.py ingest.py eval.py auth.py
 │   ├── deps.py            取得 Bot、設定快照、目前使用者
-│   └── schemas.py         Pydantic 請求／回應模型（對應 docs/api.md）
+│   ├── schemas.py         Pydantic 請求／回應模型（對應 docs/api.md、admin-api.md）
+│   └── cli.py             create-workspace、import-apps-script 等管理指令
 ├── graph/
 │   ├── state.py           ChatState
 │   ├── nodes/             deid.py triage.py retrieve.py assemble.py generate.py check.py finish.py …
@@ -160,8 +153,11 @@ server/
 │   └── migrations/        Alembic
 ├── tests/
 ├── pyproject.toml
+├── Dockerfile
 ├── .env.example
 └── docker-compose.yml
+
+web/admin/                 後台 SPA（原生 JS，靜態部署；呼叫 /api/admin/**）
 ```
 
 ## 12. 已確認的決定

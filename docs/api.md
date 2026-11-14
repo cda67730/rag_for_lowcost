@@ -8,12 +8,25 @@
 | 驗證邀請碼 | `POST /exec {action:"check"}` | `POST /api/check` |
 | 問答 | `POST /exec {action:"chat"}` | `POST /api/chat` |
 | 回饋 | `POST /exec {action:"feedback"}` | `POST /api/feedback` |
-| 文件匯入（後台） | 後台 RPC | `POST /api/ingest` |
-| 自動評測（後台） | 後台 RPC | `POST /api/eval/run` |
 
 所有請求與回應皆為 JSON、UTF-8。Apps Script 版因 CORS 限制用 `Content-Type: text/plain`，Python 版接受 `application/json` 與 `text/plain` 兩種。
 
-Python 版每個請求帶 `bot_id`（多機器人；聊天頁從網址 `?bot=<id>` 取得），可再帶 `flow_id` 指定流程，沒帶用該 Bot 的預設流程。Apps Script 版一個部署就是一個機器人，忽略這兩個欄位。階層定義見 `architecture.md`。
+Python 版每個請求帶 `bot`（機器人的 slug；聊天頁從網址 `?bot=<slug>` 取得，沒有就用 `config.js` 的 `BOT`），可再帶 `flow`（流程 id）指定流程，沒帶用該 Bot 的預設流程；Bot 不存在或停用時回 `{ok:false, error:"服務暫停"}`。Apps Script 版一個部署就是一個機器人，忽略這兩個欄位。階層定義見 `architecture.md`。
+
+### 聊天頁如何切換後端
+
+`web/chat/config.js`：
+
+```js
+window.CHAT_CONFIG = {
+  BACKEND: "apps-script",      // 或 "server"
+  GAS_URL: "https://script.google.com/macros/s/…/exec",   // BACKEND=apps-script 時用
+  API_URL: "https://api.example.org",                      // BACKEND=server 時用
+  BOT: ""                                                  // server 用；網址的 ?bot= 優先
+};
+```
+
+`chat.js` 只有一個送出函式：`apps-script` 時 POST 到 `GAS_URL` 並把動作放在 `action` 欄位；`server` 時 POST 到 `API_URL + "/api/" + action` 並附上 `bot`。其他程式不分後端。（目前 `chat.js` 只實作 `apps-script`；`server` 模式隨 Python 版第一支聊天端點一起加。）
 
 ---
 
@@ -136,22 +149,9 @@ Python 版每個請求帶 `bot_id`（多機器人；聊天頁從網址 `?bot=<id
 
 ---
 
-## `ingest` — 文件匯入（Python 版後台用；Apps Script 版走後台 RPC）
+## 後台用的端點
 
-請求（multipart 或 JSON）：`{ "kb_id", "title", "source": "upload|paste", "content_type", "data": "<base64 或純文字>", "approve": false }`（文件屬於知識庫，不屬於 Bot）
-
-回應：`{ "ok": true, "doc_id", "chunks": 42, "status": "pending|approved" }`
-
-匯入流程：解析 → 切段（`chunk_size`／`chunk_overlap`）→ 段落類型標註 → 向量 →（選用）知識圖譜標註 → 待審核。只有 `approved` 的文件進檢索。
-
----
-
-## `eval/run` — 自動評測（Python 版）
-
-請求：`{ "bot_id", "flow_id", "bank_id", "question_ids": [], "repeat": 1, "settings_override": { … } }`
-回應：`{ "ok": true, "run_id" }`；結果用 `GET /api/eval/runs/{run_id}` 取。
-
-`settings_override` 讓評測套用試用設定而不改正式設定（改版把關用）。
+文件匯入、評測、設定管理等後台功能不在這份合約內（聊天頁用不到），Python 版見 [`admin-api.md`](admin-api.md)；Apps Script 版走後台頁面內的 RPC。
 
 ---
 

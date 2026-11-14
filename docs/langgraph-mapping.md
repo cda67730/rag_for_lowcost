@@ -132,11 +132,12 @@ knowledge_bases     id, workspace_id, name
 bot_knowledge       bot_id, kb_id, label, min_hits, weight
 documents           kb_id, doc_id, title, source, status(pending|approved|disabled)
 chunks              kb_id, chunk_id, doc_id, page, text, type, embedding vector(n)
-skills / skill_history / synonyms / forbidden / referrals / invite_codes   bot_id
+skills / skill_versions / synonyms / forbidden_rules / referrals / invite_codes   bot_id
 kg_nodes / kg_edges / kg_links / kg_defs / kg_candidates                   kb_id
 conversations       bot_id, flow_id, session, turn, unit, deid_text, type, intent, answer jsonb, sources jsonb, checks jsonb, metrics jsonb, trace jsonb
 feedback            bot_id, session, turn, kind, note
-eval_banks / eval_questions / eval_runs / eval_results                     bot_id, flow_id
+eval_questions / eval_runs / eval_results                                  bot_id, flow_id
+jobs / audit_log / usage_counters                                          （見 data-model.md）
 users / memberships / workspaces
 ```
 
@@ -145,10 +146,10 @@ users / memberships / workspaces
 ## 搬運順序建議
 
 1. `db/` 模型＋Alembic＋`docker-compose.yml`（Postgres 17 + pgvector）
-2. `settings/`：讀 `project_settings`、合併預設、`tpl_` 替換——這一步做完，範本 JSON 就能匯入
+2. `settings/`：讀 `bot_settings`＋`flow_settings`、合併預設、`tpl_` 替換——這一步做完，範本 JSON 就能匯入
 3. `services/llm.py`：Gemini／OpenAI 兩家、JSON 模式、不相容參數重送
 4. `graph/`：照上表一個節點一個節點搬，每個節點寫單元測試（用假的 LLM 回應）
 5. `app/`：`/api/ui`、`/api/check`、`/api/chat`、`/api/feedback`——到這裡 `web/chat/` 可以直接接
-6. `services/ingest.py`＋`/api/ingest`
+6. `services/ingest.py`＋`POST /api/admin/kbs/{kb}/documents`（規格見 ingest.md）
 7. 後台 API 與介面
 8. 評測與 Langfuse 接線
