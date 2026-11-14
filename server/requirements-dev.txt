@@ -1,4 +1,4 @@
-# 開發與測試用：執行用套件＋測試工具（版本同樣是測試通過的那組）
+# Development and tests: runtime packages + test tools (versions also from the passing test run). ASCII-only, see requirements.txt.
 -r requirements.txt
 iniconfig==2.3.1
 pluggy==1.7.0

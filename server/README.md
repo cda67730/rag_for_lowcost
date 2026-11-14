@@ -106,6 +106,18 @@ Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／1
    - Windows：用 NSSM 之類的服務包裝工具，程式填 `C:\path\server\.venv\Scripts\python.exe`，參數填 `run.py`，啟動目錄填 `C:\path\server`。
 4. 對外：前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
 
+#### Windows 注意事項
+
+- **資料庫**：pgvector 官方沒有 Windows 安裝檔（要自己用 Visual Studio 編譯）。建議擇一：用 Docker Desktop 只跑資料庫（`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db`）、用 Supabase／Neon 等雲端 PostgreSQL，或把資料庫放在另一台 Linux。
+- **Python**：到 python.org 裝 3.12 或 3.13（安裝時勾選 Add python.exe to PATH）。`start.bat` 會依序找 `py -3.13`、`py -3.12`、`python`；微軟商店的 `python` 捷徑會被略過。
+- **中文編碼（cp950）**：繁中 Windows 的預設編碼是 cp950，第三方套件用它讀含中文的檔案會出現 `UnicodeDecodeError: 'cp950' codec can't decode…`。處理方式：
+  - `run.py` 在 Windows 上一律以 UTF-8 模式（`python -X utf8`）執行，多開的子行程也是；`start.bat` 另外設了 `PYTHONUTF8=1`。
+  - 會被套件用系統編碼讀的檔案（`alembic.ini`、`requirements*.txt`、`start.bat`）只用英文，測試會檢查。
+  - `.env` 用記事本存成 UTF-8（含不含 BOM 都可以）；不小心存成 ANSI（Big5）也讀得到。
+  - 自己手動跑 `alembic`、`pip`、`python -m app.cli` 時，先在命令提示字元執行 `set PYTHONUTF8=1`。
+- **套件更新**：`git pull` 之後 `requirements.txt` 有變，`start.bat`／`start.sh` 會自動重裝；安裝中斷也會在下次重來。一直失敗時刪掉 `.venv` 資料夾再執行。
+- **背景工作判斷**：Windows 上用系統 API 判斷舊的伺服器行程是否還在（不使用 `os.kill`，它在 Windows 上會直接結束行程）。
+
 ### 套件版本
 
 - `pyproject.toml` 寫套件的可用範圍；`requirements.txt`（執行用）和 `requirements-dev.txt`（加測試工具）固定成測試通過的確切版本，安裝與 Docker 都用這兩份。

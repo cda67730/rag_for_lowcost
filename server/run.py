@@ -51,6 +51,21 @@ def migrate() -> None:
 
 
 def main(argv=None) -> None:
+    for st in (sys.stdout, sys.stderr):      # 輸出被導到檔案（例如 Windows 服務）時，系統編碼印不出的字改成跳脫，不讓啟動失敗
+        try:
+            st.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
+    if os.name == "nt" and not sys.flags.utf8_mode:
+        # 繁中 Windows 的預設編碼是 cp950：第三方套件讀寫檔案、印 log 時遇到中文容易 UnicodeDecodeError。
+        # 用 UTF-8 模式（python -X utf8）重新執行自己；子行程（多開）也繼承這個設定
+        import subprocess
+        os.environ["PYTHONUTF8"] = "1"
+        try:
+            sys.exit(subprocess.call([sys.executable, "-X", "utf8", str(Path(__file__).resolve()), *(sys.argv[1:] if argv is None else argv)]))
+        except KeyboardInterrupt:
+            sys.exit(130)
+    os.environ.setdefault("PYTHONUTF8", "1")
     if sys.version_info < (3, 12):
         sys.exit(f"需要 Python 3.12 以上（目前 {sys.version.split()[0]}）")
     p = argparse.ArgumentParser(prog="python run.py", description="啟動 RAG 問答伺服器")

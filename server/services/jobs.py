@@ -9,6 +9,7 @@ import logging
 import multiprocessing
 import os
 import socket
+import sys
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
@@ -24,12 +25,38 @@ LIVE = ("queued", "running")
 
 
 def _start_time(pid: int) -> str | None:
-    """行程的啟動時間（Linux /proc）；拿不到回 None"""
+    """行程的啟動時間（Linux 讀 /proc、Windows 問系統）；行程不在或拿不到回 None"""
+    if sys.platform == "win32":
+        return _win_start_time(pid)
     try:
-        with open(f"/proc/{pid}/stat") as f:
+        with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as f:
             return f.read().rsplit(")", 1)[1].split()[19]
     except (OSError, IndexError):
         return None
+
+
+def _win_start_time(pid: int) -> str | None:
+    """Windows：OpenProcess＋GetProcessTimes 取建立時間。注意 Windows 的 os.kill(pid, 0) 會直接結束那個行程，不能拿來探測"""
+    import ctypes
+    from ctypes import wintypes
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.OpenProcess.restype, k.OpenProcess.argtypes = wintypes.HANDLE, (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    k.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    k.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(wintypes.FILETIME),) * 4
+    k.CloseHandle.argtypes = (wintypes.HANDLE,)
+    h = k.OpenProcess(0x1000, False, pid)          # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return None
+    try:
+        code = wintypes.DWORD()
+        if not k.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:     # 259＝STILL_ACTIVE
+            return None
+        t = [wintypes.FILETIME() for _ in range(4)]
+        if not k.GetProcessTimes(h, *(ctypes.byref(x) for x in t)):
+            return None
+        return str((t[0].dwHighDateTime << 32) | t[0].dwLowDateTime)
+    finally:
+        k.CloseHandle(h)
 
 
 def instance_id() -> str:
@@ -54,9 +81,11 @@ def alive(worker: str) -> bool | None:
     now = _start_time(pid_n)
     if now is not None:
         return not start or now == start     # pid 被別的行程重用時啟動時間會不同
-    try:
+    if sys.platform == "win32" or os.path.exists("/proc"):
+        return False                         # 這兩種系統拿得到啟動時間：拿不到就是行程不在
+    try:                                     # 其他系統（macOS）：只能確認 pid 存在；signal 0 不會影響行程
         os.kill(pid_n, 0)
-        return not os.path.exists("/proc")   # 有 /proc 卻讀不到 → 行程不在
+        return True
     except ProcessLookupError:
         return False
     except PermissionError:

@@ -191,3 +191,24 @@ def test_instance_shared_by_spawned_workers():
 def _child_instance():
     from services import jobs
     return jobs.instance_id()
+
+
+def test_alive_never_signals_on_windows(monkeypatch):
+    """Windows 的 os.kill(pid, 0) 會直接結束那個行程：在 Windows 上判斷存活絕不能呼叫它"""
+    import socket
+    from services import jobs
+    host, orig = socket.gethostname(), jobs._start_time
+
+    def boom(*a):
+        raise AssertionError("不可以呼叫 os.kill")
+    monkeypatch.setattr(jobs.os, "kill", boom)
+    monkeypatch.setattr(jobs.sys, "platform", "win32")
+    monkeypatch.setattr(jobs, "_start_time", lambda pid: None)                     # 行程不在
+    assert jobs.alive(f"{host}:4321:132") is False
+    monkeypatch.setattr(jobs, "_start_time", lambda pid: "132")                    # 同一個行程還在
+    assert jobs.alive(f"{host}:4321:132") is True and jobs.alive(f"{host}:4321:999") is False   # pid 被重用
+    assert jobs.alive("別台:1:1") is None and jobs.alive("") is False
+    calls = []
+    monkeypatch.setattr(jobs, "_start_time", orig)
+    monkeypatch.setattr(jobs, "_win_start_time", lambda pid: calls.append(pid) or None)
+    assert jobs._start_time(77) is None and calls == [77]                          # Windows 走系統 API，不讀 /proc

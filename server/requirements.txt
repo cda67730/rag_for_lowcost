@@ -1,7 +1,9 @@
-# 執行用套件的確切版本（含間接相依），全部測試在這組版本下通過。
-# 安裝：pip install -r requirements.txt && pip install --no-deps -e .
-# 升級套件：改 pyproject.toml 的範圍 → 新的虛擬環境 pip install . → 跑測試 → pip freeze --exclude rag-server > requirements.txt
-# 產生環境：Python 3.13 / Linux；Docker 用 3.12。uvloop 不支援 Windows，已加條件
+# Exact versions of the runtime packages (including indirect ones); the full test suite passes with this set.
+# Install:  pip install -r requirements.txt && pip install --no-deps -e .
+# Upgrade:  widen ranges in pyproject.toml -> fresh venv -> pip install . -> run tests -> pip freeze --exclude rag-server > requirements.txt
+#           (keep this header and the platform markers on the uvloop / tzdata lines)
+# Generated on Python 3.13 / Linux; Docker uses 3.12. uvloop is skipped on Windows.
+# Keep this file ASCII-only: pip may read it with the system encoding (cp950 on Traditional Chinese Windows).
 alembic==1.20.1
 annotated-doc==0.0.6
 annotated-types==0.8.0
@@ -71,5 +73,5 @@ websockets==17.4
 xlsxwriter==3.3.1
 xxhash==4.1.0
 zstandard==0.25.0
-# Windows 才需要（psycopg 讀時區）
+# Windows only (time zone data for psycopg)
 tzdata==2026.6 ; sys_platform == "win32"

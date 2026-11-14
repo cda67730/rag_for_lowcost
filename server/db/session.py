@@ -9,8 +9,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-# server/.env：伺服器、後台指令、遷移都會讀到（這個模組是共同的入口）。已經設定的環境變數優先，Docker／systemd 傳進來的值不會被蓋掉
-load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+def _load_env_file(p: Path) -> None:
+    """server/.env：伺服器、後台指令、遷移都會讀到（這個模組是共同的入口）。已經設定的環境變數優先，Docker／systemd 傳進來的值不會被蓋掉。
+    用 UTF-8 讀（記事本存成「UTF-8 含 BOM」也可以）；Windows 上被存成 ANSI（Big5）時改用系統編碼讀"""
+    if not p.is_file():
+        return
+    try:
+        load_dotenv(p, override=False, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        import locale
+        load_dotenv(p, override=False, encoding=locale.getpreferredencoding(False))
+
+
+_load_env_file(Path(__file__).resolve().parent.parent / ".env")
 
 
 def database_url() -> str:

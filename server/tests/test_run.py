@@ -60,3 +60,53 @@ def test_dotenv_loaded_without_overriding(tmp_path):
             env_file.unlink()
         else:
             env_file.write_bytes(backup)
+
+
+def test_files_read_with_system_encoding_are_ascii():
+    """這些檔案會被第三方工具用「系統編碼」讀（繁中 Windows 是 cp950），內容有中文就會 UnicodeDecodeError：一律只用 ASCII"""
+    for name in ("alembic.ini", "requirements.txt", "requirements-dev.txt", "start.bat"):
+        data = (ROOT / name).read_bytes()
+        bad = [i for i, b in enumerate(data) if b > 127]
+        assert not bad, f"{name} 第 {data[:bad[0]].count(b'\\n') + 1} 行有非 ASCII 字元"
+    assert b"\r\n" in (ROOT / "start.bat").read_bytes()
+
+
+def test_cp950_locale_can_read_config(monkeypatch):
+    """模擬繁中 Windows：用 cp950 讀 alembic.ini 與 requirements 不會失敗；.env 存成 UTF-8（含 BOM）或 Big5 都讀得到"""
+    import configparser
+    configparser.ConfigParser().read(ROOT / "alembic.ini", encoding="cp950")
+    for name in ("requirements.txt", "requirements-dev.txt"):
+        (ROOT / name).read_bytes().decode("cp950")
+
+
+def test_env_file_encodings(tmp_path, monkeypatch):
+    import locale
+    import os
+    import db.session as S
+    for i, (enc, data) in enumerate([("utf-8-sig", "# 註解\nRAG_E{i}=值{i}\n"), ("utf-8", "# 註解\nRAG_E{i}=值{i}\n"), ("cp950", "# 註解\nRAG_E{i}=值{i}\n")]):
+        p = tmp_path / f"e{i}.env"
+        p.write_bytes(data.format(i=i).encode(enc))
+        monkeypatch.delenv(f"RAG_E{i}", raising=False)
+        if enc == "cp950":
+            monkeypatch.setattr(locale, "getpreferredencoding", lambda do_setlocale=True: "cp950")
+        S._load_env_file(p)
+        assert os.environ.get(f"RAG_E{i}") == f"值{i}", enc
+        monkeypatch.delenv(f"RAG_E{i}", raising=False)
+
+
+def test_windows_reexec_in_utf8_mode(monkeypatch):
+    """Windows 沒開 UTF-8 模式時，run.py 用 python -X utf8 重新執行自己，參數照傳、回傳碼照回"""
+    import os
+    import subprocess
+    from types import SimpleNamespace
+    calls = []
+    monkeypatch.setattr(subprocess, "call", lambda cmd: calls.append(cmd) or 3)
+    fake_os = SimpleNamespace(name="nt", environ={}, path=os.path, chdir=os.chdir)
+    fake_sys = SimpleNamespace(flags=SimpleNamespace(utf8_mode=False), executable="C:\\py\\python.exe", exit=sys.exit, stdout=sys.stdout,
+                               stderr=sys.stderr, version_info=sys.version_info, argv=["run.py", "--dev"], path=sys.path)
+    monkeypatch.setattr(run, "os", fake_os)
+    monkeypatch.setattr(run, "sys", fake_sys)
+    with pytest.raises(SystemExit) as e:
+        run.main(["--dev"])
+    assert e.value.code == 3 and fake_os.environ["PYTHONUTF8"] == "1"
+    assert calls == [["C:\\py\\python.exe", "-X", "utf8", str(Path(run.__file__).resolve()), "--dev"]]
