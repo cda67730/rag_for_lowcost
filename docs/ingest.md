@@ -104,7 +104,7 @@ AI 分類，一次 20 段；失敗的留空（視為未分類，不受配額限�
 
 ## 10. 實作狀態
 
-`server/services/parsers.py`（解析）、`chunking.py`（切段）、`ingest.py`（上傳、處理、修復、背景任務）已完成並有測試；切段與段落類型的 prompt 與 Apps Script 版逐字比對。圖譜自動標註（§7）尚未實作，`auto_kg_tag` 目前不起作用。上傳的 API 端點隨後台 API 一起做。
+`server/services/parsers.py`（解析）、`chunking.py`（切段）、`ingest.py`（上傳、處理、修復、背景任務）已完成並有測試；切段與段落類型的 prompt 與 Apps Script 版逐字比對。圖譜自動標註（§7）已完成：知識庫開 `auto_kg_tag` 且已匯入圖譜時，處理完順便標註；失敗不影響匯入。上傳的 API 端點隨後台 API 一起做。
 
 ## 11. 與 Apps Script 版的差異
 

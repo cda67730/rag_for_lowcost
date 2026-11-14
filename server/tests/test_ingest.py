@@ -181,3 +181,29 @@ def test_background_job(kb, engine):
     run(I.run_ingest_job(factory, FakeLLM(), job3.id))
     db.expire_all()
     assert db.get(m.Job, job3.id).status == "failed" and "無法讀取" in db.get(m.Job, job3.id).message
+
+
+def test_auto_kg_tag(kb):
+    db, k = kb
+    k.auto_kg_tag = True
+    db.add(m.KgNode(kb_id=k.id, node_key="n1", name="收拾", ntype="概念")); db.flush()
+
+    class L(FakeLLM):
+        async def generate_json(self, model, prompt, **kw):
+            if "做標註" in prompt:
+                return {"items": [{"chunk": 1, "main": ["n1"], "new": [{"name": "新概念"}]}]}, None
+            return await super().generate_json(model, prompt, **kw)
+
+    doc = I.create_document(db, k, filename="a.md", data=md())
+    r = run(I.process_document(db, L(), doc.id))
+    assert r.status == "pending" and "候選" in doc.error and db.query(m.KgLink).count() >= 1
+
+    class Bad(FakeLLM):
+        async def generate_json(self, model, prompt, **kw):
+            if "做標註" in prompt:
+                raise RuntimeError("x")
+            return await super().generate_json(model, prompt, **kw)
+
+    db.query(m.KgLink).delete(); db.flush()
+    r = run(I.process_document(db, Bad(), doc.id))
+    assert r.status == "pending" and db.query(m.KgLink).count() == 0       # 批次失敗只是沒標，不影響匯入

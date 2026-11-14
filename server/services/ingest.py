@@ -189,9 +189,25 @@ async def process_document(session: Session, llm: LLMClient, doc_id: uuid.UUID, 
         notes.append(f"{missing} 段缺向量，可按「修復」補算")
     if bad_batches:
         notes.append("部分段落未分類，可在後台重做")
+    session.flush()
+    if kb.auto_kg_tag:      # 有圖譜就順便標註；失敗不影響匯入
+        from services import kg_admin
+        try:
+            with session.begin_nested():
+                r = await kg_admin.map_document(session, llm, model, _domain(session, kb.id), doc.id)
+            if r.get("candidates"):
+                notes.append(f"圖譜標註提出 {r['candidates']} 個新節點候選")
+        except Exception:
+            notes.append("圖譜標註失敗，可在後台重做")
     doc.status, doc.chunk_count, doc.error = "pending", len(pieces), "；".join(notes)[:500]
     session.flush()
     return Result("pending", len(pieces), missing, bad_batches, doc.error)
+
+
+def _domain(session: Session, kb_id: uuid.UUID) -> str:
+    bot_id = session.scalar(select(BotKnowledge.bot_id).where(BotKnowledge.kb_id == kb_id).order_by(BotKnowledge.sort).limit(1))
+    from settings.loader import build_config
+    return (load_config(session, bot_id) if bot_id else build_config({})).roles()["domain"]
 
 
 async def repair_vectors(session: Session, llm: LLMClient, kb_id: uuid.UUID) -> int:
