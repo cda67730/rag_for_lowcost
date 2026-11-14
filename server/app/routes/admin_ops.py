@@ -11,14 +11,14 @@ import csv
 import io
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, literal, or_, select, tuple_
 from sqlalchemy.orm import Session, defer
 
 from app import auth
 from app.errors import ApiError, not_found
 from app.perms import ROLES, require, roles_of, ws_roles
-from app.routes.admin import DB, Me, audit, body, cursor_of, get_bot, get_doc, get_kb, kb_out, page, uid
+from app.routes.admin import DB, Me, audit, body, cursor_of, get_bot, get_session_factory, get_doc, get_kb, kb_out, page, uid
 from app.routes.admin_bot import admin_bot
 from app.routes.chat import get_llm
 from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Feedback, Flow, Job, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
@@ -584,21 +584,52 @@ CSV_COLS = [("id", "編號"), ("at", "時間"), ("session", "Session"), ("turn",
 
 @router.get("/bots/{bot}/logs/export.csv")
 def export_logs(bot: str, days: int | None = None, unit: str | None = None, type: str | None = None, q: str | None = None, rewritten: bool | None = None,
-                include_test: bool = False, u: User = Me, s: Session = DB):
+                include_test: bool = False, u: User = Me, s: Session = DB, factory=Depends(get_session_factory)):
     b = admin_bot(s, u, bot, {"analyst"})
-    rows = s.scalars(_log_query(b, days, unit, type, q, rewritten, include_test).order_by(Conversation.created_at).limit(50000)).all()
-    fb = _feedback(s, b.id)
+    filt = (days, unit, type, q, rewritten, include_test)
+    n = s.scalar(select(func.count()).select_from(_log_query(b, *filt).with_only_columns(Conversation.id).limit(CSV_MAX).subquery()))
+    audit(s, b.workspace_id, u, "logs.export", b.slug, {"rows": n}, bot_id=b.id)
+    s.commit()
+    return StreamingResponse(_csv_stream(factory, b, filt, n), media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition": f'attachment; filename="{b.slug}-logs.csv"'})
+
+
+CSV_MAX, CSV_BATCH = 50000, 1000
+
+
+def _csv_stream(factory, b: Bot, filt: tuple, n: int):
+    """邊查邊送：每次讀 1000 筆、寫成 CSV 就送出去，記憶體裡不會同時放上萬筆紀錄。
+    用自己的 session（請求的 session 在回應開始送出後就可能被關掉）"""
     buf = io.StringIO()
     w = csv.writer(buf)
+
+    def take() -> str:
+        out = buf.getvalue()
+        buf.seek(0); buf.truncate()
+        return out
     w.writerow([h for _, h in CSV_COLS])
-    for c in rows:
-        r = log_row(c, fb.get((c.session, c.turn)))
-        r["message"], r["skills"], r["rewritten"] = c.user_text, "、".join(r["skills"]), "是" if r["rewritten"] else ""
-        w.writerow([_csv_safe(r[k]) for k, _ in CSV_COLS])
-    audit(s, b.workspace_id, u, "logs.export", b.slug, {"rows": len(rows)}, bot_id=b.id)
-    s.commit()
-    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",      # BOM：Excel 才認得 UTF-8
-                    headers={"Content-Disposition": f'attachment; filename="{b.slug}-logs.csv"'})
+    yield "\ufeff" + take()          # BOM：Excel 才認得 UTF-8
+    s = factory()
+    try:
+        last, sent = None, 0
+        while sent < n:
+            x = _log_query(b, *filt).options(*(defer(getattr(Conversation, k)) for k in _HEAVY))
+            if last:
+                x = x.where(tuple_(Conversation.created_at, Conversation.id) > tuple_(literal(last[0]), literal(last[1])))
+            rows = s.scalars(x.order_by(Conversation.created_at, Conversation.id).limit(min(CSV_BATCH, n - sent))).all()
+            if not rows:
+                break
+            fb = _feedback(s, b.id, [(c.session, c.turn) for c in rows])
+            for c in rows:
+                r = log_row(c, fb.get((c.session, c.turn)))
+                r["message"], r["skills"], r["rewritten"] = c.user_text, "、".join(r["skills"] or []), "是" if r["rewritten"] else ""
+                w.writerow([_csv_safe(r[k]) for k, _ in CSV_COLS])
+            sent += len(rows)
+            last = (rows[-1].created_at, rows[-1].id)
+            s.expunge_all()
+            yield take()
+    finally:
+        s.close()
 
 
 def _csv_safe(v):

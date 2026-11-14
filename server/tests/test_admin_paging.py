@@ -101,3 +101,31 @@ def test_kg_overview_query_count_is_constant(env):  # noqa: F811
     doc5, cs5 = docs[5]
     assert by["候選5"]["doc"] == "文件5" and by["候選5"]["snippet"] == kg_admin._u16cut(cs5[1].text, 160)
     assert by["沒出處"]["doc"] == "" and by["沒出處"]["snippet"] == ""
+
+
+def test_csv_export_streams_in_batches(env, monkeypatch):  # noqa: F811
+    """匯出分批讀、邊讀邊送；批次交界（同一時間的紀錄）不漏不重複，超過上限只匯出前面那些"""
+    import csv
+    import io
+    import app.routes.admin_ops as O
+    c, db, ws, bot, bot2, users, as_ = env
+    monkeypatch.setattr(O, "CSV_BATCH", 3)
+    monkeypatch.setattr(O, "CSV_MAX", 10)
+    ids = []
+    for i in range(12):
+        x = m.Conversation(bot_id=bot.id, session=f"s{i}", turn=1, user_text=f"q{i}", rtype="answer", skills=None if i % 2 else ["理解"], trace=[{"大": 1}])
+        db.add(x); db.flush(); ids.append(x.id)
+    db.add(m.Feedback(bot_id=bot.id, session="s4", turn=1, kind="沒幫助")); db.flush()
+    with sql_log(db) as stmts:
+        r = c.get(f"/api/admin/bots/{bot.id}/logs/export.csv", headers=as_("ana"))
+    rows = list(csv.reader(io.StringIO(r.text.lstrip("﻿"))))
+    assert rows[0][0] == "編號" and [int(x[0]) for x in rows[1:]] == ids[:10]
+    assert rows[5][-1] == "down" and rows[1][12] == "理解" and rows[2][12] == ""
+    fbq = [s for s in stmts if "FROM feedback" in s]
+    assert len(fbq) == 4 and all(" IN " in s for s in fbq)                         # 10 筆分 4 批，每批只查那批的回饋
+    assert not any("conversations.trace" in s for s in stmts)
+    log = db.query(m.AuditLog).filter_by(action="logs.export").one()
+    assert log.detail["rows"] == 10
+    from sqlalchemy.orm import Session
+    chunks = list(O._csv_stream(lambda: Session(bind=db.connection(), join_transaction_mode="create_savepoint"), bot, (None, None, None, None, None, False), 10))
+    assert len(chunks) == 5 and chunks[0].startswith("﻿編號")                 # 表頭 + 4 批，一批一批送出
