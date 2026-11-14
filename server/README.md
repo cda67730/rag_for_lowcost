@@ -2,7 +2,7 @@
 
 LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人，每個機器人有自己的設定、Skill、紀錄與聊天入口；知識庫獨立、可以被多個機器人掛載。
 
-> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）、文件匯入、後台 API（全部，見 `docs/admin-api.md`）與後台頁面（`web/admin/`）已完成並有測試。下面標「規劃」的指令尚未實作。
+> **狀態**：資料庫層、設定、專案範本、模型呼叫（Gemini／OpenAI）、去識別化、多知識庫檢索與重排、知識圖譜比對、回答檢查、問答流程（LangGraph）、聊天 API（`/api/ui`、`check`、`chat`、`feedback`）、文件匯入、後台 API（全部，見 `docs/admin-api.md`）與後台頁面（`web/admin/`）已完成並有測試。
 
 ## 文件
 
@@ -137,14 +137,26 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 
 ## 從 Apps Script 版搬過來
 
-一份試算表 → 一個 Bot ＋ 一個同名知識庫：
+一份試算表 → 一個 Bot ＋ 一個同名知識庫。**只讀試算表、不會寫回**，Apps Script 版照常運作。
+
+1. 在 Google 試算表選「檔案 › 下載 › Microsoft Excel (.xlsx)」。
+2. 把檔案放到伺服器上執行：
 
 ```bash
-docker compose exec app python -m app.cli import-apps-script \   # 規劃
+docker compose exec app python -m app.cli import-apps-script \
   --workspace main --slug <bot-slug> --xlsx <下載的試算表.xlsx>
+# 選項：--kb-slug <知識庫 slug>（預設同 bot）、--with-logs（一併搬對話紀錄與回饋）、--no-embed（先不算向量，之後在後台補算）
 ```
 
-搬設定、Skill、同義詞、禁止用語、轉介資源、邀請碼、文件與段落文字、圖譜、評測題庫；向量依新知識庫的設定重算（會花一次向量 API 費用）。對話紀錄可選擇是否搬（`--with-logs`）。
+| 搬 | 不搬 |
+| --- | --- |
+| 設定（不合法的值略過並列出）、Skill 與版本紀錄、同義詞、禁止用語、轉介資源、邀請碼 | 管理員帳號（密碼格式不同；在後台「成員」重新建） |
+| 文件與段落（含類型、讀者對象、適用年齡、情境）、知識圖譜（定義、節點、關係、來源、段落標註、候選）、評測題庫 | 評測結果 |
+| 對話紀錄與回饋（要加 `--with-logs`） | 舊向量（依新知識庫的設定重算，會花一次向量 API 費用） |
+
+- 搬過來的文件沒有原始檔，不能「重新處理」，但可以審核、改段落類型、重新分類、圖譜標註。
+- 試算表裡有對話紀錄與邀請碼，匯入完請刪除這個 .xlsx。
+- 同一個 slug 只能匯入一次；要重來請先在後台刪掉那個機器人與知識庫。
 
 ## 備份與更新
 
