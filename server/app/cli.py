@@ -1,8 +1,11 @@
-"""命令列工具。建立 Workspace 與第一個 owner 不開 API，用這裡：
+"""命令列工具（在伺服器上執行）：
 
     python -m app.cli create-workspace --slug main --name 主要工作區 --owner admin
+    python -m app.cli reset-password --login 帳號
+    python -m app.cli superadmin --login 帳號 [--revoke]
 
-密碼會提示輸入（也可用環境變數 RAG_OWNER_PASSWORD 給，方便自動化）。
+建立第一個工作區時，owner 會自動成為總管理員（之後可以在後台建立、刪除工作區）。
+新帳號的密碼會提示輸入（也可用環境變數 RAG_OWNER_PASSWORD 給，方便自動化）；帳號已存在就不會問密碼。
 """
 from __future__ import annotations
 
@@ -13,26 +16,32 @@ import sys
 
 from sqlalchemy import select
 
-from app.auth import hash_password
-from db.models import Membership, User, Workspace
+from app.errors import ApiError
+from db.models import User, Workspace
 from db.session import session
+from services import workspaces as W
 
 
-def create_workspace(slug: str, name: str, owner: str, password: str) -> tuple[Workspace, User]:
-    if len(password) < 10:
-        raise SystemExit("密碼至少 10 個字元")
+def create_workspace(slug: str, name: str, owner: str, password: str | None) -> tuple[Workspace, User, bool]:
+    """回傳 (工作區, owner, 是否設為總管理員)。還沒有任何總管理員時，這個 owner 就是總管理員"""
     with session() as s:
-        if s.scalar(select(Workspace).where(Workspace.slug == slug)):
-            raise SystemExit(f"Workspace「{slug}」已存在")
-        u = s.scalar(select(User).where(User.login == owner))
-        if u is None:
-            u = User(login=owner, display_name=owner, pw_hash=hash_password(password))
-            s.add(u)
-        w = Workspace(slug=slug, name=name)
-        s.add(w); s.flush()
-        s.add(Membership(user_id=u.id, workspace_id=w.id, role="owner"))
+        try:
+            r = W.create_workspace(s, slug, name, owner, password)
+        except ApiError as e:
+            raise SystemExit(e.error + ("：" + "、".join(f"{k} {v}" for k, v in e.fields.items()) if e.fields else ""))
+        u, boot = r["owner"], not s.scalar(select(User.id).where(User.is_superadmin).limit(1))
+        if boot:
+            u.is_superadmin = True
+        W.system_audit(s, None, "workspace.create", r["workspace"].slug, {"name": r["workspace"].name, "owner": u.login, "via": "cli"})
         s.commit()
-        return w, u
+        return r["workspace"], u, boot
+
+
+def ask_password(prompt: str) -> str:
+    pw = os.environ.get("RAG_OWNER_PASSWORD") or getpass.getpass(prompt)
+    if len(pw) < 10:
+        raise SystemExit("密碼至少 10 個字元")
+    return pw
 
 
 def main(argv=None) -> None:
@@ -49,9 +58,32 @@ def main(argv=None) -> None:
     i.add_argument("--xlsx", required=True, help="Google 試算表「檔案 › 下載 › Microsoft Excel」存下的檔案")
     i.add_argument("--with-logs", action="store_true", help="一併搬對話紀錄與回饋（預設不搬）")
     i.add_argument("--no-embed", action="store_true", help="先不算向量，之後在後台按「補算缺少的向量」")
+    rp = sub.add_parser("reset-password", help="重設任何帳號的密碼（含屬於多個工作區的帳號），印出一次性密碼")
+    rp.add_argument("--login", required=True)
+    sa = sub.add_parser("superadmin", help="設定或取消總管理員（可在後台建立、刪除工作區）")
+    sa.add_argument("--login", required=True)
+    sa.add_argument("--revoke", action="store_true", help="取消總管理員")
     r = sub.add_parser("purge-traces", help="清掉超過保留天數的流程紀錄（伺服器每天也會自動清一次）")
     r.add_argument("--days", type=int, help="保留天數，預設讀 TRACE_RETENTION_DAYS（沒設是 90）")
     a = p.parse_args(argv)
+    if a.cmd in ("reset-password", "superadmin"):
+        with session() as s:
+            u = W.find_user(s, a.login)
+            if u is None:
+                raise SystemExit(f"找不到帳號「{a.login}」")
+            if a.cmd == "reset-password":
+                temp = W.reset_password(s, u)
+                W.system_audit(s, None, "user.reset_password", u.login, {"via": "cli"})
+                s.commit()
+                print(f"{u.login} 的一次性密碼：{temp}（請轉交本人，登入後到右上角改密碼；原本的登入已失效）")
+            else:
+                if a.revoke and u.is_superadmin and not s.scalar(select(User.id).where(User.is_superadmin, User.id != u.id).limit(1)):
+                    print("提醒：取消後就沒有總管理員了，之後只能用這個指令再設定")
+                u.is_superadmin = not a.revoke
+                W.system_audit(s, None, "user.superadmin", u.login, {"on": u.is_superadmin, "via": "cli"})
+                s.commit()
+                print(f"{u.login}：{'已設為' if u.is_superadmin else '已取消'}總管理員")
+        return
     if a.cmd == "purge-traces":
         from services import retention
         days = a.days if a.days is not None else retention.retention_days()
@@ -82,10 +114,13 @@ def main(argv=None) -> None:
         print("下一步：到後台確認設定、審核文件；試算表檔案含對話與邀請碼，用完請刪除。")
         return
     if a.cmd == "create-workspace":
-        pw = os.environ.get("RAG_OWNER_PASSWORD") or getpass.getpass("owner 密碼（至少 10 個字元）：")
-        w, u = create_workspace(a.slug, a.name, a.owner, pw)
-        print(f"已建立 Workspace {w.slug}（{w.id}），owner：{u.login}")
-
+        with session() as s:
+            exists = W.find_user(s, a.owner) is not None
+        pw = None if exists else ask_password("新帳號 owner 的密碼（至少 10 個字元）：")
+        w, u, boot = create_workspace(a.slug, a.name, a.owner, pw)
+        print(f"已建立 Workspace {w.slug}（{w.id}），owner：{u.login}" + ("（使用原有帳號與密碼）" if exists else ""))
+        if boot:
+            print(f"{u.login} 也是總管理員：可以在後台建立、刪除工作區")
 
 if __name__ == "__main__":
     main(sys.argv[1:])

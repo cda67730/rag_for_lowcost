@@ -46,7 +46,7 @@
 | POST | `/auth/login` | 公開 | `{login, password}` → `{token, user}`。連續錯 5 次鎖 15 分鐘 |
 | POST | `/auth/refresh` | 已登入 | 換新 token |
 | POST | `/auth/logout` | 已登入 | 自己的 `token_version`+1 |
-| GET | `/me` | 已登入 | 自己的資料、可存取的 Workspace 與 Bot 清單、各自角色 |
+| GET | `/me` | 已登入 | 自己的資料、`is_superadmin`、可存取的 Workspace 與 Bot 清單、各自角色 |
 | POST | `/me/password` | 已登入 | `{old, new}`，成功後舊 token 失效 |
 
 ## 2. Workspace 與成員
@@ -59,10 +59,22 @@
 | POST | `/workspaces/{ws}/members` | O | `{login, display_name, password?, role, bot_id?}`；帳號不存在就建立 |
 | PATCH | `/workspaces/{ws}/members/{membership}` | O | 改角色或範圍 |
 | DELETE | `/workspaces/{ws}/members/{membership}` | O | 移除成員關係 |
-| POST | `/workspaces/{ws}/users/{user}/reset-password` | O | 產生一次性密碼 |
+| POST | `/workspaces/{ws}/users/{user}/reset-password` | O | 產生一次性密碼。帳號也屬於其他工作區或是總管理員時回 409 `shared_account`（只能本人改或由總管理員重設） |
 | GET | `/workspaces/{ws}/audit` | O | 稽核紀錄，可依 bot／kb／action 篩選 |
 
-建立 Workspace 與第一個 owner 用命令列（`python -m app.cli create-workspace`），不開 API。
+## 2a. 系統管理（總管理員）
+
+總管理員（`users.is_superadmin`）可以建立、刪除工作區，重設任何帳號的密碼；不會因此看到工作區的內容（要管某個工作區，還是要是那裡的成員）。非總管理員呼叫一律 403。
+
+| 方法 | 路徑 | 說明 |
+| --- | --- | --- |
+| GET | `/system/workspaces` | 所有工作區：名稱、slug、owner、機器人／知識庫／文件／對話／成員數 |
+| POST | `/system/workspaces` | `{slug, name, owner?, password?}`；owner 預設是自己。帳號已存在就加為 owner、不動密碼；不存在就建立，沒給 password 時回傳 `temp_password`（只顯示這一次） |
+| DELETE | `/system/workspaces/{ws}` | `{confirm: "<slug>"}`；連同機器人、知識庫、文件、紀錄、成員角色一起刪，帳號保留。還有背景工作在跑回 409 `jobs_running` |
+| POST | `/system/users/reset-password` | `{login}` → `{login, temp_password}`，對方的登入全部失效 |
+| GET | `/system/audit` | 跨工作區操作紀錄（建立／刪除工作區、重設密碼、總管理員設定） |
+
+第一個工作區用命令列建立（`python -m app.cli create-workspace`），它的 owner 會自動成為總管理員；之後可在後台「系統管理」建立。指令 `python -m app.cli superadmin --login 帳號 [--revoke]` 設定或取消總管理員，`python -m app.cli reset-password --login 帳號` 重設任何帳號的密碼。
 
 ## 3. 機器人與流程
 

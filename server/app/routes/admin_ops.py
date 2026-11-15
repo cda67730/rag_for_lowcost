@@ -23,6 +23,7 @@ from app.routes.admin_bot import admin_bot
 from app.routes.chat import get_llm
 from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Feedback, Flow, Job, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
 from graph.chat_graph import Deps, run_chat
+from services import workspaces as W
 from services import describe as describe_svc
 from services import ingest
 from services.llm import EMBED_MODELS, LLMClient, provider_of
@@ -178,8 +179,10 @@ def reset_password(ws: str, user_id: str, u: User = Me, s: Session = DB):
     target = s.get(User, uid(user_id))
     if target is None or not s.scalar(select(Membership.id).where(Membership.user_id == target.id, Membership.workspace_id == w.id).limit(1)):
         raise not_found()
-    temp = secrets.token_urlsafe(12)
-    target.pw_hash, target.token_version, target.failed_count, target.locked_until = auth.hash_password(temp), target.token_version + 1, 0, None
+    # 帳號是全站共用的：也屬於別的工作區（或是總管理員）的帳號，重設密碼等於拿到他在別處的權限，只能本人改或由總管理員重設
+    if target.is_superadmin or W.other_workspaces(s, target, w.id):
+        raise ApiError(409, "shared_account", "這個帳號也屬於其他工作區，無法在這裡重設密碼。請本人登入後自己改，或請總管理員重設")
+    temp = W.reset_password(s, target)
     audit(s, w.id, u, "user.reset_password", target.login)
     s.commit()
     return {"temp_password": temp}

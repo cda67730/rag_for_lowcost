@@ -78,6 +78,8 @@ class User(Base):
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sql("0"))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql("false"))
+    # 總管理員：建立／刪除工作區、重設任何帳號的密碼；不會因此看到各工作區的內容（要看內容還是得是成員）。用 python -m app.cli superadmin 設定
+    is_superadmin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql("false"))
     created_at: Mapped[datetime] = created()
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -106,6 +108,19 @@ class AuditLog(Base):
     bot_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))   # 不設 FK：Bot 刪了紀錄還在
     kb_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     user_id: Mapped[uuid.UUID | None] = fk("users.id", "SET NULL", nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    target: Mapped[str] = s()
+    detail: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=sql("'{}'::jsonb"))
+    at: Mapped[datetime] = created()
+
+
+class SystemAudit(Base):
+    """跨工作區的操作紀錄（建立／刪除工作區、總管理員重設密碼）。不掛在工作區底下：工作區刪了紀錄還在"""
+    __tablename__ = "system_audit"
+    __table_args__ = (Index("ix_system_audit_at", sql("at DESC")),)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[uuid.UUID | None] = fk("users.id", "SET NULL", nullable=True)
+    login: Mapped[str] = s()          # 帳號刪了也看得出是誰
     action: Mapped[str] = mapped_column(Text, nullable=False)
     target: Mapped[str] = s()
     detail: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=sql("'{}'::jsonb"))

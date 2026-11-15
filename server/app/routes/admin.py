@@ -143,7 +143,7 @@ def me(u: User = Me, s: Session = DB):
             e["roles"].append(m.role)
         else:
             e["bots"].append({"bot_id": str(m.bot_id), "role": m.role})
-    return {"id": str(u.id), "login": u.login, "display_name": u.display_name, "workspaces": list(wss.values())}
+    return {"id": str(u.id), "login": u.login, "display_name": u.display_name, "is_superadmin": u.is_superadmin, "workspaces": list(wss.values())}
 
 
 @router.post("/me/password")
