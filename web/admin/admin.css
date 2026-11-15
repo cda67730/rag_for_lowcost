@@ -19,6 +19,7 @@ label{display:block;font-weight:600;margin:10px 0 4px}
 label.inline{display:inline-flex;gap:6px;align-items:center;font-weight:400;margin:0}
 .btn{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:inherit;white-space:nowrap}
 .btn:hover{border-color:var(--accent)}.btn:disabled{opacity:.5;cursor:default}
+a.btn{text-decoration:none;display:inline-block}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.danger{color:var(--err)}.btn.sm{padding:3px 9px;font-size:12px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}

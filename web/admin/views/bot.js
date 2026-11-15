@@ -28,11 +28,14 @@ A.views.bot = async function (botId, tab) {
     let rows = cur.items.map((x) => ({ ...x }));
     const draw = () => {
       const free = av.items.filter((k) => !rows.find((r) => r.kb_id === k.id));
-      p.innerHTML = `<p class="note">機器人回答時只會檢索這裡掛的知識庫。「最少段數」保證每次至少從這個庫取幾段；「權重」放大或縮小這個庫的分數。同一個機器人掛的知識庫要用同一個向量模型。</p>
+      const kbHome = "#/ws/" + b.workspace_id + "/kbs";
+      const guide = av.items.length ? `<div class="box"><b>上傳文件不在這裡。</b>文件是放進「知識庫」的：到 <a href="${kbHome}">工作區 › 知識庫</a> 點知識庫名稱 →「文件」上傳、等處理完再核可；這一頁只決定機器人要用哪些知識庫。</div>`
+        : `<div class="box"><b>這個工作區還沒有知識庫。</b>步驟：① 到 <a href="${kbHome}">工作區 › 知識庫</a> 新增一個知識庫 → ② 點進去在「文件」上傳檔案、等處理完再核可 → ③ 回到這一頁把它掛上。</div>`;
+      p.innerHTML = guide + `<p class="note">機器人回答時只會檢索這裡掛的知識庫。「最少段數」保證每次至少從這個庫取幾段；「權重」放大或縮小這個庫的分數。同一個機器人掛的知識庫要用同一個向量模型。</p>
         <div class="tablewrap"><table><thead><tr><th>知識庫</th><th>標籤（給模型看的來源名稱）</th><th>最少段數</th><th>權重</th><th>啟用</th><th></th></tr></thead><tbody>${rows.map((r, i) =>
           `<tr><td><b>${A.esc(r.name)}</b><div class="note mono">${A.esc(r.embed_model)}・${r.embed_dim}</div></td><td><input type="text" data-f="label" data-i="${i}" value="${A.esc(r.label)}"></td>
           <td><input type="number" data-f="min_hits" data-i="${i}" value="${r.min_hits}" min="0" max="10" style="width:70px"></td><td><input type="number" data-f="weight" data-i="${i}" value="${r.weight}" step="0.1" min="0.1" max="3" style="width:80px"></td>
-          <td><input type="checkbox" data-f="enabled" data-i="${i}" ${r.enabled ? "checked" : ""}></td><td><button class="btn sm danger" data-del="${i}" type="button">卸下</button></td></tr>`).join("") || `<tr><td colspan="6" class="note">還沒有掛任何知識庫</td></tr>`}</tbody></table></div>
+          <td><input type="checkbox" data-f="enabled" data-i="${i}" ${r.enabled ? "checked" : ""}></td><td><a class="btn sm" href="#/kb/${r.kb_id}/docs">文件</a> <button class="btn sm danger" data-del="${i}" type="button">卸下</button></td></tr>`).join("") || `<tr><td colspan="6" class="note">還沒有掛任何知識庫</td></tr>`}</tbody></table></div>
         <div class="row" style="margin-top:10px"><select id="kAdd" style="max-width:360px"><option value="">— 選擇要掛上的知識庫 —</option>${free.map((k) => `<option value="${k.id}" ${k.compatible ? "" : "disabled"}>${A.esc(k.name)}（${A.esc(k.embed_model)}・${k.embed_dim}）${k.compatible ? "" : "－向量模型不同"}</option>`).join("")}</select>
         <button class="btn" id="kAddB" type="button">掛上</button><span style="flex:1"></span><button class="btn pri" id="kSave" type="button">儲存</button></div>`;
       A.$$("[data-f]", p).forEach((x) => (x.onchange = () => { const r = rows[+x.dataset.i]; r[x.dataset.f] = x.type === "checkbox" ? x.checked : x.type === "number" ? +x.value : x.value; }));
