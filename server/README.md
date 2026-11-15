@@ -39,7 +39,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
 | `CHAT_TIMEOUT_SECONDS` | 否 | 一個回合最多幾秒，預設 50；超過改給保守回答並記錄（品質旗標 `timeout`）。要比反向代理的逾時短 |
-| `HOST` `PORT` | 否 | `start.sh`／`start.bat`／`run.py` 監聽的位址與埠，預設 `127.0.0.1`、`8000`（Docker 不看這兩個，固定 `0.0.0.0:8000`） |
+| `HOST` `PORT` | 否 | `start.sh`／`start.bat`／`run.py` 監聽的位址與埠，預設 `127.0.0.1`、`8000`。Docker 固定聽 `0.0.0.0`，埠預設 8000，雲端平台給 `PORT` 時照它的 |
 | `WEB_CONCURRENCY` | 否 | 同時開幾個程式，預設 1；建議設成 CPU 核心數（2～4）。uvicorn 直接讀這個變數，Docker 與一般安裝都適用。背景工作（文件處理、評測、圖譜草稿）在接到請求的那個程式裡跑，伺服器重啟時沒做完的工作會標成失敗、可重試 |
 | `DB_POOL_SIZE` `DB_MAX_OVERFLOW` `DB_POOL_TIMEOUT` | 否 | 資料庫連線池，預設 10／20／10 秒，每個程式各一份。連線只在讀寫時短暫持有，等模型時會先還回去。`WEB_CONCURRENCY` ×（POOL_SIZE＋MAX_OVERFLOW）要小於 PostgreSQL 的 `max_connections`（預設 100），例如 4 個程式就設 5／15 |
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90；0＝不清。伺服器啟動時和之後每天清一次，只清流程紀錄，對話內容與統計保留。也可手動跑 `python -m app.cli purge-traces` |
@@ -120,6 +120,38 @@ Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／1
   - 自己手動跑 `alembic`、`pip`、`python -m app.cli` 時，先在命令提示字元執行 `set PYTHONUTF8=1`。
 - **套件更新**：`git pull` 之後 `requirements.txt` 有變，`start.bat`／`start.sh` 會自動重裝；安裝中斷也會在下次重來。一直失敗時刪掉 `.venv` 資料夾再執行。
 - **背景工作判斷**：Windows 上用系統 API 判斷舊的伺服器行程是否還在（不使用 `os.kill`，它在 Windows 上會直接結束行程）。
+
+### 部署到 Railway
+
+repo 不用改就能部署。照下面設定：
+
+1. **資料庫**：在 Railway 專案裡新增有 pgvector 的 PostgreSQL。從範本（Template）搜尋 pgvector 選一個；Railway 預設的 PostgreSQL 不一定有 pgvector。
+2. **伺服器**：新增服務 → 選這個 GitHub repo，再到服務的 Settings 設定：
+   - **Root Directory**：`/server`（repo 裡還有 Apps Script 版與前端，伺服器只在這個資料夾）。Railway 會自動用裡面的 `Dockerfile` 建置。
+   - **Pre-deploy Command**：`alembic upgrade head`（每次部署前更新資料庫結構）。
+   - **Healthcheck Path**：`/healthz`。
+   - **Networking → Generate Domain**：產生對外網址。伺服器會聽 Railway 給的 `PORT`。
+3. **Variables**（伺服器服務的環境變數；不用 `.env` 檔）：
+
+   | 變數 | 值 |
+   |---|---|
+   | `DATABASE_URL` | 引用資料庫服務的內部連線字串，例如 `${{pgvector.DATABASE_URL}}`（依你的資料庫服務名稱）。`postgresql://` 開頭也可以，程式會自動轉換 |
+   | `JWT_SECRET` | 自己產生的 32 字元以上隨機字串 |
+   | `GEMINI_API_KEY` 或 `OPENAI_API_KEY` | 模型金鑰 |
+   | `CORS_ORIGINS` | 聊天頁與後台的網址，例如 GitHub Pages 的 `https://帳號.github.io` |
+   | `FORWARDED_ALLOW_IPS` | `*`（只有 Railway 的代理連得到伺服器，這樣才拿得到使用者真正的 IP，邀請碼錯誤鎖定與次數限制才準） |
+   | `WEB_CONCURRENCY` | 依方案的 CPU，通常 2 |
+
+4. **建第一個管理員**：部署完成後，在本機裝好 Railway CLI 並 `railway link` 到這個專案，再執行（`-s` 後面是伺服器服務的名稱；會提示輸入 admin 的密碼）：
+   ```bash
+   railway ssh -s 伺服器服務名稱 -- python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
+   ```
+5. **前端**：`web/` 放 GitHub Pages（repo 已有 `.github/workflows/pages.yml`），把 `web/chat/config.js`、`web/admin/config.js` 的 API 網址改成 Railway 產生的網址。
+
+注意：
+- 上傳的文件存在資料庫裡，不需要掛 Volume。
+- 重新部署會中斷正在跑的背景工作（文件處理、評測），它們會在 15 分鐘內被標為失敗，到後台重試即可。部署盡量避開正在處理大量文件的時候。
+- 資料庫連線數：`WEB_CONCURRENCY` ×（`DB_POOL_SIZE`＋`DB_MAX_OVERFLOW`）要小於資料庫的 `max_connections`。
 
 ### 套件版本
 
