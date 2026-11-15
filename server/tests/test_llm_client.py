@@ -154,3 +154,31 @@ def test_validate_embed_config():
         validate_embed_config("gemini-embedding-001", 3072, (768, 1536))
     with pytest.raises(ValueError, match="可用的維度"):
         validate_embed_config("text-embedding-ada-002", 768, (768, 1536))
+
+
+def test_list_models_live_and_cached():
+    """後台的模型下拉選單：問供應商有哪些生成模型，濾掉向量、語音、圖片等，快取一小時；查不到時回報錯誤、不快取"""
+    calls = []
+
+    def handler(req: httpx.Request):
+        calls.append(req.url.host)
+        if "googleapis" in req.url.host:
+            assert req.headers["x-goog-api-key"] == "g"
+            return httpx.Response(200, json={"models": [
+                {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent", "countTokens"]},
+                {"name": "models/gemini-3-pro", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-embedding-001", "supportedGenerationMethods": ["embedContent"]},
+                {"name": "models/gemini-2.5-flash-preview-tts", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-2.0-flash-live-001", "supportedGenerationMethods": ["bidiGenerateContent"]},
+                {"name": "models/imagen-4", "supportedGenerationMethods": ["predict"]}]})
+        assert req.headers["authorization"] == "Bearer o"
+        return httpx.Response(200, json={"data": [{"id": x} for x in ["gpt-5-mini", "gpt-4o-realtime-preview", "o4-mini", "text-embedding-3-small",
+                                                                        "dall-e-3", "gpt-4o-mini-tts", "whisper-1", "gpt-4.1"]]})
+    c = LLMClient(gemini_key="g", openai_key="o", transport=httpx.MockTransport(handler))
+    r = asyncio.run(c.list_models())
+    assert r == {"gemini": ["gemini-3-pro", "gemini-2.5-flash"], "openai": ["o4-mini", "gpt-5-mini", "gpt-4.1"], "errors": {}}
+    asyncio.run(c.list_models())
+    assert len(calls) == 2                                     # 第二次用快取
+    bad = LLMClient(gemini_key="g", openai_key="", transport=httpx.MockTransport(lambda req: httpx.Response(403, json={})))
+    r = asyncio.run(bad.list_models())
+    assert r["gemini"] == [] and r["openai"] == [] and r["errors"] == {"gemini": "HTTPStatusError"} and bad._models_cache is None

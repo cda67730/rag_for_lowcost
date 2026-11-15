@@ -14,6 +14,7 @@ import json
 import math
 import os
 import re
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -208,6 +209,37 @@ class LLMClient:
 
     async def aclose(self):
         await self._http.aclose()
+
+    # 可用的生成模型：直接問供應商（用伺服器的金鑰），一小時更新一次。後台的模型下拉選單用
+    _models_cache: tuple[float, dict] | None = None
+    MODELS_TTL = 3600.0
+    _SKIP = re.compile(r"embed|tts|audio|realtime|transcribe|image|imagen|veo|live|search|moderation|instruct|davinci|babbage|aqa|learnlm|robotics|computer-use|native", re.I)
+
+    async def list_models(self) -> dict:
+        """{"gemini": [...], "openai": [...], "errors": {...}}；沒有金鑰的供應商是空清單"""
+        now = time.monotonic()
+        if self._models_cache and now - self._models_cache[0] < self.MODELS_TTL:
+            return self._models_cache[1]
+        out: dict = {"gemini": [], "openai": [], "errors": {}}
+        if self.keys.get("gemini"):
+            try:
+                r = await self._http.get(GEMINI_BASE.rstrip("/"), params={"pageSize": 1000}, headers={"x-goog-api-key": self.keys["gemini"]}, timeout=10)
+                r.raise_for_status()
+                out["gemini"] = sorted({m["name"].removeprefix("models/") for m in r.json().get("models", [])
+                                        if "generateContent" in (m.get("supportedGenerationMethods") or []) and m.get("name", "").startswith("models/gemini")
+                                        and not self._SKIP.search(m["name"])}, reverse=True)
+            except Exception as e:      # 金鑰錯、網路斷：下拉選單退回預設清單
+                out["errors"]["gemini"] = type(e).__name__
+        if self.keys.get("openai"):
+            try:
+                r = await self._http.get(OPENAI_BASE + "models", headers={"Authorization": "Bearer " + self.keys["openai"]}, timeout=10)
+                r.raise_for_status()
+                out["openai"] = sorted({m["id"] for m in r.json().get("data", []) if re.match(r"^(gpt-|o\d|chatgpt-)", m.get("id", "")) and not self._SKIP.search(m["id"])}, reverse=True)
+            except Exception as e:
+                out["errors"]["openai"] = type(e).__name__
+        if not out["errors"]:
+            self._models_cache = (now, out)
+        return out
 
     def _need_key(self, model: str):
         p = provider_of(model)

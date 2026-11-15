@@ -28,6 +28,7 @@
     if (rest.length) groups.push({ id: "gx", title: "其他", keys: rest });
     const tier = String((d.items.find((x) => x.key === "tier") || {}).value || "basic");
     const modelList = models ? models.suggested : [];
+    const gen = (models && models.generate) || { gemini: modelList.filter((m) => !/^(gpt-|o\d)/.test(m)), openai: modelList.filter((m) => /^(gpt-|o\d)/.test(m)) };
 
     const field = (k) => {
       const s = by[k], v = cur[k], id = "f_" + k;
@@ -37,7 +38,14 @@
       if (STRUCT[k]) input = `<div class="st" data-st="${k}"></div>`;
       else if (BOOL(s.default)) input = `<label class="inline"><input type="checkbox" id="${id}" data-k="${k}" ${v.toUpperCase() === "TRUE" ? "checked" : ""}> 開啟</label>`;
       else if (CHOICE[k]) input = `<select id="${id}" data-k="${k}">${CHOICE[k].map(([a, b]) => `<option value="${a}" ${a === v ? "selected" : ""}>${A.esc(b)}</option>`).join("")}</select>`;
-      else if (MODEL.test(k)) input = `<div class="row"><input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}" list="modelList" style="flex:1"><button class="btn sm" data-ping="${k}" type="button">測試</button></div><div class="note" data-pingout="${k}"></div>`;
+      else if (MODEL.test(k)) {
+        // 下拉選單列出供應商目前提供的模型（有金鑰的才列）；清單沒有的可選「自行輸入」
+        const known = [].concat(gen.gemini, gen.openai), custom = v && !known.includes(v);
+        const opt = (m) => `<option value="${A.esc(m)}" ${m === v ? "selected" : ""}>${A.esc(m)}</option>`;
+        input = `<div class="row"><select data-mk="${k}" style="flex:1">${gen.gemini.length ? `<optgroup label="Gemini">${gen.gemini.map(opt).join("")}</optgroup>` : ""}${gen.openai.length ? `<optgroup label="OpenAI">${gen.openai.map(opt).join("")}</optgroup>` : ""}
+            <option value="__custom__" ${custom || !v ? "selected" : ""}>其他（自行輸入）…</option></select><button class="btn sm" data-ping="${k}" type="button">測試</button></div>
+          <input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}" placeholder="模型名稱，例如 gemini-2.5-flash 或 gpt-5-mini" style="margin-top:6px;${custom || !v ? "" : "display:none"}"><div class="note" data-pingout="${k}"></div>`;
+      }
       else if (s.text || v.includes("\n") || v.length > 70) input = `<textarea id="${id}" data-k="${k}" rows="${Math.min(12, Math.max(3, v.split("\n").length + 1))}">${A.esc(v)}</textarea>`;
       else input = `<input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}">`;
       return `<div class="fld" data-f="${k}">${head}${input}${note}<div class="err" data-e="${k}"></div></div>`;
@@ -131,6 +139,13 @@
     }
     const norm = (k, v) => (BOOL(by[k].default) ? String(v).toUpperCase() === "TRUE" : String(v == null ? "" : v));
 
+    A.$$("[data-mk]", box).forEach((sel) => (sel.onchange = () => {
+      const inp = A.$(`input[data-k="${sel.dataset.mk}"]`, box);
+      if (sel.value === "__custom__") { inp.style.display = ""; inp.focus(); return; }
+      inp.style.display = "none";
+      inp.value = sel.value;
+      inp.dispatchEvent(new Event("input", { bubbles: true }));     // 走同一個記錄修改的流程
+    }));
     box.addEventListener("input", (e) => {
       const k = e.target.dataset && e.target.dataset.k;
       if (!k) return;

@@ -51,6 +51,7 @@ def test_models_and_ping(env):  # noqa: F811
     app.dependency_overrides[C.get_llm] = lambda: llm
     r = c.get("/api/admin/models", headers=as_("botadmin")).json()
     assert r["providers"] == {"gemini": True, "openai": False}
+    assert "gemini-2.5-flash" in r["generate"]["gemini"] and r["generate"]["openai"] == []     # 查不到供應商清單時至少有預設模型
     assert {e["id"]: e["available"] for e in r["embed"]}["text-embedding-3-small"] is False
     p = c.post("/api/admin/models/ping", headers=as_("botadmin"), json={"model": "gemini-x"}).json()
     assert p["ok"] is True and "ms" in p

@@ -224,9 +224,17 @@ def delete_bot(bot: str, confirm: str = "", u: User = Me, s: Session = DB):
 # ───────── §4 模型 ─────────
 
 @router.get("/models")
-def models(u: User = Me, llm: LLMClient = Depends(get_llm)):
-    gen = sorted({SETTING_DEFAULTS.get(k) for k in ("model_triage", "model_answer", "model_check") if SETTING_DEFAULTS.get(k)})
+async def models(u: User = Me, llm: LLMClient = Depends(get_llm)):
+    """providers：哪些供應商有金鑰；generate：供應商目前提供的生成模型（即時查詢、快取一小時），查不到時至少有預設模型"""
+    gen = sorted({SETTING_DEFAULTS.get(k) for k in ("model_triage", "model_answer", "model_check", "model_rerank") if SETTING_DEFAULTS.get(k)})
+    live = await llm.list_models() if hasattr(llm, "list_models") else {"gemini": [], "openai": [], "errors": {}}
+    by = {p: list(live.get(p) or []) for p in ("gemini", "openai")}
+    for m in gen:                                   # 預設模型一定列出（供應商清單查不到時也能選）
+        p = provider_of(m)
+        if llm.keys.get(p) and m not in by[p]:
+            by[p].insert(0, m)
     return {"providers": {p: bool(llm.keys.get(p)) for p in ("gemini", "openai")},
+            "generate": by, "errors": live.get("errors") or {},
             "suggested": [m for m in gen if llm.keys.get(provider_of(m))],
             "embed": [{"id": k, "dims": list(v["dims"]), "provider": provider_of(k), "available": bool(llm.keys.get(provider_of(k)))} for k, v in EMBED_MODELS.items()]}
 
