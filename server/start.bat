@@ -17,9 +17,9 @@ echo Creating .venv with %PY% ...
 
 :install
 fc /b requirements.txt ".venv\requirements.installed" >nul 2>nul && goto run
-echo Installing packages (first run or requirements.txt changed) ...
+echo Installing packages (first run or requirements.txt changed). This usually takes 3-10 minutes ...
 ".venv\Scripts\python.exe" -m pip install -q --upgrade pip || goto fail
-".venv\Scripts\python.exe" -m pip install -q -r requirements.txt || goto fail
+".venv\Scripts\python.exe" -m pip install --progress-bar on -r requirements.txt || goto fail
 ".venv\Scripts\python.exe" -m pip install -q --no-deps -e . || goto fail
 copy /y requirements.txt ".venv\requirements.installed" >nul
 

@@ -14,9 +14,9 @@ if [ ! -x .venv/bin/python ]; then
 fi
 
 if ! cmp -s requirements.txt .venv/requirements.installed; then
-  echo "安裝套件（第一次執行或 requirements.txt 有變）…"
+  echo "安裝套件（第一次執行或 requirements.txt 有變），通常要 3～10 分鐘…"
   .venv/bin/python -m pip install -q --upgrade pip
-  .venv/bin/python -m pip install -q -r requirements.txt
+  .venv/bin/python -m pip install -r requirements.txt
   .venv/bin/python -m pip install -q --no-deps -e .
   cp requirements.txt .venv/requirements.installed      # 裝完才記下：中途失敗下次會重裝
 fi
