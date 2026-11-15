@@ -25,6 +25,32 @@
 - 資料庫帳號要有**建立擴充**（`CREATE EXTENSION`）的權限。第一次啟動時會自動建立 vector 擴充和所有資料表，不用自己跑 SQL。
 - 版本：PostgreSQL 16 或 17；pgvector 0.8 以上較好，0.6 也能跑。
 
+#### Windows：裝好 Docker Desktop 之後怎麼開資料庫
+
+不用另外安裝 PostgreSQL。專案的 `docker-compose.yml` 已經指定好含 pgvector 的映像檔（`pgvector/pgvector:pg17`），一個指令就會下載並啟動。
+
+1. **啟動 Docker Desktop**，等左下角顯示 Engine running。第一次安裝時，它可能要求啟用 WSL 2 並重開機，照畫面做就好。
+2. **準備 `server\.env`**：先執行一次 `start.bat`，它會從 `.env.example` 建出 `.env`。用記事本打開，改這兩行，**兩個密碼要一樣**：
+   ```
+   POSTGRES_PASSWORD=自己取的密碼
+   DATABASE_URL=postgresql+psycopg://rag:自己取的密碼@127.0.0.1:5432/rag
+   ```
+   密碼只用英文字母和數字比較保險。`@ : / ? #` 這些符號放進連線字串要另外轉碼，容易出錯。
+3. **開資料庫**：在 `server` 資料夾開命令提示字元，執行：
+   ```
+   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+   ```
+   第一次會下載映像檔，大約幾百 MB。
+4. **確認狀態**：執行 `docker compose ps`，db 那一列顯示 `healthy` 就好了。
+5. **回到下面「三、安裝步驟」的第 3 步**，再執行一次 `start.bat`。
+
+之後要注意的事：
+- **開機自動啟動**：資料庫設定了 `restart: unless-stopped`，只要 Docker Desktop 有開，資料庫就會跟著啟動。到 Docker Desktop 的設定勾「Start Docker Desktop when you sign in」，開機後就不用手動開。
+- **資料存在哪**：資料存在 Docker 的資料卷（volume）`pgdata`，關掉、重開機都不會不見。**不要執行 `docker compose down -v`**，`-v` 會連資料一起刪掉。
+- **密碼只在第一次建立資料庫時生效**。之後再改 `POSTGRES_PASSWORD`，資料庫的密碼不會跟著變，`DATABASE_URL` 要繼續用原本的密碼。真的要換密碼，要進資料庫用 `ALTER USER` 改。
+- **5432 埠被佔用**：電腦上已經裝過 PostgreSQL 的話，5432 埠可能被佔用。可以先停掉原本的 PostgreSQL 服務，或改 `docker-compose.dev.yml` 的埠，例如 `127.0.0.1:5433:5432`，`DATABASE_URL` 也改成 `:5433`。
+- **只開放給本機**：資料庫只開放給本機（127.0.0.1）連線，區網裡的其他電腦連不到，這是刻意的。
+
 ### 3. 模型 API 金鑰
 
 Gemini（`GEMINI_API_KEY`）或 OpenAI（`OPENAI_API_KEY`），至少一把。金鑰只放在伺服器的 `.env`，不要放進前端、資料庫或 repo。
@@ -121,7 +147,9 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 | `Installation failed` | 多半是網路或公司 proxy 擋住 pip。確認能連 pypi.org 後再執行；一直失敗就刪掉 `.venv` 重來。 |
 | `server/.env 還沒填：DATABASE_URL` | `.env` 的必填欄位是空的，填好再執行。 |
 | `JWT_SECRET 至少要 32 個字元` | 用上面的指令重新產生一組。 |
-| `connection refused`、`could not connect to server` | 資料庫沒開，或 `DATABASE_URL` 的主機、埠、帳密不對。用 Docker 跑資料庫的話，先確認 Docker Desktop 有開。 |
+| `connection refused`、`could not connect to server` | 資料庫沒開，或 `DATABASE_URL` 的主機、埠、帳密不對。用 Docker 跑資料庫的話，先確認 Docker Desktop 有開、`docker compose ps` 顯示 healthy。 |
+| `password authentication failed for user "rag"` | `DATABASE_URL` 的密碼和建立資料庫時的 `POSTGRES_PASSWORD` 不一樣。注意：資料庫建好之後再改 `POSTGRES_PASSWORD` 不會生效。 |
+| `env file …\.env not found`（執行 docker compose 時） | `server` 資料夾裡還沒有 `.env`。先執行一次 `start.bat`，或把 `.env.example` 複製成 `.env`。 |
 | `permission denied to create extension "vector"` | 資料庫帳號沒有建立擴充的權限。請管理員先執行 `CREATE EXTENSION vector;`，或改用有權限的帳號。 |
 | `extension "vector" is not available` | 資料庫沒有安裝 pgvector。換用雲端或 Docker 的資料庫，或在主機上安裝 pgvector。 |
 | `'cp950' codec can't decode…` | 繁中 Windows 的編碼問題。用啟動檔執行就會自動處理；手動跑 `pip`、`alembic`、`python -m app.cli` 前先執行 `set PYTHONUTF8=1`。 |
