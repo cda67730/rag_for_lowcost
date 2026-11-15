@@ -17,7 +17,9 @@ services:
     # 不對外開放資料庫埠；要從本機連線除錯時再暫時加 ports: ["127.0.0.1:5432:5432"]
 
   app:
-    build: .
+    build:
+      context: ..              # repo 根目錄：映像檔要一起打包 web/ 的聊天頁與後台
+      dockerfile: server/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:

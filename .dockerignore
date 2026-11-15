@@ -1,0 +1,16 @@
+# docker build 的目錄是 repo 根目錄（server/Dockerfile）；只需要 server/ 與 web/
+.git
+.github
+apps-script
+releases
+tools
+templates
+*.zip
+**/.venv
+**/.env
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.egg-info
+**/build
+server/tests

@@ -23,7 +23,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 
 - Docker 與 Docker Compose；或 Python 3.12／3.13＋PostgreSQL 16／17（含 pgvector，0.8 以上較好）。不用 Docker 的準備與步驟見 [`INSTALL.md`](INSTALL.md)
 - Gemini 或 OpenAI 的 API 金鑰，至少一把
-- 一個能放靜態網頁的地方給聊天頁與後台（GitHub Pages 即可）
+- 聊天頁與後台由伺服器直接提供（`/chat/`、`/admin/`），不用另外架網站；要放 GitHub Pages 也可以
 
 ## 環境變數
 
@@ -36,7 +36,9 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `GEMINI_API_KEY` | 是 | Gemini 金鑰 |
 | `OPENAI_API_KEY` | 否 | 要用 OpenAI 的生成或向量模型才填 |
 | `JWT_SECRET` | 是 | 後台登入用，至少 32 個隨機字元（`openssl rand -hex 32`） |
-| `CORS_ORIGINS` | 是 | 允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io` |
+| `CORS_ORIGINS` | 否 | 前端放在**別的網址**（例如 GitHub Pages）時才要設：允許呼叫 API 的前端網址，逗號分隔，例如 `https://<帳號>.github.io`。用伺服器自己的 `/chat/`、`/admin/` 不用設 |
+| `SERVE_WEB` | 否 | 伺服器是否提供 `/chat/`（聊天頁）與 `/admin/`（後台），預設 `true`；前端只放 GitHub Pages 時可設 `false` |
+| `WEB_DIR` | 否 | 前端檔案的資料夾；不設時自動找 Docker 映像檔裡的 `web/` 或 repo 的 `web/` |
 | `PUBLIC_BASE_URL` | 否 | 伺服器對外網址，用在後台顯示聊天頁連結 |
 | `CHAT_TIMEOUT_SECONDS` | 否 | 一個回合最多幾秒，預設 50；超過改給保守回答並記錄（品質旗標 `timeout`）。要比反向代理的逾時短 |
 | `HOST` `PORT` | 否 | `start.sh`／`start.bat`／`run.py` 監聽的位址與埠，預設 `127.0.0.1`、`8000`。Docker 固定聽 `0.0.0.0`，埠預設 8000，雲端平台給 `PORT` 時照它的 |
@@ -127,7 +129,8 @@ repo 不用改就能部署。照下面設定：
 
 1. **資料庫**：在 Railway 專案裡新增有 pgvector 的 PostgreSQL。從範本（Template）搜尋 pgvector 選一個；Railway 預設的 PostgreSQL 不一定有 pgvector。
 2. **伺服器**：新增服務 → 選這個 GitHub repo，再到服務的 Settings 設定：
-   - **Root Directory**：`/server`（repo 裡還有 Apps Script 版與前端，伺服器只在這個資料夾）。Railway 會自動用裡面的 `Dockerfile` 建置。
+   - **Root Directory**：留空（用 repo 根目錄建置，映像檔才能一起打包聊天頁與後台）。
+   - Dockerfile 位置用下面 Variables 的 `RAILWAY_DOCKERFILE_PATH` 指定。
    - **Pre-deploy Command**：`alembic upgrade head`（每次部署前更新資料庫結構）。
    - **Healthcheck Path**：`/healthz`。
    - **Networking → Generate Domain**：產生對外網址。伺服器會聽 Railway 給的 `PORT`。
@@ -136,9 +139,9 @@ repo 不用改就能部署。照下面設定：
    | 變數 | 值 |
    |---|---|
    | `DATABASE_URL` | 引用資料庫服務的內部連線字串，例如 `${{pgvector.DATABASE_URL}}`（依你的資料庫服務名稱）。`postgresql://` 開頭也可以，程式會自動轉換 |
+   | `RAILWAY_DOCKERFILE_PATH` | `server/Dockerfile` |
    | `JWT_SECRET` | 自己產生的 32 字元以上隨機字串 |
    | `GEMINI_API_KEY` 或 `OPENAI_API_KEY` | 模型金鑰 |
-   | `CORS_ORIGINS` | 聊天頁與後台的網址，例如 GitHub Pages 的 `https://帳號.github.io` |
    | `FORWARDED_ALLOW_IPS` | `*`（只有 Railway 的代理連得到伺服器，這樣才拿得到使用者真正的 IP，邀請碼錯誤鎖定與次數限制才準） |
    | `WEB_CONCURRENCY` | 依方案的 CPU，通常 2 |
 
@@ -146,7 +149,7 @@ repo 不用改就能部署。照下面設定：
    ```bash
    railway ssh -s 伺服器服務名稱 -- python -m app.cli create-workspace --slug main --name "主要工作區" --owner admin
    ```
-5. **前端**：`web/` 放 GitHub Pages（repo 已有 `.github/workflows/pages.yml`），把 `web/chat/config.js`、`web/admin/config.js` 的 API 網址改成 Railway 產生的網址。
+5. **開始使用**：後台是 `https://Railway給的網址/admin/`，聊天頁是 `https://Railway給的網址/chat/?bot=機器人代號`。同一個網址，不用設 `CORS_ORIGINS`，也不用改 `config.js`。
 
 注意：
 - 上傳的文件存在資料庫裡，不需要掛 Volume。
@@ -175,7 +178,8 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 
 ## 第一次設定
 
-1. 開後台（`web/admin/`，部署方式同聊天頁；推上 GitHub 後網址是 `https://<帳號>.github.io/<repo>/admin/`），`web/admin/config.js` 的 `API_URL` 填 API 網址，用剛建的 owner 帳號登入。`CORS_ORIGINS` 要包含後台所在的網址。
+1. 開後台：`https://伺服器網址/admin/`（本機是 <http://127.0.0.1:8000/admin/>），用剛建的 owner 帳號登入。聊天頁在 `/chat/?bot=機器人代號`。
+   要把前端放在 GitHub Pages 等別的網址也可以：那邊的 `web/admin/config.js`、`web/chat/config.js` 填 API 網址，並把那個網址加進 `CORS_ORIGINS`。
 2. **建知識庫**：Workspace → 知識庫 → 新增。選向量模型與維度（之後不能改）、可見範圍（整個 Workspace／只給指定 Bot）。向量模型可選 Gemini（`gemini-embedding-001`）或 OpenAI（`text-embedding-3-small`／`-large`），維度 768 或 1536；完整清單見 `docs/data-model.md`。同一個機器人掛的知識庫要用同一個向量模型。
 3. **上傳文件**到知識庫 → 等處理完 → 看段落 → 核可。
 4. **建機器人**：Workspace → 機器人 → 新增，填 slug（聊天頁網址會用到）與名稱，可直接選一份專案範本。
@@ -239,7 +243,8 @@ docker compose exec app python -m app.cli import-apps-script \
 - 後台全部需要 JWT，依角色檢查；密碼用 argon2id；連續錯 5 次鎖 15 分鐘。
 - 所有寫入寫稽核紀錄（誰、何時、改了什麼），不記金鑰與對話原文。
 - 對話紀錄只存去識別化後的文字（`enable_deid` 開啟時）；原名對照表只在使用者瀏覽器。
-- CORS 只允許 `CORS_ORIGINS` 列出的網址。
+- CORS 只允許 `CORS_ORIGINS` 列出的網址；伺服器自己提供的 `/chat/`、`/admin/` 是同一個網址，不經過 CORS。
+- 伺服器提供的頁面加了 `X-Content-Type-Options: nosniff`；後台另加 `X-Frame-Options: DENY`（不讓別的網站嵌入），聊天頁可以嵌進其他網站。
 - 上傳檔案依檔頭判斷類型、限制大小，解析在背景任務中執行，不執行檔案內的巨集或程式。
 
 ## 目錄

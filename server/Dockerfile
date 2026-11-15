@@ -3,11 +3,15 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 
+# 建置時的目錄是 repo 根目錄（docker-compose 與 Railway 都這樣設），才能把前端一起打包：
+#   docker build -f server/Dockerfile .
 # 先裝相依（改程式不用重裝）：照 requirements.txt 的確切版本
-COPY requirements.txt ./
+COPY server/requirements.txt ./
 RUN pip install -r requirements.txt
 
-COPY . .
+COPY server/ ./
+# 聊天頁與後台：伺服器在 /chat/、/admin/ 提供（app/web.py）。只讀不改，GitHub Pages 的前台照舊
+COPY web/ ./web/
 RUN pip install --no-deps . \
  && useradd --system --uid 10001 app && chown -R app /srv
 USER app

@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from app.errors import ApiError, handler
 from app.logsetup import setup_logging
+from app.web import mount_web
 from app.routes.admin import router as admin_router
 from app.routes.admin_bot import router as admin_bot_router
 from app.routes.admin_ops import router as admin_ops_router
@@ -78,3 +79,7 @@ def healthz():
         return JSONResponse({"ok": False, "error": "資料庫無法連線", "detail": type(e).__name__}, status_code=503)
     ok = bool(vector and rev)
     return JSONResponse({"ok": ok, "pgvector": vector, "migration": rev}, status_code=200 if ok else 503)
+
+
+# 聊天頁與後台（/chat/、/admin/）：放在最後，API 路由優先
+WEB_DIR = mount_web(app)

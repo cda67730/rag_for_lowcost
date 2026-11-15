@@ -49,8 +49,8 @@ Workspace（工作區／租戶）
 
 - **單一服務**：FastAPI 進程內跑 LangGraph，不另開 worker。文件匯入與評測這類長工作用背景任務（FastAPI `BackgroundTasks` 起步，量大再換 arq／Celery）。
 - **資料庫一個**：所有表帶 `workspace_id`，Bot 相關的再帶 `bot_id`。向量直接在 `chunks.embedding`（pgvector，HNSW 索引）。
-- **後台**是獨立的靜態 SPA（`web/admin/`），只打 `/api/admin/**`；跟聊天頁一樣部署在 GitHub Pages 或任何靜態空間。Apps Script 版的 `AdminUI.html` 功能照搬，介面重寫。
-- **部署**：`docker-compose.yml` 兩個容器（`db`、`app`）。環境變數：`DATABASE_URL`、`GEMINI_API_KEY`、`OPENAI_API_KEY`、`JWT_SECRET`、`CORS_ORIGINS`。
+- **後台**是靜態 SPA（`web/admin/`），只打 `/api/admin/**`。Python 版伺服器直接在 `/admin/`、`/chat/` 提供後台與聊天頁（同一個網址、不需 CORS）；也可以照舊放 GitHub Pages。Apps Script 版的 `AdminUI.html` 功能照搬，介面重寫。
+- **部署**：`docker-compose.yml` 兩個容器（`db`、`app`）。環境變數：`DATABASE_URL`、`GEMINI_API_KEY`、`OPENAI_API_KEY`、`JWT_SECRET`（前端放別的網址時再加 `CORS_ORIGINS`）。映像檔用 repo 根目錄建置（`docker build -f server/Dockerfile .`），一起打包 `web/`。
 
 ## 4. 多機器人怎麼路由
 

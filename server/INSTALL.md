@@ -111,11 +111,8 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
    這個帳號同時是**總管理員**：之後要再開工作區，直接在後台右上角「系統管理」建立，不用再下指令。忘記密碼時，在伺服器上執行 `python -m app.cli reset-password --login admin`。
 
 5. **開後台**
-   - **自己電腦測試**：
-     1. 把 `web/admin/config.js` 的 `API_URL` 填成 `http://127.0.0.1:8000`。
-     2. 在 repo 的 `web` 資料夾執行 `python -m http.server 5500`。
-     3. 瀏覽器開 <http://localhost:5500/admin/>，用 admin 登入。`.env` 預設的 `CORS_ORIGINS=http://localhost:5500` 就是給這個用的。
-   - **正式環境**：後台放在 GitHub Pages 之類的地方，`CORS_ORIGINS` 改成後台的網址。
+   - 伺服器直接提供後台與聊天頁：瀏覽器開 <http://127.0.0.1:8000/admin/>，用 admin 登入。聊天頁是 <http://127.0.0.1:8000/chat/?bot=機器人代號>。
+   - 不用改 `config.js`、不用設 `CORS_ORIGINS`（同一個網址）。前端要另外放在 GitHub Pages 時才需要設定，見 README。
 
 接下來建知識庫、機器人、邀請碼，見 [README 的「第一次設定」](README.md#第一次設定)。
 
@@ -134,7 +131,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 - 前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
 - `.env` 設 `FORWARDED_ALLOW_IPS` 為反向代理的 IP。沒設的話，系統會把所有人當成同一個 IP，邀請碼錯誤鎖定、次數限制都會失準。
-- `CORS_ORIGINS` 只留聊天頁和後台的正式網址。
+- 前端用伺服器自己的 `/chat/`、`/admin/` 時，`CORS_ORIGINS` 留空；前端另外放在別的網址時，只留那些正式網址。
 - `WEB_CONCURRENCY` 設成 CPU 核心數（2～4）。程式數 ×（`DB_POOL_SIZE`＋`DB_MAX_OVERFLOW`）要小於 PostgreSQL 的 `max_connections`（預設 100）。
 - 定期備份資料庫，見 README 的「備份與更新」。
 
@@ -155,5 +152,5 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 | `extension "vector" is not available` | 資料庫沒有安裝 pgvector。換用雲端或 Docker 的資料庫，或在主機上安裝 pgvector。 |
 | `'cp950' codec can't decode…` | 繁中 Windows 的編碼問題。用啟動檔執行就會自動處理；手動跑 `pip`、`alembic`、`python -m app.cli` 前先執行 `set PYTHONUTF8=1`。 |
 | `address already in use`、`WinError 10048` | 8000 埠被別的程式佔用。在 `.env` 把 `PORT` 改成別的數字。 |
-| 後台登入時顯示連線失敗 | `web/admin/config.js` 的 `API_URL` 不對，或 `CORS_ORIGINS` 沒包含後台的網址。改完 `.env` 要重新啟動伺服器。 |
+| 後台登入時顯示連線失敗 | 用伺服器的 `/admin/` 時，確認伺服器有在跑。後台放在別的網址時：`web/admin/config.js` 的 `API_URL` 不對，或 `CORS_ORIGINS` 沒包含後台的網址。改完 `.env` 要重新啟動伺服器。 |
 | 問答一直回保守回答 | 模型金鑰沒填或填錯，看伺服器視窗裡的錯誤訊息。 |
