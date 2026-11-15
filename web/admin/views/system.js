@@ -1,12 +1,13 @@
 /* 系統管理（只有總管理員看得到）：所有工作區、建立、刪除，重設任何帳號的密碼，跨工作區操作紀錄 */
 (function () {
   const ACT = { "workspace.create": "建立工作區", "workspace.delete": "刪除工作區", "user.reset_password": "重設密碼", "user.superadmin": "總管理員設定" };
+  const actName = (x) => (x.action === "user.superadmin" && x.detail ? (x.detail.on ? "設為總管理員" : "取消總管理員") : ACT[x.action] || x.action);
 
   A.views.system = async function () {
     A.crumbs([["系統管理"]]);
     const v = A.$("#view");
     if (!A.me.is_superadmin) { v.innerHTML = `<div class="empty">只有總管理員可以使用系統管理。</div>`; return; }
-    const [d, log] = await Promise.all([A.api("GET", "/system/workspaces"), A.api("GET", "/system/audit?limit=50")]);
+    const [d, log, sa] = await Promise.all([A.api("GET", "/system/workspaces"), A.api("GET", "/system/audit?limit=50"), A.api("GET", "/system/superadmins")]);
     const mine = new Set((A.me.workspaces || []).map((w) => w.id));
     v.innerHTML = `<h2>系統管理</h2>
       <p class="note">總管理員可以建立、刪除工作區，重設任何帳號的密碼；但不會因此看到工作區的內容，要管理某個工作區，請在建立時把自己設為 owner，或請它的 owner 把你加為成員。</p>
@@ -28,9 +29,15 @@
         <p class="note">任何帳號都可以，包括屬於多個工作區的帳號。重設後對方目前的登入會失效。</p>
         <div class="row"><input type="text" id="rl" placeholder="帳號" autocomplete="off" style="max-width:240px"><button class="btn" id="rb" type="button">重設</button></div><p id="rt" class="ok"></p>
       </div>
+      <div class="box"><h4>總管理員（${sa.items.length}）</h4>
+        <p class="note">總管理員可以建立、刪除工作區與重設任何帳號的密碼。帳號要先存在（先加進某個工作區）。至少要保留一位。</p>
+        <div class="tablewrap"><table><tbody>${sa.items.map((x) => `<tr><td>${A.esc(x.login)}${x.login === A.me.login ? "（你）" : ""}${x.disabled ? "（已停用）" : ""}</td><td>${A.esc(x.display_name || "")}</td>
+          <td style="text-align:right"><button class="btn sm danger" data-revoke="${A.esc(x.login)}" type="button">取消</button></td></tr>`).join("")}</tbody></table></div>
+        <div class="row" style="margin-top:10px"><input type="text" id="sl" placeholder="帳號" autocomplete="off" style="max-width:240px"><button class="btn" id="sb" type="button">設為總管理員</button></div>
+      </div>
       <h3>操作紀錄</h3>
       ${log.items.length ? `<div class="tablewrap"><table><thead><tr><th>時間</th><th>誰</th><th>動作</th><th>對象</th></tr></thead><tbody>${log.items.map((x) => `<tr><td>${A.esc(A.fmtTime(x.at))}</td>
-        <td>${A.esc(x.login || "（指令）")}</td><td>${A.esc(ACT[x.action] || x.action)}</td><td>${A.esc(x.target)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">還沒有紀錄</div>`}`;
+        <td>${A.esc(x.login || "（指令）")}</td><td>${A.esc(actName(x))}</td><td>${A.esc(x.target)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">還沒有紀錄</div>`}`;
 
     A.$("#nc").onclick = (e) => A.act(e.target, async () => {
       const r = await A.api("POST", "/system/workspaces", { slug: A.$("#ns").value, name: A.$("#nn").value, owner: A.$("#no").value.trim() || A.me.login, password: A.$("#np").value });
@@ -47,6 +54,21 @@
         A.$("#rt").textContent = `${r.login} 的一次性密碼：${r.temp_password}（只顯示這一次）`;
       });
     };
+
+    A.$("#sb").onclick = (e) => {
+      const login = A.$("#sl").value.trim();
+      if (!login || !confirm(`把 ${login} 設為總管理員？他將可以建立、刪除工作區與重設任何帳號的密碼。`)) return;
+      A.act(e.target, async () => { await A.api("POST", "/system/superadmins", { login }); await A.views.system(); }, "已設定");
+    };
+    A.$$("[data-revoke]", v).forEach((b) => (b.onclick = () => {
+      const login = b.dataset.revoke, self = login === A.me.login;
+      if (!confirm(self ? "取消你自己的總管理員？取消後就不能再進系統管理。" : `取消 ${login} 的總管理員？`)) return;
+      A.act(b, async () => {
+        await A.api("POST", "/system/superadmins/revoke", { login });
+        if (self) { A.me = null; return A.go("#/"); }      // 重新讀自己的資料，右上角的「系統管理」也會消失
+        await A.views.system();
+      }, "已取消");
+    }));
 
     A.$$("[data-del]", v).forEach((b) => (b.onclick = () => {
       const w = d.items.find((x) => x.id === b.dataset.del);

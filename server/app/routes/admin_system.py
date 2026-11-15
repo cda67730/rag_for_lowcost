@@ -1,7 +1,7 @@
 """總管理員：列出、建立、刪除工作區，重設任何帳號的密碼，看跨工作區的操作紀錄。
 總管理員不會因此看到各工作區的內容；要管某個工作區的機器人與資料，還是要是那裡的成員。"""
 from fastapi import APIRouter, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.errors import ApiError, forbidden, not_found
@@ -74,6 +74,47 @@ async def reset_password(request: Request, u: User = Me, s: Session = DB):
     W.system_audit(s, u, "user.reset_password", target.login)
     s.commit()
     return {"login": target.login, "temp_password": temp}
+
+
+@router.get("/superadmins")
+def list_superadmins(u: User = Me, s: Session = DB):
+    superadmin(u)
+    rows = s.scalars(select(User).where(User.is_superadmin).order_by(User.login)).all()
+    return {"items": [{"login": x.login, "display_name": x.display_name, "disabled": x.disabled} for x in rows]}
+
+
+@router.post("/superadmins")
+async def grant_superadmin(request: Request, u: User = Me, s: Session = DB):
+    """把現有帳號設為總管理員（帳號要先存在：先加進某個工作區，或用系統管理建立工作區時指定他為 owner）"""
+    superadmin(u)
+    d = await body(request)
+    target = W.find_user(s, str(d.get("login") or ""))
+    if target is None:
+        raise ApiError(404, "not_found", "找不到這個帳號；請先把他加進某個工作區", {"login": "找不到"})
+    if target.disabled:
+        raise ApiError(409, "disabled", "這個帳號已停用", {"login": "已停用"})
+    if not target.is_superadmin:
+        target.is_superadmin = True
+        W.system_audit(s, u, "user.superadmin", target.login, {"on": True})
+        s.commit()
+    return list_superadmins(u, s)
+
+
+@router.post("/superadmins/revoke")
+async def revoke_superadmin(request: Request, u: User = Me, s: Session = DB):
+    """取消總管理員；不能取消最後一位（否則就沒人能在後台管理工作區）。立即生效，對方下一個請求就沒有權限"""
+    superadmin(u)
+    d = await body(request)
+    target = W.find_user(s, str(d.get("login") or ""))
+    if target is None or not target.is_superadmin:
+        raise ApiError(404, "not_found", "這個帳號不是總管理員", {"login": "不是總管理員"})
+    others = s.scalar(select(func.count()).select_from(User).where(User.is_superadmin, User.id != target.id, User.disabled.is_(False))) or 0
+    if not others:
+        raise ApiError(409, "last_superadmin", "至少要保留一位總管理員；請先設定另一位，再取消這位")
+    target.is_superadmin = False
+    W.system_audit(s, u, "user.superadmin", target.login, {"on": False})
+    s.commit()
+    return list_superadmins(u, s) if u.is_superadmin else {"items": [], "self_revoked": True}
 
 
 @router.get("/audit")

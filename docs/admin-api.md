@@ -72,6 +72,9 @@
 | POST | `/system/workspaces` | `{slug, name, owner?, password?}`；owner 預設是自己。帳號已存在就加為 owner、不動密碼；不存在就建立，沒給 password 時回傳 `temp_password`（只顯示這一次） |
 | DELETE | `/system/workspaces/{ws}` | `{confirm: "<slug>"}`；連同機器人、知識庫、文件、紀錄、成員角色一起刪，帳號保留。還有背景工作在跑回 409 `jobs_running` |
 | POST | `/system/users/reset-password` | `{login}` → `{login, temp_password}`，對方的登入全部失效 |
+| GET | `/system/superadmins` | 所有總管理員 |
+| POST | `/system/superadmins` | `{login}` 把現有帳號設為總管理員（帳號不存在 404、已停用 409） |
+| POST | `/system/superadmins/revoke` | `{login}` 取消總管理員，立即生效；不能取消最後一位（409 `last_superadmin`），可以取消自己 |
 | GET | `/system/audit` | 跨工作區操作紀錄（建立／刪除工作區、重設密碼、總管理員設定） |
 
 第一個工作區用命令列建立（`python -m app.cli create-workspace`），它的 owner 會自動成為總管理員；之後可在後台「系統管理」建立。指令 `python -m app.cli superadmin --login 帳號 [--revoke]` 設定或取消總管理員，`python -m app.cli reset-password --login 帳號` 重設任何帳號的密碼。

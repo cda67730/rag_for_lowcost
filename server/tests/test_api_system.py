@@ -120,3 +120,32 @@ def test_cli_workspace_reset_superadmin(env, monkeypatch, capsys):  # noqa: F811
     assert db.get(m.User, users["rev"].id).is_superadmin and not db.get(m.User, users["owner"].id).is_superadmin
     acts = [a for (a,) in db.execute(select(m.SystemAudit.action).order_by(m.SystemAudit.id))]
     assert acts == ["workspace.create", "workspace.create", "user.reset_password", "user.superadmin", "user.superadmin"]
+
+
+def test_grant_and_revoke_superadmin(env):  # noqa: F811
+    c, db, ws, bot, bot2, users, as_ = env
+    users["owner"].is_superadmin = True; db.flush()
+    h, S = as_("owner"), "/api/admin/system/superadmins"
+    assert [x["login"] for x in c.get(S, headers=h).json()["items"]] == ["owner"]
+    assert c.post(S, headers=as_("rev"), json={"login": "rev"}).status_code == 403             # 不是總管理員不能自己升級
+    assert c.post(S, headers=h, json={"login": "nobody"}).status_code == 404
+    users["ana"].disabled = True; db.flush()
+    assert c.post(S, headers=h, json={"login": "ana"}).json()["code"] == "disabled"
+    r = c.post(S, headers=h, json={"login": "REV"}).json()
+    assert [x["login"] for x in r["items"]] == ["owner", "rev"]
+    hr = as_("rev")
+    assert c.get("/api/admin/system/workspaces", headers=hr).status_code == 200 and c.get("/api/admin/me", headers=hr).json()["is_superadmin"]
+    assert c.post(S, headers=h, json={"login": "rev"}).status_code == 200                       # 重複設定不出錯、不重複記
+    # 取消別人：立即生效
+    assert [x["login"] for x in c.post(S + "/revoke", headers=h, json={"login": "rev"}).json()["items"]] == ["owner"]
+    assert c.get("/api/admin/system/workspaces", headers=hr).status_code == 403
+    # 最後一位不能取消（停用的帳號不算數）
+    users["ana"].is_superadmin = True; db.flush()
+    assert c.post(S + "/revoke", headers=h, json={"login": "owner"}).json()["code"] == "last_superadmin"
+    assert c.post(S + "/revoke", headers=h, json={"login": "wsadmin"}).status_code == 404
+    # 有另一位時可以取消自己
+    c.post(S, headers=h, json={"login": "rev"})
+    r = c.post(S + "/revoke", headers=h, json={"login": "owner"}).json()
+    assert r == {"items": [], "self_revoked": True} and c.get("/api/admin/system/workspaces", headers=h).status_code == 403
+    acts = [(x["action"], x["target"], x["detail"].get("on")) for x in c.get("/api/admin/system/audit", headers=hr).json()["items"]]
+    assert acts == [("user.superadmin", "owner", False), ("user.superadmin", "rev", True), ("user.superadmin", "rev", False), ("user.superadmin", "rev", True)]
