@@ -6,6 +6,7 @@
     [/^#\/bot\/([^/]+)(?:\/([a-z-]+))?$/, (m) => A.views.bot(m[1], m[2] || "settings")],
     [/^#\/kb\/([^/]+)(?:\/([a-z-]+))?$/, (m) => A.views.kb(m[1], m[2] || "docs")],
     [/^#\/system$/, () => A.views.system()],
+    [/^#\/account$/, () => A.views.account()],
   ];
   async function route() {
     A.side.close();
@@ -13,7 +14,7 @@
     if (h !== "#/login" && !A.token.get()) return A.go("#/login");
     if (h !== "#/login" && !A.me) {
       try { A.me = await A.api("GET", "/me"); } catch (e) { if (e.status !== 401) A.$("#view").innerHTML = `<p class="err">${A.esc(e.message)}</p>`; return; }
-      A.$("#me").innerHTML = (A.me.is_superadmin ? `<a href="#/system">系統管理</a> ` : "") + `${A.esc(A.me.display_name || A.me.login)} <button class="btn sm" id="logout" type="button">登出</button>`;
+      A.$("#me").innerHTML = (A.me.is_superadmin ? `<a href="#/system">系統管理</a> ` : "") + `<a href="#/account" title="我的帳號（改密碼）">${A.esc(A.me.display_name || A.me.login)}</a> <button class="btn sm" id="logout" type="button">登出</button>`;
       A.$("#logout").onclick = async () => { try { await A.api("POST", "/auth/logout"); } catch (e) {} A.token.set(""); A.me = null; A.$("#me").innerHTML = ""; A.go("#/login"); };
     }
     for (const [re, fn] of routes) {

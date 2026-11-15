@@ -1,6 +1,7 @@
 """後台 API 第一批（docs/admin-api.md §1、3、4、7、8、12）：登入、機器人、設定、知識庫與掛載、文件、背景任務。"""
 from __future__ import annotations
 
+import asyncio
 import base64
 import re
 import uuid
@@ -148,14 +149,21 @@ def me(u: User = Me, s: Session = DB):
 
 @router.post("/me/password")
 async def change_password(request: Request, u: User = Me, s: Session = DB):
+    """改自己的密碼；其他裝置上的登入全部失效，回傳這個裝置用的新 token"""
     d = await body(request)
-    try:
-        auth._ph.verify(u.pw_hash, str(d.get("old") or ""))
-    except Exception:
+    old, new = str(d.get("old") or ""), str(d.get("new") or "")
+
+    def ok(h, pw):
+        try:
+            return auth._ph.verify(h, pw)
+        except Exception:
+            return False
+    if not await asyncio.to_thread(ok, u.pw_hash, old):      # argon2 很耗 CPU：不在事件迴圈裡算
         raise ApiError(422, "bad_password", "目前的密碼不正確", {"old": "不正確"})
-    new = str(d.get("new") or "")
     auth.check_password_rules(new)
-    u.pw_hash, u.token_version = auth.hash_password(new), u.token_version + 1
+    if new == old:
+        raise ApiError(422, "same_password", "新密碼不能和目前的一樣", {"new": "和目前的一樣"})
+    u.pw_hash, u.token_version, u.failed_count, u.locked_until = await asyncio.to_thread(auth.hash_password, new), u.token_version + 1, 0, None
     s.commit()
     return {"token": auth.make_token(u)}
 

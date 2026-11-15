@@ -62,8 +62,11 @@ def test_login_lock_logout_and_password(env):
     assert c.get("/api/admin/me", headers={"Authorization": "Bearer " + new}).status_code == 200
     assert c.post("/api/admin/me/password", headers=h, json={"old": "x", "new": "y" * 12}).status_code == 422
     assert c.post("/api/admin/me/password", headers=h, json={"old": PW, "new": "short"}).json()["code"] == "weak_password"
+    assert c.post("/api/admin/me/password", headers=h, json={"old": PW, "new": PW}).json()["code"] == "same_password"
     t2 = c.post("/api/admin/me/password", headers=h, json={"old": PW, "new": "another-long-pw"}).json()["token"]
     assert c.get("/api/admin/me", headers=h).status_code == 401                         # 舊 token 失效
+    assert c.post("/api/admin/auth/login", json={"login": "owner", "password": PW}).status_code == 401
+    assert c.post("/api/admin/auth/login", json={"login": "owner", "password": "another-long-pw"}).status_code == 200
     h2 = {"Authorization": "Bearer " + t2}
     assert c.post("/api/admin/auth/logout", headers=h2).json() == {"ok": True}
     assert c.get("/api/admin/me", headers=h2).status_code == 401

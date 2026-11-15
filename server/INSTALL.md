@@ -108,7 +108,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
      ```
 
    會要你輸入 admin 的密碼（至少 10 個字元，輸入時畫面不會顯示）。
-   這個帳號同時是**總管理員**：之後要再開工作區，直接在後台右上角「系統管理」建立，不用再下指令。忘記密碼時，在伺服器上執行 `python -m app.cli reset-password --login admin`。
+   這個帳號同時是**總管理員**：之後要再開工作區，直接在後台右上角「系統管理」建立，不用再下指令。要改密碼：後台右上角點自己的名字 →「我的帳號」。忘記密碼時，在伺服器上執行 `python -m app.cli reset-password --login admin`。
 
 5. **開後台**
    - 伺服器直接提供後台與聊天頁：瀏覽器開 <http://127.0.0.1:8000/admin/>，用 admin 登入。聊天頁是 <http://127.0.0.1:8000/chat/?bot=機器人代號>。
