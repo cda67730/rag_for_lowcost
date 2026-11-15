@@ -10,9 +10,12 @@ A.views.bot = async function (botId, tab) {
   if (!T.find((x) => x[0] === tab)) tab = T[0][0];
   const v = A.$("#view");
   v.innerHTML = `<div class="row" style="justify-content:space-between"><h2>${A.esc(b.name)} <span class="note">${A.esc(b.slug)}</span> ${b.disabled ? A.pill("disabled", "已停用") : ""}</h2>
-    ${admin ? `<div class="row"><button class="btn sm" id="bRename" type="button">改名</button><button class="btn sm" id="bToggle" type="button">${b.disabled ? "啟用" : "停用"}</button></div>` : ""}</div>` +
+    ${admin ? `<div class="row"><button class="btn sm" id="bRename" type="button">改名</button><button class="btn sm" id="bToggle" type="button">${b.disabled ? "啟用" : "停用"}</button></div>` : ""}</div>
+    <div class="row chaturl" style="margin:-4px 0 10px;gap:8px;flex-wrap:wrap"><span class="note">聊天頁</span><a href="${A.esc(A.chatUrl(b.slug))}" target="_blank" rel="noopener" class="mono" style="word-break:break-all">${A.esc(A.chatUrl(b.slug))}</a>
+      <button class="btn sm" id="bCopy" type="button">複製網址</button>${b.disabled ? `<span class="note">（已停用：聊天頁會顯示「服務暫停」）</span>` : ""}</div>` +
     A.tabs("#/bot/" + botId, T, tab) + `<div id="pane"></div>`;
   const p = A.$("#pane");
+  A.$("#bCopy").onclick = () => A.copy(A.chatUrl(b.slug));
   if (admin) {
     A.$("#bRename").onclick = () => { const n = prompt("新名稱", b.name); if (n) A.act(null, () => A.api("PATCH", `/bots/${botId}`, { name: n }), "已改名").then(() => A.go(location.hash)); };
     A.$("#bToggle").onclick = () => confirm(b.disabled ? "啟用後聊天頁可以使用，確定？" : "停用後聊天頁會顯示「服務暫停」，確定？") &&

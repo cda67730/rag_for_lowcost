@@ -16,7 +16,7 @@ A.views.workspace = async function (wsId, tab) {
         <div class="grid2"><div><label for="bs">slug（網址用，小寫英數字與連字號）</label><input type="text" id="bs" placeholder="例如 helpdesk"></div>
         <div><label for="bn">名稱</label><input type="text" id="bn"></div></div>
         <div class="row end" style="margin-top:10px"><button class="btn pri" id="bc" type="button">建立</button></div></details>` : "") +
-      (d.items.length ? `<div class="cards">${d.items.map((b) => `<a class="card" href="#/bot/${b.id}"><b>${A.esc(b.name)}</b><span class="note">${A.esc(b.slug)}</span> ${b.disabled ? A.pill("disabled", "停用") : ""}</a>`).join("")}</div>`
+      (d.items.length ? `<div class="cards">${d.items.map((b) => `<a class="card" href="#/bot/${b.id}"><b>${A.esc(b.name)}</b><span class="note">${A.esc(b.slug)}</span> ${b.disabled ? A.pill("disabled", "停用") : ""}<span class="note mono" style="word-break:break-all">聊天頁：/chat/?bot=${A.esc(encodeURIComponent(b.slug))}</span></a>`).join("")}</div>`
         : `<div class="empty">還沒有機器人。${wsAdmin ? "用上面的「新增機器人」建一個。" : ""}</div>`);
     const bc = A.$("#bc");
     if (bc) bc.onclick = () => A.act(bc, async () => {

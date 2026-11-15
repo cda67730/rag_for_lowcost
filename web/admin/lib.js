@@ -17,6 +17,13 @@
   };
 
   A.base = () => String(C.API_URL || "").replace(/\/+$/, "");
+  /** 這個機器人的聊天頁網址（伺服器在 /chat/ 提供聊天頁） */
+  A.chatUrl = (slug) => A.base() + "/chat/?bot=" + encodeURIComponent(slug);
+  A.copy = async (text) => {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+    A.toast("已複製");
+  };
 
   /** 呼叫 /api/admin；錯誤丟出 Error（含 code、fields、status）。opts.raw＝回 Response；opts.body 可是 FormData 或字串 */
   A.api = async function (method, path, body, opts) {
