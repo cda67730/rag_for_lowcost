@@ -110,3 +110,14 @@ def test_windows_reexec_in_utf8_mode(monkeypatch):
         run.main(["--dev"])
     assert e.value.code == 3 and fake_os.environ["PYTHONUTF8"] == "1"
     assert calls == [["C:\\py\\python.exe", "-X", "utf8", str(Path(run.__file__).resolve()), "--dev"]]
+
+
+@pytest.mark.parametrize("raw,want", [("postgres://u:p@h:5432/d?sslmode=require", "postgresql+psycopg://u:p@h:5432/d?sslmode=require"),
+                                      ("postgresql://u@h/d", "postgresql+psycopg://u@h/d"),
+                                      ("postgresql+psycopg://u@h/d", "postgresql+psycopg://u@h/d"),
+                                      ("  postgresql://u@h/d  ", "postgresql+psycopg://u@h/d")])
+def test_database_url_normalized(monkeypatch, raw, want):
+    """雲端資料庫給的 postgres:// 連線字串直接貼進 .env 就能用"""
+    from db.session import database_url
+    monkeypatch.setenv("DATABASE_URL", raw)
+    assert database_url() == want

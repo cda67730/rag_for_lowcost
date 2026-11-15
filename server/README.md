@@ -8,6 +8,7 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 
 | 文件 | 內容 |
 | --- | --- |
+| [`INSTALL.md`](INSTALL.md) | **安裝前須知**：要先準備什麼、專案放哪裡、用啟動檔安裝的步驟、常見錯誤 |
 | [`docs/architecture.md`](../docs/architecture.md) | 階層（Workspace → Bot → Flow、知識庫）、元件、權限、已確認的決定 |
 | [`docs/data-model.md`](../docs/data-model.md) | 每張表的欄位、索引、刪除行為、向量查詢寫法 |
 | [`docs/api.md`](../docs/api.md) | 聊天頁用的 API（與 Apps Script 版相同） |
@@ -20,8 +21,8 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 
 ## 系統需求
 
-- Docker 與 Docker Compose（正式環境建議）；或 Python 3.12＋PostgreSQL 17（含 pgvector 0.8 以上）
-- Gemini API 金鑰（必要）；OpenAI API 金鑰（選用）
+- Docker 與 Docker Compose；或 Python 3.12／3.13＋PostgreSQL 16／17（含 pgvector，0.8 以上較好）。不用 Docker 的準備與步驟見 [`INSTALL.md`](INSTALL.md)
+- Gemini 或 OpenAI 的 API 金鑰，至少一把
 - 一個能放靜態網頁的地方給聊天頁與後台（GitHub Pages 即可）
 
 ## 環境變數
@@ -76,6 +77,8 @@ docker compose exec app python -m app.cli create-workspace --slug main --name "�
 API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS，並在 `.env` 設 `FORWARDED_ALLOW_IPS=<代理的 IP>`（映像檔已開 `--proxy-headers`），邀請碼錯誤次數才會依使用者的真實 IP 計算。
 
 ### 不用 Docker 安裝（正式環境也可以）
+
+> 第一次安裝建議照 [`INSTALL.md`](INSTALL.md) 一步步做，裡面有準備事項與常見錯誤。
 
 Docker 不是必要的，需要的只有 Python 3.12 以上與 PostgreSQL 16／17（含 pgvector；0.8 以上較好，0.6 也能跑）。
 

@@ -28,6 +28,10 @@ def database_url() -> str:
     url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
         raise RuntimeError("DATABASE_URL 未設定（見 server/.env.example）")
+    # 雲端資料庫（Supabase、Neon…）給的連線字串多半是 postgres:// 或 postgresql://：改用這個專案的驅動（psycopg 3）
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
     return url
 
 
