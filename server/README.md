@@ -129,8 +129,7 @@ repo 不用改就能部署。照下面設定：
 
 1. **資料庫**：在 Railway 專案裡新增有 pgvector 的 PostgreSQL。從範本（Template）搜尋 pgvector 選一個；Railway 預設的 PostgreSQL 不一定有 pgvector。
 2. **伺服器**：新增服務 → 選這個 GitHub repo，再到服務的 Settings 設定：
-   - **Root Directory**：留空（用 repo 根目錄建置，映像檔才能一起打包聊天頁與後台）。
-   - Dockerfile 位置用下面 Variables 的 `RAILWAY_DOCKERFILE_PATH` 指定。
+   - **Root Directory**：留空。Railway 會自動用 repo 根目錄的 `Dockerfile` 建置（一起打包聊天頁與後台）；Build Logs 開頭應該是 Docker 建置，不是 Railpack。
    - **Pre-deploy Command**：`alembic upgrade head`（每次部署前更新資料庫結構）。
    - **Healthcheck Path**：`/healthz`。
    - **Networking → Generate Domain**：產生對外網址。伺服器會聽 Railway 給的 `PORT`。
@@ -139,7 +138,6 @@ repo 不用改就能部署。照下面設定：
    | 變數 | 值 |
    |---|---|
    | `DATABASE_URL` | 引用資料庫服務的內部連線字串，例如 `${{pgvector.DATABASE_URL}}`（依你的資料庫服務名稱）。`postgresql://` 開頭也可以，程式會自動轉換 |
-   | `RAILWAY_DOCKERFILE_PATH` | `server/Dockerfile` |
    | `JWT_SECRET` | 自己產生的 32 字元以上隨機字串 |
    | `GEMINI_API_KEY` 或 `OPENAI_API_KEY` | 模型金鑰 |
    | `FORWARDED_ALLOW_IPS` | `*`（只有 Railway 的代理連得到伺服器，這樣才拿得到使用者真正的 IP，邀請碼錯誤鎖定與次數限制才準） |
@@ -259,8 +257,7 @@ server/
 ├── tests/        pytest；需要 TEST_DATABASE_URL
 ├── alembic.ini
 ├── pyproject.toml
-├── Dockerfile
-├── docker-compose.yml       正式：db＋app，資料庫不對外
+├── docker-compose.yml       正式（映像檔用 repo 根目錄的 Dockerfile 建置）：db＋app，資料庫不對外
 ├── docker-compose.dev.yml   本機開發：把 db 開到 127.0.0.1:5432
 └── .env.example
 ```

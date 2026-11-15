@@ -3,8 +3,10 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /srv
 
-# 建置時的目錄是 repo 根目錄（docker-compose 與 Railway 都這樣設），才能把前端一起打包：
-#   docker build -f server/Dockerfile .
+# Python 版伺服器的映像檔（Apps Script 版用不到這個檔案）。放在 repo 根目錄：
+#   - Railway 等平台會自動找到它，不用另外設定路徑
+#   - 建置目錄是 repo 根目錄，才能把 web/ 的聊天頁與後台一起打包
+#   docker build -t rag-server .
 # 先裝相依（改程式不用重裝）：照 requirements.txt 的確切版本
 COPY server/requirements.txt ./
 RUN pip install -r requirements.txt

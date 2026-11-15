@@ -21,7 +21,9 @@ def test_serves_chat_and_admin():
     assert r.status_code == 200 and "lib.js" in r.text and r.headers["x-frame-options"] == "DENY"
     assert c.get("/chat/trace.js").status_code == 200 and c.get("/admin/views/system.js").status_code == 200   # 後台引用 ../chat/trace.js
     assert c.get("/chat/../server/.env").status_code == 404 and c.get("/admin/nope.js").status_code == 404
-    assert c.get("/api/admin/me").status_code == 401   # API 不受影響
+    paths = [getattr(r, "path", "") for r in app.routes]
+    assert paths[-2:] == ["/chat", "/admin"] and paths.index("/healthz") < paths.index("/chat/config.js")   # API 路由在前，靜態檔掛在最後
+    assert "/api/admin/auth/login" in c.get("/openapi.json").json()["paths"]
 
 
 def test_config_js_points_to_same_origin():

@@ -19,7 +19,7 @@ services:
   app:
     build:
       context: ..              # repo 根目錄：映像檔要一起打包 web/ 的聊天頁與後台
-      dockerfile: server/Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
