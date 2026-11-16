@@ -83,3 +83,35 @@ tr.click{cursor:pointer}tr.click:hover{background:var(--bg)}
 
 /* 流程紀錄（共用 ../chat/trace.js 的樣式）在後台放大，和其他字一致 */
 .tv{zoom:1.2}
+
+/* 聊天介面文字：右側模擬畫面 */
+.pvgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.pv{--pa:#1e7f7d;position:sticky;top:70px;max-height:calc(100vh - 150px);overflow:auto;background:#f5f7f9;border:1px solid var(--line);border-radius:14px;padding:10px;font-size:13px;color:#1d2733}
+.pvlabel{font-size:12px;color:#5e6b78;margin-bottom:6px}
+.pvscr{background:#fff;border:1px solid #dce2e8;border-radius:12px;margin-bottom:10px;overflow:hidden}
+.pvcap{font-size:11px;color:#5e6b78;background:#eef1f4;padding:3px 8px}
+.pvgate{padding:12px;text-align:center}.pvgate p{margin:6px 0 8px;color:#5e6b78}
+.pvhead{background:var(--pa);color:#fff;font-weight:600;padding:8px 10px}
+.pvbody{padding:8px;display:flex;flex-direction:column;gap:6px}
+.pvb{max-width:92%;padding:7px 10px;border-radius:12px;line-height:1.5}
+.pvb.me{align-self:flex-end;background:#e8eef8}
+.pvb.bot{align-self:flex-start;background:#fff;border:1px solid #dce2e8}
+.pvwait{color:#5e6b78;font-style:italic}
+.pvb ol{margin:2px 0;padding-left:18px}.pvb p{margin:2px 0}
+.pvh{color:var(--pa);font-weight:600;margin-top:4px}
+.pvwarn{background:#fff6e0;border-radius:8px;padding:4px 6px;margin-bottom:4px;font-size:12px}
+.pvref,.pvtag{font-size:10px;border:1px solid var(--pa);color:var(--pa);border-radius:5px;padding:0 4px}
+.pvtag{background:#fff6e0;border-color:#c9a227;color:#7a5b00}
+.pvfb{display:flex;gap:6px;margin-top:6px}.pvfb span{border:1px solid #dce2e8;border-radius:8px;padding:1px 8px;font-size:12px}
+.pvcap2{font-size:11px;color:#5e6b78;margin-bottom:2px}
+.pvcard{border:1px solid #b23a3a;background:#fcecec;border-radius:10px;padding:8px 10px}.pvcard p{margin:4px 0}.pvcard small{color:#5e6b78}
+.pvfoot{display:flex;gap:6px;padding:8px;border-top:1px solid #dce2e8}
+.pvin{flex:1;border:1px solid #dce2e8;border-radius:8px;padding:5px 8px;color:#8a96a3;text-align:left}
+.pvbtn{background:var(--pa);color:#fff;border-radius:8px;padding:5px 12px;display:inline-block}
+.pvgate .pvin{margin-bottom:6px}
+.pv [data-pvk]{cursor:pointer}
+.pv .hit{outline:3px solid #f0a020;outline-offset:2px;border-radius:8px;animation:pvhit 1.2s ease-out 1}
+@keyframes pvhit{0%{outline-color:#ff6a00}100%{outline-color:#f0a020}}
+@media (max-width:1100px){.pvgrid{grid-template-columns:1fr}.pv{position:static;max-height:none;order:-1}}
+/* 窄螢幕：設定區不撐破版面，寬表格在框內左右捲動 */
+.setwrap>div{min-width:0}.st .stb{overflow-x:auto}

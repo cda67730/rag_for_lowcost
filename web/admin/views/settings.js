@@ -10,7 +10,13 @@
     enable_relevance_check: "回應度檢查", system_prompt: "系統提示詞", answer_schema: "回答欄位", answer_rules: "回答規則", fallback_rules: "AI 補足時的規則", intents: "意圖",
     triage_rules: "分流規則", triage_focus_hint: "提問焦點說明", followup_prompt: "追問提示詞", continue_prompt: "延續回覆提示詞", continue_options: "延續回覆的選項",
     top_k: "採用段數", min_score: "相似度門檻", rerank_pool: "重排候選數", quota_min_actionable: "至少幾段可照做", quota_max_principle: "最多幾段原則／背景",
-    kg_boost: "圖譜加分", kg_max_nodes: "圖譜最多命中節點", ui_accent: "主題色" };
+    kg_boost: "圖譜加分", kg_max_nodes: "圖譜最多命中節點", ui_accent: "主題色", ui_gate_text: "邀請碼頁說明", ui_input_placeholder: "輸入框提示字",
+    ui_waiting: "等待中的字", ui_referral_title: "緊急轉介卡標題", ui_referral_note: "緊急轉介卡說明", ui_referral_heading: "轉介建議小標題", ui_ai_tag: "AI 補充標籤",
+    ui_fb_up: "正面回饋按鈕", ui_fb_down: "負面回饋按鈕", msg_no_knowledge: "查不到資料時的回覆", msg_check_failed: "沒通過檢查時的回覆", msg_ai_fallback: "AI 補足時的提醒",
+    msg_out_of_scope: "超出範圍時的回覆" };
+  // 聊天介面文字的右側模擬畫面：每個設定對應畫面上的哪一塊
+  const PV_GROUP = "聊天介面文字";
+  const PV_MSG = { msg_no_knowledge: "知識庫查不到資料時", msg_check_failed: "回答沒通過檢查時", msg_out_of_scope: "問題超出服務範圍時" };
   const MODEL = /^model_/;
   const CHOICE = { kg_mode: [["hybrid", "混合（圖譜加分＋一般檢索）"], ["only", "只用圖譜對到的段落"]], deid_mode: [["ai", "AI（較準，多一次呼叫或併入分流）"], ["rule", "規則（不呼叫模型）"]] };
   const STRUCT = { answer_schema: "回答欄位", intents: "意圖", check_items: "檢查項目" };
@@ -58,7 +64,30 @@
       else input = `<input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}">`;
       return `<div class="fld" data-f="${k}">${head}${input}${note}<div class="err" data-e="${k}"></div></div>`;
     };
-    const sec = (g) => `<div class="sec" id="sec-${g.id}"><h4>${A.esc(g.title)}</h4>${g.keys.map(field).join("")}</div>`;
+    const sec = (g) => g.title === PV_GROUP
+      ? `<div class="sec" id="sec-${g.id}"><h4>${A.esc(g.title)} <span class="note">點欄位，右邊會標出它在聊天頁的位置；點畫面也能跳到對應欄位</span></h4><div class="pvgrid"><div>${g.keys.map(field).join("")}</div>${preview()}</div></div>`
+      : `<div class="sec" id="sec-${g.id}"><h4>${A.esc(g.title)}</h4>${g.keys.map(field).join("")}</div>`;
+    const t = (k) => `<span data-pv="${k}"></span>`;
+    function preview() {
+      return `<aside class="pv" aria-label="聊天頁模擬畫面"><div class="pvlabel">模擬畫面（示意）</div>
+        <div class="pvscr"><div class="pvcap">邀請碼頁</div>
+          <div class="pvgate" data-pvk="ui_gate_text"><b data-pv="bot_name"></b><p>${t("ui_gate_text")}</p><div class="pvin">邀請碼</div><div class="pvbtn">進入</div></div></div>
+        <div class="pvscr"><div class="pvcap">對話頁</div>
+          <div class="pvhead" data-pvk="bot_name">${t("bot_name")}</div>
+          <div class="pvbody">
+            <div class="pvb bot" data-pvk="welcome">${t("welcome")}</div>
+            <div class="pvb me">班上有個孩子午睡時一直哭…</div>
+            <div class="pvb bot pvwait" data-pvk="ui_waiting">${t("ui_waiting")}</div>
+            <div class="pvb bot" data-pvk="msg_ai_fallback ui_ai_tag ui_referral_heading ui_fb_up ui_fb_down">
+              <div class="pvwarn" data-pvk="msg_ai_fallback">${t("msg_ai_fallback")}</div>
+              <div class="pvh">建議做法</div><ol><li>先陪孩子坐一下，降低聲音和光線 <span class="pvref">K1</span></li><li>和家長確認在家的午睡習慣 <span class="pvtag" data-pvk="ui_ai_tag">${t("ui_ai_tag")}</span></li></ol>
+              <div class="pvh" data-pvk="ui_referral_heading">${t("ui_referral_heading")}</div><p>持續一週以上請和${t("_escalate")}討論。</p>
+              <div class="pvfb"><span data-pvk="ui_fb_up">${t("ui_fb_up")}</span><span data-pvk="ui_fb_down">${t("ui_fb_down")}</span></div></div>
+            <div class="pvb bot pvmsg" data-pvk="${Object.keys(PV_MSG).join(" ")}"><div class="pvcap2" data-pvmsgcap></div><span data-pvmsg></span></div>
+            <div class="pvcard" data-pvk="ui_referral_title ui_referral_note"><b data-pvk="ui_referral_title">${t("ui_referral_title")}</b><p>請立即聯絡${t("_escalate")}。</p><small data-pvk="ui_referral_note">${t("ui_referral_note")}</small></div>
+          </div>
+          <div class="pvfoot"><div class="pvin" data-pvk="ui_input_placeholder">${t("ui_input_placeholder")}</div><div class="pvbtn">送出</div></div></div></aside>`;
+    }
     const top = groups.filter((g) => TOP.includes(g.title)), adv = groups.filter((g) => !TOP.includes(g.title));
     box.innerHTML = `<datalist id="modelList">${modelList.map((m) => `<option value="${A.esc(m)}">`).join("")}</datalist>
       <div class="setwrap"><nav class="setnav"><a data-go="tier">版本</a>${top.map((g) => `<a data-go="${g.id}">${A.esc(g.title)}</a>`).join("")}<span class="note" style="padding:8px 10px 2px">進階</span>${adv.map((g) => `<a data-go="${g.id}">${A.esc(g.title)}</a>`).join("")}</nav>
@@ -170,11 +199,45 @@
       ta.focus();
     });
     syncDeps();
+    // 模擬畫面：即時套用目前填的字（留空＝預設），聚焦欄位時標出位置
+    const pv = A.$(".pv", box);
+    let pvMsg = "msg_no_knowledge";
+    const val = (k) => { const v = cur[k] != null && cur[k] !== "" ? cur[k] : by[k] ? String(by[k].default || "") : ""; return v; };
+    const fill = (v) => v.replace(/\{(escalate|who)\}/g, () => val("role_escalate") || "專人").replace(/\{user\}/g, () => val("role_user") || "使用者").replace(/\{subject\}/g, () => val("role_subject") || "對象");
+    const pvSync = () => {
+      if (!pv) return;
+      A.$$("[data-pv]", pv).forEach((el) => { const k = el.dataset.pv; el.textContent = k === "_escalate" ? (val("role_escalate") || "專人") : fill(val(k)); });
+      A.$("[data-pvmsg]", pv).textContent = fill(val(pvMsg));
+      A.$("[data-pvmsgcap]", pv).textContent = PV_MSG[pvMsg] + "的回覆";
+      const ac = val("ui_accent");
+      pv.style.setProperty("--pa", /^#[0-9a-f]{3,8}$/i.test(ac) ? ac : "#1e7f7d");
+    };
+    const pvFocus = (k) => {
+      if (!pv) return;
+      A.$$(".hit", pv).forEach((x) => x.classList.remove("hit"));
+      if (PV_MSG[k]) { pvMsg = k; pvSync(); }
+      if (k === "ui_accent") { A.$$(".pvhead,.pvbtn,.pvh", pv).forEach((x) => x.classList.add("hit")); return; }
+      const hits = A.$$("[data-pvk]", pv).filter((x) => x.dataset.pvk.split(" ").includes(k));
+      const best = hits.sort((a, b) => a.dataset.pvk.split(" ").length - b.dataset.pvk.split(" ").length)[0];
+      if (best) { best.classList.add("hit"); best.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    };
+    if (pv) {
+      box.addEventListener("focusin", (e) => { const f = e.target.closest && e.target.closest(".fld"); if (f && pv.closest(".sec").contains(f)) pvFocus(f.dataset.f); });
+      pv.addEventListener("click", (e) => {
+        const el = e.target.closest("[data-pvk]");
+        if (!el) return;
+        const k = el.dataset.pvk.split(" ")[0] === "msg_no_knowledge" ? pvMsg : el.dataset.pvk.split(" ")[0];
+        const inp = A.$(`[data-k="${k}"]`, box);
+        if (inp) { inp.scrollIntoView({ block: "center", behavior: "smooth" }); inp.focus({ preventScroll: true }); } else pvFocus(k);
+      });
+      pvSync();
+    }
     box.addEventListener("input", (e) => {
       const k = e.target.dataset && e.target.dataset.k;
       if (!k) return;
       cur[k] = e.target.type === "checkbox" ? (e.target.checked ? "TRUE" : "FALSE") : e.target.value;
       dirty();
+      pvSync();
     });
     A.$$(".setnav a", box).forEach((a) => (a.onclick = () => {
       const el = A.$("#sec-" + a.dataset.go, box);
