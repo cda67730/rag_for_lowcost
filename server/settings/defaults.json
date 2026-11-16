@@ -470,12 +470,7 @@
         "show_sources",
         "enable_invite",
         "daily_limit",
-        "hourly_limit"
-      ]
-    },
-    {
-      "title": "提示詞與回答格式",
-      "keys": [
+        "hourly_limit",
         "system_prompt",
         "answer_rules",
         "enable_answer_schema",

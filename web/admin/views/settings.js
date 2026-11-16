@@ -14,7 +14,7 @@
   const MODEL = /^model_/;
   const CHOICE = { kg_mode: [["hybrid", "混合（圖譜加分＋一般檢索）"], ["only", "只用圖譜對到的段落"]], deid_mode: [["ai", "AI（較準，多一次呼叫或併入分流）"], ["rule", "規則（不呼叫模型）"]] };
   const STRUCT = { answer_schema: "回答欄位", intents: "意圖", check_items: "檢查項目" };
-  const TOP = ["版本與基本", "提示詞與回答格式", "角色用詞", "模型"];
+  const TOP = ["版本與基本", "角色用詞", "模型"];
   // 開關 → 它控制的設定：開關關掉時，這些設定變淡（內容保留、仍可先改好）
   const DEPS = { enable_answer_schema: ["answer_schema"], enable_roles: ["role_user", "role_subject", "role_escalate"], enable_triage: ["intents", "triage_rules", "triage_focus_hint", "max_followups", "followup_prompt"],
     enable_case_flow: ["full_answer_rounds", "continue_prompt", "continue_options"], enable_rerank: ["rerank_pool", "quota_min_actionable", "quota_max_principle", "model_rerank"], enable_kg: ["kg_mode", "kg_boost", "kg_max_nodes"],
@@ -24,7 +24,9 @@
     const [d, models] = await Promise.all([A.api("GET", `/bots/${botId}/settings`), A.api("GET", "/models").catch(() => null)]);
     const items = d.items.filter((x) => !x.kb_level && x.key !== "tier");
     const by = Object.fromEntries(items.map((x) => [x.key, x]));
-    const cur = Object.fromEntries(items.map((x) => [x.key, x.value == null ? "" : BOOL(x.default) && BOOL(x.value) ? String(x.value).toUpperCase() : String(x.value)]));
+    // 長文字（提示詞、規則）：沒自訂或跟預設一樣就顯示空白＋預設內容當提示；留空＝用預設
+    const LONG = (x) => !STRUCT[x.key] && typeof x.default === "string" && (x.text || x.default.includes("\n") || x.default.length > 70);
+    const cur = Object.fromEntries(items.map((x) => [x.key, x.value == null ? "" : LONG(x) && (x.is_default || String(x.value) === x.default) ? "" : BOOL(x.default) && BOOL(x.value) ? String(x.value).toUpperCase() : String(x.value)]));
     const orig = { ...cur };
     const used = new Set();
     const groups = d.groups.map((g, i) => ({ id: "g" + i, title: g.title, keys: g.keys.filter((k) => by[k] && !used.has(k) && used.add(k)) }));
@@ -50,6 +52,8 @@
             <option value="__custom__" ${custom || !v ? "selected" : ""}>其他（自行輸入）…</option></select><button class="btn sm" data-ping="${k}" type="button">測試</button></div>
           <input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}" placeholder="模型名稱，例如 gemini-2.5-flash 或 gpt-5-mini" style="margin-top:6px;${custom || !v ? "" : "display:none"}"><div class="note" data-pingout="${k}"></div>`;
       }
+      else if (LONG(s)) input = `<textarea id="${id}" data-k="${k}" rows="${Math.min(12, Math.max(3, (v || s.default).split("\n").length + 1))}" placeholder="${A.esc("留空＝使用預設：\n" + s.default)}">${A.esc(v)}</textarea>
+          <div class="row" style="gap:8px;margin-top:4px"><button class="btn sm" type="button" data-fill="${k}">帶入預設內容來改</button><button class="btn sm" type="button" data-clear="${k}">清空（用預設）</button></div>`;
       else if (s.text || v.includes("\n") || v.length > 70) input = `<textarea id="${id}" data-k="${k}" rows="${Math.min(12, Math.max(3, v.split("\n").length + 1))}">${A.esc(v)}</textarea>`;
       else input = `<input type="text" id="${id}" data-k="${k}" value="${A.esc(v)}">`;
       return `<div class="fld" data-f="${k}">${head}${input}${note}<div class="err" data-e="${k}"></div></div>`;
@@ -157,6 +161,14 @@
       keys.forEach((k) => { const f = A.$(`.fld[data-f="${k}"]`, box); if (!f) return; f.style.opacity = on.checked ? "" : ".5"; f.title = on.checked ? "" : `「${label(sw, by[sw])}」關閉中，這項暫不使用（內容保留）`; });
     });
     box.addEventListener("change", (e) => { if (e.target.dataset && DEPS[e.target.dataset.k]) syncDeps(); });
+    box.addEventListener("click", (e) => {
+      const k = e.target.dataset && (e.target.dataset.fill || e.target.dataset.clear);
+      if (!k) return;
+      const ta = A.$(`textarea[data-k="${k}"]`, box);
+      ta.value = e.target.dataset.fill ? by[k].default : "";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    });
     syncDeps();
     box.addEventListener("input", (e) => {
       const k = e.target.dataset && e.target.dataset.k;

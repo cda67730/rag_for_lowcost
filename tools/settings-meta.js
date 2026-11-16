@@ -1,8 +1,8 @@
 // 設定的分組與存放位置：docs/settings.md 產生器與 server/settings/defaults.json 匯出共用這一份
 // 分組與後台「機器人設定」一致；where＝Python 版存放位置（bot＝Bot 設定、flow＝可被 Flow 覆蓋、kb＝知識庫屬性、server＝伺服器）
 const GROUPS = [
-  ["版本與基本", ["tier", "bot_name", "welcome", "default_skill", "show_sources", "enable_invite", "daily_limit", "hourly_limit"]],
-  ["提示詞與回答格式", ["system_prompt", "answer_rules", "enable_answer_schema", "answer_schema", "enable_citation", "knowledge_only", "fallback_rules"]],
+  ["版本與基本", ["tier", "bot_name", "welcome", "default_skill", "show_sources", "enable_invite", "daily_limit", "hourly_limit",
+    "system_prompt", "answer_rules", "enable_answer_schema", "answer_schema", "enable_citation", "knowledge_only", "fallback_rules"]],
   ["角色用詞", ["domain_desc", "enable_roles", "role_user", "role_subject", "role_escalate"]],
   ["模型", ["model_answer", "model_triage", "model_rerank", "model_check", "model_embed", "embed_dim", "temperature", "model_eval_gen", "model_eval_judge"]],
   ["分流與追問", ["enable_triage", "intents", "triage_rules", "triage_focus_hint", "max_followups", "followup_prompt"]],

@@ -101,6 +101,9 @@ class Field:
                 "count": list(self.count), "countContinue": list(self.count_continue)}
 
 
+BLANK_IS_DEFAULT = ("system_prompt",)
+
+
 def field_off(f: dict) -> bool:
     """回答欄位的「啟用」：沒寫＝啟用；false、"FALSE"、"否"、0＝關閉（關閉的欄位不給模型、不檢查、不顯示）"""
     v = f.get("enabled", True)
@@ -161,7 +164,10 @@ class BotConfig:
         return int(self.num(key))
 
     def str(self, key: str) -> str:
-        return js_str(self.values.get(key))
+        v = self.values.get(key)
+        if key in BLANK_IS_DEFAULT and _blank(v):
+            v = SETTING_DEFAULTS[key]     # Python 版：系統提示詞留空＝用預設（Apps Script 版是空字串）
+        return js_str(v)
 
     # 角色用詞與文字
     def roles(self) -> dict[str, str]:

@@ -108,8 +108,19 @@ def test_groups_put_switch_next_to_its_content():
     d = _j.loads((Path(__file__).resolve().parents[1] / "settings" / "defaults.json").read_text(encoding="utf-8"))
     g = {x["title"]: x["keys"] for x in d["groups"]}
     titles = [x["title"] for x in d["groups"]]
-    assert titles[:2] == ["版本與基本", "提示詞與回答格式"]
+    assert titles[0] == "版本與基本" and "提示詞與回答格式" not in titles
+    assert {"system_prompt", "answer_rules", "enable_answer_schema", "answer_schema", "fallback_rules"} <= set(g["版本與基本"])
     for sw, dep in [("enable_answer_schema", "answer_schema"), ("enable_triage", "triage_rules"), ("enable_case_flow", "continue_prompt"),
                     ("enable_kg", "kg_mode"), ("enable_deid", "deid_mode"), ("enable_llm_check", "check_items"), ("enable_roles", "role_user")]:
         grp = next(k for k, v in g.items() if sw in v)
         assert dep in g[grp] and g[grp].index(sw) < g[grp].index(dep), sw
+
+
+def test_prompt_settings_blank_means_default():
+    from settings.loader import TEXT_DEFAULTS
+    c = build_config({"system_prompt": "  ", "answer_rules": "", "fallback_rules": "", "answer_schema": ""})
+    assert c.str("system_prompt") == SETTING_DEFAULTS["system_prompt"]
+    assert c.text("answer_rules") == c.tpl(TEXT_DEFAULTS["answer_rules"]) and c.text("fallback_rules")
+    assert [f.key for f in c.schema()] == ["reply", "steps", "notes"] and not c.notes
+    assert build_config({"system_prompt": "自訂"}).str("system_prompt") == "自訂"
+    assert build_config({"welcome": ""}).str("welcome") == ""       # 其他設定的空白不受影響
