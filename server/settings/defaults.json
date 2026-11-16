@@ -474,6 +474,18 @@
       ]
     },
     {
+      "title": "提示詞與回答格式",
+      "keys": [
+        "system_prompt",
+        "answer_rules",
+        "enable_answer_schema",
+        "answer_schema",
+        "enable_citation",
+        "knowledge_only",
+        "fallback_rules"
+      ]
+    },
+    {
       "title": "角色用詞",
       "keys": [
         "domain_desc",
@@ -498,21 +510,46 @@
       ]
     },
     {
-      "title": "流程開關",
+      "title": "分流與追問",
       "keys": [
         "enable_triage",
+        "intents",
+        "triage_rules",
+        "triage_focus_hint",
         "max_followups",
+        "followup_prompt"
+      ]
+    },
+    {
+      "title": "個案延續",
+      "keys": [
         "enable_case_flow",
         "full_answer_rounds",
+        "continue_prompt",
+        "continue_options"
+      ]
+    },
+    {
+      "title": "檢索",
+      "keys": [
         "enable_rerank",
+        "top_k",
+        "min_score",
+        "rerank_pool",
+        "quota_min_actionable",
+        "quota_max_principle",
         "enable_kg",
         "kg_mode",
+        "kg_boost",
+        "kg_max_nodes"
+      ]
+    },
+    {
+      "title": "去識別化",
+      "keys": [
         "enable_deid",
         "deid_mode",
-        "deid_labels",
-        "enable_citation",
-        "knowledge_only",
-        "enable_answer_schema"
+        "deid_labels"
       ]
     },
     {
@@ -522,33 +559,6 @@
         "check_items",
         "check_severe",
         "enable_relevance_check"
-      ]
-    },
-    {
-      "title": "提示詞與回答格式",
-      "keys": [
-        "system_prompt",
-        "answer_schema",
-        "answer_rules",
-        "fallback_rules",
-        "intents",
-        "triage_rules",
-        "triage_focus_hint",
-        "followup_prompt",
-        "continue_prompt",
-        "continue_options"
-      ]
-    },
-    {
-      "title": "檢索",
-      "keys": [
-        "top_k",
-        "min_score",
-        "rerank_pool",
-        "quota_min_actionable",
-        "quota_max_principle",
-        "kg_boost",
-        "kg_max_nodes"
       ]
     },
     {

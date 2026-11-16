@@ -14,7 +14,11 @@
   const MODEL = /^model_/;
   const CHOICE = { kg_mode: [["hybrid", "混合（圖譜加分＋一般檢索）"], ["only", "只用圖譜對到的段落"]], deid_mode: [["ai", "AI（較準，多一次呼叫或併入分流）"], ["rule", "規則（不呼叫模型）"]] };
   const STRUCT = { answer_schema: "回答欄位", intents: "意圖", check_items: "檢查項目" };
-  const TOP = ["版本與基本", "角色用詞", "模型"];
+  const TOP = ["版本與基本", "提示詞與回答格式", "角色用詞", "模型"];
+  // 開關 → 它控制的設定：開關關掉時，這些設定變淡（內容保留、仍可先改好）
+  const DEPS = { enable_answer_schema: ["answer_schema"], enable_roles: ["role_user", "role_subject", "role_escalate"], enable_triage: ["intents", "triage_rules", "triage_focus_hint", "max_followups", "followup_prompt"],
+    enable_case_flow: ["full_answer_rounds", "continue_prompt", "continue_options"], enable_rerank: ["rerank_pool", "quota_min_actionable", "quota_max_principle", "model_rerank"], enable_kg: ["kg_mode", "kg_boost", "kg_max_nodes"],
+    enable_deid: ["deid_mode", "deid_labels"], enable_llm_check: ["check_items", "check_severe", "model_check"], knowledge_only: [], enable_citation: [] };
 
   A.settingsEditor = async function (box, botId, wsId) {
     const [d, models] = await Promise.all([A.api("GET", `/bots/${botId}/settings`), A.api("GET", "/models").catch(() => null)]);
@@ -57,7 +61,7 @@
       <div><div class="sec" id="sec-tier"><h4>版本 <span class="note">選一個就套用該版本的開關組合（直接儲存）；之後每個開關仍可個別調整</span></h4>
         <div class="tiers">${Object.entries(d.tiers).map(([k, t]) => `<label class="tier ${k === tier ? "on" : ""}"><input type="radio" name="tier" value="${k}" ${k === tier ? "checked" : ""}><b>${A.esc(t.name)}</b><span class="note">${A.esc(t.desc)}</span></label>`).join("")}</div></div>
       ${top.map(sec).join("")}
-      <details class="box" id="adv"><summary><b>進階設定</b> <span class="note">流程開關、檢查、提示詞、檢索參數、聊天介面文字</span></summary><div style="margin-top:12px">${adv.map(sec).join("")}</div></details>
+      <details class="box" id="adv"><summary><b>進階設定</b> <span class="note">分流追問、個案延續、檢索、去識別化、檢查、聊天介面文字</span></summary><div style="margin-top:12px">${adv.map(sec).join("")}</div></details>
       ${d.notes && d.notes.length ? `<div class="box warn">設定讀取時發現的問題：${d.notes.map((n) => A.esc(n.join ? n.join("：") : n)).join("；")}</div>` : ""}
       <div class="savebar"><span class="note" id="dirtyN"></span><button class="btn" id="sReset" type="button">復原</button><button class="btn pri" id="sSave" type="button">儲存</button></div></div></div>`;
 
@@ -100,17 +104,17 @@
         const tsel = (v, i) => `<select data-f="type" data-r="${i}">${[["text", "一段文字"], ["list", "條列"], ["items", "有出處的建議"]].map(([a, b]) => `<option value="${a}" ${a === v ? "selected" : ""}>${b}</option>`).join("")}</select>`;
         const msel = (v, i) => `<select data-f="modes" data-r="${i}">${[["full", "完整回答"], ["continue", "延續回覆"], ["both", "都要"]].map(([a, b]) => `<option value="${a}" ${a === (v || "full") ? "selected" : ""}>${b}</option>`).join("")}</select>`;
         const cb = (f, v, i) => `<input type="checkbox" data-f="${f}" data-r="${i}" ${v ? "checked" : ""}>`;
-        return `<div style="overflow:auto"><table><thead><tr><th>key</th><th>標題</th><th>給模型的說明</th><th>類型</th><th>出現在</th><th>必填</th><th>摘要</th><th>複製鈕</th><th>數量</th><th></th></tr></thead><tbody>${schema.map((f, i) =>
-          `<tr><td><input type="text" data-f="key" data-r="${i}" value="${A.esc(f.key)}" style="width:90px"></td><td><input type="text" data-f="label" data-r="${i}" value="${A.esc(f.label || "")}"></td>
+        return `<div style="overflow:auto"><table><thead><tr><th>啟用</th><th>key</th><th>標題</th><th>給模型的說明</th><th>類型</th><th>出現在</th><th>必填</th><th>摘要</th><th>複製鈕</th><th>數量</th><th></th></tr></thead><tbody>${schema.map((f, i) =>
+          `<tr style="${f.enabled === false ? "opacity:.5" : ""}"><td><input type="checkbox" data-f="enabled" data-r="${i}" ${f.enabled === false ? "" : "checked"} title="關閉＝暫時不用這個欄位，內容保留"></td><td><input type="text" data-f="key" data-r="${i}" value="${A.esc(f.key)}" style="width:90px"></td><td><input type="text" data-f="label" data-r="${i}" value="${A.esc(f.label || "")}"></td>
           <td><input type="text" data-f="hint" data-r="${i}" value="${A.esc(f.hint || "")}" style="min-width:220px"></td><td>${tsel(f.type, i)}</td><td>${msel(f.modes, i)}</td>
           <td>${cb("required", f.required, i)}</td><td>${cb("summary", f.summary, i)}</td><td>${cb("copy", f.copy, i)}</td>
           <td>${f.type === "items" ? `<input type="text" data-f="count" data-r="${i}" value="${A.esc(f.count || "2-3")}" style="width:56px">` : ""}</td><td><button class="btn sm danger" type="button" data-del="${i}">刪</button></td></tr>`).join("")}</tbody></table></div>
-          <button class="btn sm" type="button" data-add>新增欄位</button> <span class="note">key 用英文；「有出處的建議」會要求模型附段落編號，出處檢查只看這一類欄位</span>`;
+          <button class="btn sm" type="button" data-add>新增欄位</button> <span class="note">取消「啟用」＝暫時不用這個欄位（內容保留）；key 用英文；「有出處的建議」會要求模型附段落編號，出處檢查只看這一類欄位</span>`;
       };
       const bindTable = (b) => {
         if (key === "answer_schema" && schema) {
           const save = () => { cur[key] = "[\n" + schema.map((o) => JSON.stringify(o)).join(",\n") + "\n]"; dirty(); };
-          A.$$("[data-f]", b).forEach((x) => (x.onchange = () => { const o = schema[+x.dataset.r]; o[x.dataset.f] = x.type === "checkbox" ? x.checked : x.value; if (x.dataset.f === "type") render(); save(); }));
+          A.$$("[data-f]", b).forEach((x) => (x.onchange = () => { const o = schema[+x.dataset.r]; if (x.dataset.f === "enabled") { if (x.checked) delete o.enabled; else o.enabled = false; } else o[x.dataset.f] = x.type === "checkbox" ? x.checked : x.value; save(); if (x.dataset.f === "type" || x.dataset.f === "enabled") render(); }));
           A.$$("[data-del]", b).forEach((x) => (x.onclick = () => { schema.splice(+x.dataset.del, 1); save(); render(); }));
           const ad = A.$("[data-add]", b);
           if (ad) ad.onclick = () => { schema.push({ key: "field_" + (schema.length + 1), type: "text", label: "", hint: "", modes: "full" }); save(); render(); };
@@ -147,13 +151,13 @@
       inp.dispatchEvent(new Event("input", { bubbles: true }));     // 走同一個記錄修改的流程
     }));
     // 自訂角色用詞關掉時，三個稱呼欄位變灰（保留內容、不使用）
-    const syncRoles = () => {
-      const on = A.$('input[data-k="enable_roles"]', box);
+    const syncDeps = () => Object.entries(DEPS).forEach(([sw, keys]) => {
+      const on = A.$(`input[data-k="${sw}"]`, box);
       if (!on) return;
-      ["role_user", "role_subject", "role_escalate"].forEach((k) => { const el = A.$(`[data-k="${k}"]`, box); if (el) { el.disabled = !on.checked; el.closest(".fld").style.opacity = on.checked ? "" : ".55"; } });
-    };
-    box.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.k === "enable_roles") syncRoles(); });
-    syncRoles();
+      keys.forEach((k) => { const f = A.$(`.fld[data-f="${k}"]`, box); if (!f) return; f.style.opacity = on.checked ? "" : ".5"; f.title = on.checked ? "" : `「${label(sw, by[sw])}」關閉中，這項暫不使用（內容保留）`; });
+    });
+    box.addEventListener("change", (e) => { if (e.target.dataset && DEPS[e.target.dataset.k]) syncDeps(); });
+    syncDeps();
     box.addEventListener("input", (e) => {
       const k = e.target.dataset && e.target.dataset.k;
       if (!k) return;

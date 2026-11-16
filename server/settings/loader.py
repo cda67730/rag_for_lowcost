@@ -101,6 +101,20 @@ class Field:
                 "count": list(self.count), "countContinue": list(self.count_continue)}
 
 
+def field_off(f: dict) -> bool:
+    """回答欄位的「啟用」：沒寫＝啟用；false、"FALSE"、"否"、0＝關閉（關閉的欄位不給模型、不檢查、不顯示）"""
+    v = f.get("enabled", True)
+    return v is False or v == 0 or js_str(v).strip().upper() in ("FALSE", "否", "0")
+
+
+def _all_off(text: str) -> bool:
+    try:
+        raw = json.loads(text)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(raw, list) and bool(raw) and all(isinstance(f, dict) and field_off(f) for f in raw)
+
+
 def range_of(s: Any, default: tuple[int, int]) -> tuple[int, int]:
     m = _RANGE_RE.match(js_str(s))
     return (int(m.group(1)), int(m.group(2))) if m else default
@@ -226,6 +240,8 @@ class BotConfig:
         seen, out = set(), []
         for f in raw:
             f = f if isinstance(f, dict) else {}
+            if field_off(f):
+                continue
             key = js_str(f.get("key") or "").strip()
             fld = Field(
                 key=key,
@@ -252,6 +268,8 @@ class BotConfig:
         out, bad = None, None
         try:
             out = self._parse_schema(self.text("answer_schema"))
+            if not out and _all_off(self.text("answer_schema")):
+                bad = "所有欄位都關閉了"
         except (ValueError, json.JSONDecodeError) as e:
             bad = str(e)
         if out and self.citation_on() and not any(f.type == "items" for f in out):

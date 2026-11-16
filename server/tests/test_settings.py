@@ -81,3 +81,35 @@ def test_enable_roles_switch():
     assert off.roles() == {"domain": "學前融合教育", "user": "使用者", "subject": "對方", "escalate": "主管"}
     assert off.tpl("{user}問{subject}的事，找{escalate}；{domain}") == "使用者問對方的事，找主管；學前融合教育"
     assert build_config({**vals, "enable_roles": ""}).roles()["user"] == "老師"          # 空白＝預設（開）
+
+
+def test_answer_schema_field_enabled_toggle():
+    import json as _j
+    fields = [{"key": "reply", "type": "text", "modes": "both", "required": True},
+              {"key": "steps", "type": "items", "modes": "both", "count": "1-3"},
+              {"key": "notes", "type": "list", "modes": "both", "enabled": False},
+              {"key": "draft", "type": "text", "modes": "full", "enabled": "FALSE"},
+              {"key": "tip", "type": "text", "modes": "full", "enabled": True}]
+    c = build_config({"answer_schema": _j.dumps(fields)})
+    assert [f.key for f in c.schema()] == ["reply", "steps", "tip"]
+    assert '"notes"' not in c.schema_format("full") and '"draft"' not in c.schema_format("full")
+    assert not c.notes
+    # 全部關閉 → 用預設欄位並記一筆
+    c = build_config({"answer_schema": _j.dumps([dict(f, enabled=False) for f in fields])})
+    assert [f.key for f in c.schema()] == ["reply", "steps", "notes"]
+    assert any("所有欄位都關閉" in n[1] for n in c.notes)
+    # 出處開著卻把 items 欄位關掉 → 照舊補參考做法欄
+    c = build_config({"answer_schema": _j.dumps([fields[0], dict(fields[1], enabled=False)])})
+    assert any(f.type == "items" for f in c.schema())
+
+
+def test_groups_put_switch_next_to_its_content():
+    import json as _j
+    d = _j.loads((Path(__file__).resolve().parents[1] / "settings" / "defaults.json").read_text(encoding="utf-8"))
+    g = {x["title"]: x["keys"] for x in d["groups"]}
+    titles = [x["title"] for x in d["groups"]]
+    assert titles[:2] == ["版本與基本", "提示詞與回答格式"]
+    for sw, dep in [("enable_answer_schema", "answer_schema"), ("enable_triage", "triage_rules"), ("enable_case_flow", "continue_prompt"),
+                    ("enable_kg", "kg_mode"), ("enable_deid", "deid_mode"), ("enable_llm_check", "check_items"), ("enable_roles", "role_user")]:
+        grp = next(k for k, v in g.items() if sw in v)
+        assert dep in g[grp] and g[grp].index(sw) < g[grp].index(dep), sw
