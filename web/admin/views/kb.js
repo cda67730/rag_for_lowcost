@@ -18,12 +18,18 @@ A.views.kb = async function (kbId, tab) {
 
   async function docs() {
     let status = "", next = null;
-    p.innerHTML = `<div class="drop" id="drop">把檔案拖到這裡，或 <button class="btn sm" id="pick" type="button">選擇檔案</button>（PDF、Word、PowerPoint、Excel、純文字；單檔 50 MB 以內，可多選）
-        <input type="file" id="files" multiple hidden accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv"></div>
-      <div class="grid2" style="margin-top:8px"><div><label for="usrc">出處（套用到這次上傳的檔案）</label><input type="text" id="usrc" placeholder="例如：出版單位、年份"></div>
+    p.innerHTML = `<div class="grid2 addsrc">
+        <div class="box"><h4>上傳檔案</h4>
+          <div class="drop" id="drop" style="min-height:190px;display:flex;flex-direction:column;justify-content:center;gap:8px">把檔案拖到這裡<div><button class="btn" id="pick" type="button">選擇檔案</button></div>
+            <span class="note">PDF、Word、PowerPoint、Excel、純文字；單檔 50 MB 以內，可多選</span>
+            <input type="file" id="files" multiple hidden accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv"></div></div>
+        <div class="box"><h4>貼上文字</h4>
+          <label for="pt">標題</label><input type="text" id="pt" placeholder="例如：收拾時間的常見做法">
+          <label for="px" style="margin-top:8px">內容 <span class="note" id="pxn"></span></label><textarea id="px" rows="8" placeholder="直接貼上文章、問答、筆記…會和上傳的檔案一樣切段、分類、計算向量，處理完到下方核可"></textarea>
+          <div class="row end" style="margin-top:8px"><button class="btn pri" id="pg" type="button">加入知識庫</button></div></div>
+      </div>
+      <div class="grid2" style="margin-top:8px"><div><label for="usrc">出處（套用到這次上傳的檔案或貼上的文字）</label><input type="text" id="usrc" placeholder="例如：出版單位、年份"></div>
         <div><label for="uev">證據等級 <span class="note">可空</span></label><input type="text" id="uev"></div></div>
-      <details class="box" style="margin-top:10px"><summary>或貼上文字</summary><label for="pt">標題</label><input type="text" id="pt"><label for="px">內容</label><textarea id="px" rows="6"></textarea>
-        <div class="row end" style="margin-top:8px"><button class="btn pri" id="pg" type="button">送出</button></div></details>
       <div id="up"></div>
       <div class="row" style="margin:14px 0 8px"><div class="tabs" style="margin:0;border:0">${[["", "全部"], ["processing", "處理中"], ["pending", "待審核"], ["approved", "已核可"], ["disabled", "停用"], ["failed", "失敗"]].map(([s, t]) => `<a href="javascript:void 0" data-s="${s}" class="${s === "" ? "on" : ""}">${t}</a>`).join("")}</div>
         <span style="flex:1"></span>${admin ? '<button class="btn" id="rep" type="button">補算缺少的向量</button>' : ""}</div>
@@ -35,11 +41,16 @@ A.views.kb = async function (kbId, tab) {
     drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
     drop.ondragleave = () => drop.classList.remove("over");
     drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); upload(Array.from(e.dataTransfer.files)); };
-    A.$("#pg").onclick = (e) => A.act(e.target, async () => {
-      const r = await A.api("POST", `/kbs/${kbId}/documents`, { title: A.$("#pt").value, text: A.$("#px").value, source_note: A.$("#usrc").value, evidence: A.$("#uev").value });
-      A.$("#px").value = "";
-      track(A.$("#pt").value || "貼上的文字", r.job_id);
-    });
+    A.$("#px").oninput = () => { const n = A.$("#px").value.trim().length; A.$("#pxn").textContent = n ? `${n} 字` : ""; };
+    A.$("#pg").onclick = (e) => {
+      if (!A.$("#px").value.trim()) return A.toast("請先貼上內容");
+      A.act(e.target, async () => {
+        const title = A.$("#pt").value.trim();
+        const r = await A.api("POST", `/kbs/${kbId}/documents`, { title, text: A.$("#px").value, source_note: A.$("#usrc").value, evidence: A.$("#uev").value });
+        A.$("#px").value = ""; A.$("#pt").value = ""; A.$("#pxn").textContent = "";
+        track(title || "貼上的文字", r.job_id);
+      });
+    };
     A.$$("[data-s]", p).forEach((a) => (a.onclick = () => { status = a.dataset.s; A.$$("[data-s]", p).forEach((x) => x.classList.toggle("on", x === a)); load(true); }));
     const rep = A.$("#rep");
     if (rep) rep.onclick = () => A.act(rep, async () => { const r = await A.api("POST", `/kbs/${kbId}/repair`); A.toast(r.fixed ? `已補上 ${r.fixed} 段的向量` : "沒有缺向量的段落"); });
