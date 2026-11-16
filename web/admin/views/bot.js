@@ -225,7 +225,8 @@ A.views.bot = async function (botId, tab) {
       next = d.next;
       const html = d.items.map((r) => `<tr class="click" data-id="${r.id}"><td>${A.fmtTime(r.at)}</td><td>${A.esc(r.unit)}</td><td>${A.esc(r.message)}${r.corrected ? ` ${A.pill("approved", "已修正")}` : ""}</td><td>${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</td>
         <td>${r.retrieved}</td><td>${r.cited}</td><td>${r.rewritten ? "是" : ""}</td><td>${r.fb === "up" ? "👍" : r.fb === "down" ? "👎" : ""}${r.copied ? " 📋" : ""}</td><td>${(r.ms / 1000).toFixed(1)}s</td></tr>`).join("");
-      A.$("#lb").innerHTML = reset ? html || '<tr><td colspan="9" class="note">沒有紀錄</td></tr>' : A.$("#lb").innerHTML + html;
+      const empty = `<tr><td colspan="9" class="note">沒有紀錄。${A.$("#lx").checked ? "" : "後台「測試對話」的紀錄預設不顯示，要看請勾選「含後台測試」；"}聊天頁的對話會在使用者送出問題後出現（期間預設近 30 天）。</td></tr>`;
+      A.$("#lb").innerHTML = reset ? html || empty : A.$("#lb").innerHTML + html;
       A.$("#lm").hidden = !next;
       A.$$("tr.click", p).forEach((tr) => (tr.onclick = () => detail(tr.dataset.id)));
     }
