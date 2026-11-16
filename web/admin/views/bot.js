@@ -241,7 +241,13 @@ A.views.bot = async function (botId, tab) {
     /** 專家修正：改好問與答，存成知識庫的一份新文件（需要工作區的 admin／reviewer 權限，且是這個機器人掛的知識庫） */
     function fixPanel(box, r) {
       const done = r.corrected_doc ? `<div class="box" style="margin-top:10px">已修正並存入知識庫：<a href="#/kb/${r.corrected_doc.kb_id}/docs">${A.esc(r.corrected_doc.title)}</a> ${A.st(r.corrected_doc.status)}</div>` : "";
-      if (!r.kb_targets.length) { box.innerHTML = done; return; }
+      if (!r.kb_targets.length) {
+        const why = r.correct_block === "no_kb"
+          ? `這個機器人還沒掛知識庫，所以還不能把修正存進去。先到「<a href="#/bot/${botId}/knowledge">知識庫</a>」分頁掛上一個知識庫。`
+          : "要把修正存進知識庫，需要工作區的 admin／owner，或「工作區 reviewer＋這個機器人的 analyst」權限，請找工作區 owner 設定。";
+        box.innerHTML = done + `<div class="row" style="margin-top:10px"><button class="btn" type="button" disabled>修正並加入知識庫</button></div><p class="note">${why}</p>`;
+        return;
+      }
       const plain = (html) => { const d = document.createElement("div"); d.innerHTML = html; return d.textContent.replace(/\s*\[[\d,\s]*\]/g, "").trim(); };
       const ans = r.answer ? plain(AnswerView.text(r)) : "";
       box.innerHTML = done + `<div class="row" style="margin-top:10px"><button class="btn" id="fxOpen" type="button">${r.corrected_doc ? "再修正一次" : "修正並加入知識庫"}</button></div>

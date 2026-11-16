@@ -497,7 +497,9 @@ def log_detail(log_id: int, u: User = Me, s: Session = DB):
     return {**log_row(c, fb), "message": c.user_text, "triage": c.triage, "answer": c.answer, "sources": c.sources, "checks": c.checks, "trace": c.trace,
             "stability": c.stability, "quality": c.quality, "referral": c.referral,
             "corrected_doc": {"id": str(doc.id), "kb_id": str(doc.kb_id), "title": doc.title, "status": doc.status} if doc else None,
-            "kb_targets": correction_targets(s, u, b)}
+            "kb_targets": (t := correction_targets(s, u, b)),
+            # 不能專家修正的原因（後台顯示提示，而不是整個按鈕不見）：no_permission＝權限不夠、no_kb＝機器人還沒掛知識庫
+            "correct_block": None if t else ("no_kb" if set(ws_roles(s, u, b.workspace_id)) & {"owner", "admin", "reviewer"} else "no_permission")}
 
 
 def correction_targets(s: Session, u: User, b: Bot) -> list[dict]:

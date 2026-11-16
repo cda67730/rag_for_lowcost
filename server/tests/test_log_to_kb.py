@@ -33,6 +33,8 @@ def test_expert_correction_creates_document(env):  # noqa: F811
     d = c.get(f"/api/admin/logs/{conv.id}", headers=as_("rev")).json()
     assert d["kb_targets"] == [{"id": str(k.id), "name": "手冊庫", "label": "手冊", "chunk_size": k.chunk_size}] and d["corrected_doc"] is None
     assert c.get(f"/api/admin/logs/{conv.id}", headers=as_("ana")).json()["kb_targets"] == []     # 分析者看得到紀錄，但不能改知識庫
+    assert c.get(f"/api/admin/logs/{conv.id}", headers=as_("ana")).json()["correct_block"] == "no_permission"
+    assert d["correct_block"] is None
     body = {"kb_id": str(k.id), "question": "孩子A收玩具時丟積木怎麼辦？", "answer": "先蹲下來、用簡短的話說明期待，再示範一次。", "approve": True}
     assert c.post(f"/api/admin/logs/{conv.id}/to-kb", headers=as_("ana"), json=body).status_code == 403
     assert c.post(f"/api/admin/logs/{conv.id}/to-kb", headers=as_("rev"), json={**body, "kb_id": str(other.id)}).json()["code"] == "kb_not_allowed"
@@ -63,3 +65,11 @@ def test_correction_without_approve_waits_for_review(env):  # noqa: F811
     assert doc.status == "pending" and doc.title == "自訂標題" and doc.reviewed_by is None
     job = db.get(m.Job, __import__("uuid").UUID(r["job_id"]))
     assert job.status == "done" and job.result["status"] == "pending" and "auto_approve_by" not in job.result
+
+
+def test_correct_block_no_kb(env):  # noqa: F811
+    """機器人還沒掛知識庫：告訴管理者原因，而不是按鈕不見"""
+    c, db, ws, bot, bot2, users, as_ = env
+    conv = m.Conversation(bot_id=bot2.id, session="s", turn=1, user_text="q", rtype="answer"); db.add(conv); db.flush()
+    d = c.get(f"/api/admin/logs/{conv.id}", headers=as_("owner")).json()
+    assert d["kb_targets"] == [] and d["correct_block"] == "no_kb"
