@@ -151,10 +151,12 @@ class BotConfig:
 
     # 角色用詞與文字
     def roles(self) -> dict[str, str]:
+        """角色用詞。enable_roles 關掉時，提問者／談論對象／轉介對象一律用通用稱呼（領域描述照常）"""
+        on = self.flag("enable_roles")
         out = {}
         for k, sk in _ROLE_KEYS.items():
             v = self.values.get(sk)
-            out[k] = ROLE_DEFAULTS[k] if _blank(v) else js_str(v).strip()
+            out[k] = ROLE_DEFAULTS[k] if _blank(v) or (not on and k != "domain") else js_str(v).strip()
         return out
 
     def tpl(self, s: Any) -> str:

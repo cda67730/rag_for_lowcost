@@ -1,5 +1,5 @@
 {
-  "_comment": "由 tools/export-defaults.js 自 apps-script/Setup.gs 與 Chat.gs 產生，請勿手改",
+  "_comment": "由 tools/export-defaults.js 自 apps-script/Setup.gs 與 Chat.gs 產生（另加 Python 版專用設定），請勿手改",
   "settings": [
     {
       "key": "tier",
@@ -90,6 +90,11 @@
       "key": "domain_desc",
       "value": "AI 知識問答系統",
       "note": "領域描述：分流器與審查器的 prompt 開頭「你是〔領域描述〕的分流器」"
+    },
+    {
+      "key": "enable_roles",
+      "value": true,
+      "note": "自訂角色用詞：開＝prompt 裡的 {user}、{subject}、{escalate} 用下面三個自訂稱呼；關＝一律用通用稱呼（使用者／對方／主管），下面三欄保留但不使用。領域描述不受影響（只有 Python 版）"
     },
     {
       "key": "role_user",
@@ -472,6 +477,7 @@
       "title": "角色用詞",
       "keys": [
         "domain_desc",
+        "enable_roles",
         "role_user",
         "role_subject",
         "role_escalate"

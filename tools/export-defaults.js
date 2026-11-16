@@ -1,9 +1,19 @@
 // 把 apps-script 的預設值匯出成 server/settings/defaults.json，Python 版直接讀這份（預設值只維護在 Setup.gs 一處）
 // 用法：node tools/export-defaults.js        （改了 Setup.gs 的預設值就重跑；測試會檢查是否同步）
 const fs = require("fs"), vm = require("vm"), path = require("path");
-const { GROUPS, WHERE, FLOW } = require("./settings-meta");
+const { GROUPS, WHERE, FLOW, SERVER_ONLY } = require("./settings-meta");
 const root = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(root, "apps-script", f), "utf8");
+
+function withServerOnly(settings) {
+  const out = settings.slice();
+  for (const x of SERVER_ONLY) {
+    const i = out.findIndex((s) => s.key === x.after);
+    if (i < 0) throw new Error("SERVER_ONLY: 找不到 " + x.after);
+    out.splice(i + 1, 0, { key: x.key, value: x.value, note: x.note });
+  }
+  return out;
+}
 
 function build() {
   const sb = { cfgAll_: () => ({}), cfg_: () => undefined, console };
@@ -12,8 +22,8 @@ function build() {
     ";this.__={SD:SETTINGS_DEFAULT,TD:TEXT_DEFAULTS,TI:TIERS,RD:ROLE_DEFAULTS,IK:INTENT_KEYS,SF:SCHEMA_FREE};", sb);
   const x = sb.__;
   return {
-    _comment: "由 tools/export-defaults.js 自 apps-script/Setup.gs 與 Chat.gs 產生，請勿手改",
-    settings: x.SD.map(([key, value, note]) => ({ key, value, note })),
+    _comment: "由 tools/export-defaults.js 自 apps-script/Setup.gs 與 Chat.gs 產生（另加 Python 版專用設定），請勿手改",
+    settings: withServerOnly(x.SD.map(([key, value, note]) => ({ key, value, note }))),
     text_defaults: x.TD,
     tiers: x.TI,
     role_defaults: x.RD,

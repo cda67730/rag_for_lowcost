@@ -2,7 +2,7 @@
 // 分組與後台「機器人設定」一致；where＝Python 版存放位置（bot＝Bot 設定、flow＝可被 Flow 覆蓋、kb＝知識庫屬性、server＝伺服器）
 const GROUPS = [
   ["版本與基本", ["tier", "bot_name", "welcome", "default_skill", "show_sources", "enable_invite", "daily_limit", "hourly_limit"]],
-  ["角色用詞", ["domain_desc", "role_user", "role_subject", "role_escalate"]],
+  ["角色用詞", ["domain_desc", "enable_roles", "role_user", "role_subject", "role_escalate"]],
   ["模型", ["model_answer", "model_triage", "model_rerank", "model_check", "model_embed", "embed_dim", "temperature", "model_eval_gen", "model_eval_judge"]],
   ["流程開關", ["enable_triage", "max_followups", "enable_case_flow", "full_answer_rounds", "enable_rerank", "enable_kg", "kg_mode", "enable_deid", "deid_mode", "deid_labels", "enable_citation", "knowledge_only", "enable_answer_schema"]],
   ["檢查", ["enable_llm_check", "check_items", "check_severe", "enable_relevance_check"]],
@@ -14,4 +14,10 @@ const GROUPS = [
 const WHERE = { model_embed: "kb", embed_dim: "kb", chunk_size: "kb", chunk_overlap: "kb", enable_node_mapping: "kb" };
 const FLOW = new Set(["tier", "enable_triage", "max_followups", "enable_case_flow", "full_answer_rounds", "enable_rerank", "enable_kg", "kg_mode", "enable_citation", "knowledge_only", "enable_answer_schema", "enable_llm_check", "enable_relevance_check", "model_answer", "model_triage", "model_rerank", "model_check", "temperature", "top_k", "min_score", "rerank_pool", "quota_min_actionable", "quota_max_principle", "kg_boost", "kg_max_nodes", "system_prompt", "answer_schema", "answer_rules", "fallback_rules", "intents", "triage_rules", "triage_focus_hint", "followup_prompt", "continue_prompt", "continue_options", "check_items", "check_severe"]);
 
-module.exports = { GROUPS, WHERE, FLOW };
+// 只有 Python 版才有的設定（Apps Script 版不動）：產生 defaults.json 與設定文件時插在指定的設定後面
+const SERVER_ONLY = [
+  { after: "domain_desc", key: "enable_roles", value: true,
+    note: "自訂角色用詞：開＝prompt 裡的 {user}、{subject}、{escalate} 用下面三個自訂稱呼；關＝一律用通用稱呼（使用者／對方／主管），下面三欄保留但不使用。領域描述不受影響（只有 Python 版）" },
+];
+
+module.exports = { GROUPS, WHERE, FLOW, SERVER_ONLY };

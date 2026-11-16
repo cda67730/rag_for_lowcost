@@ -70,3 +70,14 @@ def test_tpl_and_text_fallback(db):
                 m.BotSetting(bot_id=bot.id, key="msg_ai_fallback", value="")]); db.flush()
     c = load_config(db, bot.id)
     assert "園長" in c.text("msg_ai_fallback")   # 空白→內建預設，且 {escalate} 被替換
+
+
+def test_enable_roles_switch():
+    """自訂角色用詞可以關掉：關掉時提問者／談論對象／轉介對象改用通用稱呼，領域描述照常；模板替換也跟著變"""
+    vals = {"domain_desc": "學前融合教育", "role_user": "老師", "role_subject": "孩子", "role_escalate": "園長"}
+    on = build_config(vals)
+    assert on.roles() == {"domain": "學前融合教育", "user": "老師", "subject": "孩子", "escalate": "園長"}
+    off = build_config({**vals, "enable_roles": "FALSE"})
+    assert off.roles() == {"domain": "學前融合教育", "user": "使用者", "subject": "對方", "escalate": "主管"}
+    assert off.tpl("{user}問{subject}的事，找{escalate}；{domain}") == "使用者問對方的事，找主管；學前融合教育"
+    assert build_config({**vals, "enable_roles": ""}).roles()["user"] == "老師"          # 空白＝預設（開）

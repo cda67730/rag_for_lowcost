@@ -43,6 +43,7 @@
 | key | 預設 | Python 版位置 | 說明 |
 | --- | --- | --- | --- |
 | `domain_desc` | `AI 知識問答系統` | Bot | 領域描述：分流器與審查器的 prompt 開頭「你是〔領域描述〕的分流器」 |
+| `enable_roles` | 開 | Bot | 自訂角色用詞：開＝prompt 裡的 {user}、{subject}、{escalate} 用下面三個自訂稱呼；關＝一律用通用稱呼（使用者／對方／主管），下面三欄保留但不使用。領域描述不受影響（只有 Python 版） |
 | `role_user` | `使用者` | Bot | 提問者的稱呼；所有 prompt 裡的 {user} 都換成這個 |
 | `role_subject` | `對方` | Bot | 談論對象的稱呼（提問者在問誰的事）；{subject} |
 | `role_escalate` | `主管` | Bot | 預設升級對象：轉介資源沒有「系統能力不足」時，保守回答建議找誰；{escalate} |

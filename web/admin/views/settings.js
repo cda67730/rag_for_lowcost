@@ -146,6 +146,14 @@
       inp.value = sel.value;
       inp.dispatchEvent(new Event("input", { bubbles: true }));     // 走同一個記錄修改的流程
     }));
+    // 自訂角色用詞關掉時，三個稱呼欄位變灰（保留內容、不使用）
+    const syncRoles = () => {
+      const on = A.$('input[data-k="enable_roles"]', box);
+      if (!on) return;
+      ["role_user", "role_subject", "role_escalate"].forEach((k) => { const el = A.$(`[data-k="${k}"]`, box); if (el) { el.disabled = !on.checked; el.closest(".fld").style.opacity = on.checked ? "" : ".55"; } });
+    };
+    box.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.k === "enable_roles") syncRoles(); });
+    syncRoles();
     box.addEventListener("input", (e) => {
       const k = e.target.dataset && e.target.dataset.k;
       if (!k) return;

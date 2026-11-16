@@ -4,9 +4,10 @@ const fs = require("fs"), vm = require("vm"), path = require("path");
 const root = path.join(__dirname, "..");
 const sb = {}; vm.createContext(sb);
 vm.runInContext(fs.readFileSync(path.join(root, "apps-script/Setup.gs"), "utf8").replace("function setup()", "function setupX()") + ";this.SD=SETTINGS_DEFAULT;this.TI=TIERS;", sb);
-const SD = sb.SD, TI = sb.TI, byKey = {}; SD.forEach((r) => (byKey[r[0]] = r));
-
-const { GROUPS, WHERE, FLOW } = require("./settings-meta");
+const { GROUPS, WHERE, FLOW, SERVER_ONLY } = require("./settings-meta");
+const SD = sb.SD.slice(), TI = sb.TI, byKey = {};
+for (const x of SERVER_ONLY) SD.splice(SD.findIndex((r) => r[0] === x.after) + 1, 0, [x.key, x.value, x.note]);
+SD.forEach((r) => (byKey[r[0]] = r));
 const whereOf = (k) => WHERE[k] === "kb" ? "知識庫" : FLOW.has(k) ? "Bot（Flow 可覆蓋）" : "Bot";
 const esc = (s) => String(s).replace(/\|/g, "\\|").replace(/\n/g, " ");
 const short = (v) => { if (typeof v === "boolean") return v ? "開" : "關"; const s = String(v); if (s === "") return "（空）"; return s.length > 40 || /\n/.test(s) ? "（長文字，見下方）" : "`" + esc(s) + "`"; };
@@ -55,7 +56,7 @@ out += `\n## Python 版另外的設定位置\n\n這些不是 Bot 設定 key，�
 | --- | --- |
 | 知識庫掛載（標籤、最少段數、權重、啟用） | \`bot_knowledge\`，Bot 後台「知識庫」分頁 |
 | 知識庫可見範圍 | \`knowledge_bases.visibility\` ＋ \`kb_allowed_bots\` |
-| 模型供應商金鑰、資料庫連線、JWT 密鑰、CORS、Langfuse | 伺服器環境變數（見 \`server/README.md\`） |
+| 模型供應商金鑰、資料庫連線、JWT 密鑰、CORS、紀錄保留天數 | 伺服器環境變數（見 \`server/README.md\`） |
 `;
 fs.writeFileSync(path.join(root, "docs/settings.md"), out);
 console.log("docs/settings.md：", SD.length, "項設定，", longs.length, "項長文字");
