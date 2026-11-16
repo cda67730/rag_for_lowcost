@@ -183,7 +183,7 @@ A.views.kb = async function (kbId, tab) {
       <div class="grid3"><div><label for="kz">段落長度（字）</label><input type="number" id="kz" value="${k.chunk_size}"></div><div><label for="ko">重疊字數</label><input type="number" id="ko" value="${k.chunk_overlap}"></div>
       <div><label for="kv">可見範圍</label><select id="kv"><option value="workspace" ${k.visibility === "workspace" ? "selected" : ""}>整個工作區</option><option value="restricted" ${k.visibility === "restricted" ? "selected" : ""}>只給指定的機器人</option></select></div></div>
       <label class="inline" style="margin-top:10px"><input type="checkbox" id="ka" ${k.auto_kg_tag ? "checked" : ""}> 上傳文件時自動做圖譜標註（需已匯入圖譜）</label>
-      <p class="note">向量模型（${A.esc(k.embed_model)}・${k.embed_dim} 維）建立後不能改。段落長度與重疊只影響之後上傳或重新處理的文件。</p>
+      <p class="note">向量模型（${A.esc(k.embed_model)}・${k.embed_dim} 維）建立後不能改；要換只能新建知識庫並重新上傳所有文件（向量全部重算），而且要和同一個機器人掛的其他知識庫一致。段落長度與重疊只影響之後上傳或重新處理的文件。</p>
       <div class="row end"><button class="btn pri" id="ks" type="button">儲存</button></div></div>
       <div class="box" id="ab" ${k.visibility === "restricted" ? "" : "hidden"}><h4>可以掛這個知識庫的機器人</h4>${bots.items.map((b) => `<label class="inline" style="margin-right:14px"><input type="checkbox" data-b="${b.id}" ${k.bots.find((x) => x.id === b.id) ? "checked" : ""}> ${A.esc(b.name)}</label>`).join("")}
       <div class="row end"><button class="btn" id="as" type="button">儲存白名單</button></div></div>

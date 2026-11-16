@@ -27,10 +27,14 @@ A.views.workspace = async function (wsId, tab) {
 
   async function kbs() {
     const [d, m] = await Promise.all([A.api("GET", `/workspaces/${wsId}/kbs`), wsAdmin ? A.api("GET", "/models") : Promise.resolve(null)]);
-    const opts = m ? m.embed.map((e) => e.dims.map((dim) => `<option value="${A.esc(e.id)}|${dim}" ${e.available ? "" : "disabled"}>${A.esc(e.id)}・${dim} 維${e.available ? "" : "（未設定金鑰）"}</option>`).join("")).join("") : "";
+    // 預設（建議）：gemini-embedding-001・768 維；整個工作區統一用同一組，任何知識庫都能掛到任何機器人
+    const REC = "gemini-embedding-001|768";
+    const opts = m ? m.embed.map((e) => e.dims.map((dim) => { const v = `${e.id}|${dim}`;
+      return `<option value="${A.esc(v)}" ${e.available ? "" : "disabled"} ${v === REC && e.available ? "selected" : ""}>${A.esc(e.id)}・${dim} 維${v === REC ? "（建議）" : ""}${e.available ? "" : "（未設定金鑰）"}</option>`; }).join("")).join("") : "";
     p.innerHTML = (wsAdmin ? `<details class="box"><summary><b>新增知識庫</b></summary>
         <div class="grid2"><div><label for="ks">slug</label><input type="text" id="ks"></div><div><label for="kn">名稱</label><input type="text" id="kn"></div></div>
-        <label for="ke">向量模型與維度 <span class="note">建立後不能改；同一個機器人掛的知識庫要用同一個</span></label><select id="ke">${opts}</select>
+        <label for="ke">向量模型與維度</label><select id="ke">${opts}</select>
+        <p class="note" style="margin-top:4px"><b>建立後不能改。</b>要換模型或維度，只能新建一個知識庫、重新上傳所有文件（向量全部重算）。同一個機器人掛的知識庫必須用同一組，建議整個工作區都用預設的「gemini-embedding-001・768 維」。</p>
         <div class="grid3"><div><label for="kz">段落長度（字）</label><input type="number" id="kz" value="500"></div><div><label for="ko">重疊字數</label><input type="number" id="ko" value="80"></div>
         <div><label for="kv">可見範圍</label><select id="kv"><option value="workspace">整個工作區</option><option value="restricted">只給指定的機器人</option></select></div></div>
         <div class="row end" style="margin-top:10px"><button class="btn pri" id="kc" type="button">建立</button></div></details>` : "") +
