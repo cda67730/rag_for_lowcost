@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import csv
 import io
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, literal, or_, select, tuple_
 from sqlalchemy.orm import Session, defer
@@ -21,11 +21,12 @@ from app.perms import ROLES, require, roles_of, ws_roles
 from app.routes.admin import DB, Me, audit, body, cursor_of, get_bot, get_session_factory, get_doc, get_kb, kb_out, page, uid
 from app.routes.admin_bot import admin_bot
 from app.routes.chat import get_llm
-from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Feedback, Flow, Job, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
+from db.models import AuditLog, Bot, BotKnowledge, Chunk, Conversation, Document, Feedback, Flow, Job, KbAllowedBot, KnowledgeBase, Membership, User, Workspace
 from graph.chat_graph import Deps, run_chat
 from services import workspaces as W
 from services import describe as describe_svc
-from services import ingest
+from services import ingest, jobs
+from services.parsers import ParseError
 from services.llm import EMBED_MODELS, LLMClient, provider_of
 from services.retrieval import CHUNK_TYPES
 from settings.loader import SETTING_DEFAULTS, TEXT_DEFAULTS, load_config
@@ -433,7 +434,8 @@ def log_row(c: Conversation, fb: list[str] | None = None) -> dict:
     return {"id": c.id, "at": c.created_at.isoformat(), "session": c.session, "turn": c.turn, "unit": c.unit, "message": c.user_text[:120], "type": c.rtype,
             "intent": c.intent, "referral": (c.referral or {}).get("category", "") if isinstance(c.referral, dict) else "", "retrieved": c.hits, "top": c.top_score,
             "cited": c.cited, "skills": c.skills, "rewritten": c.rewritten, "ms": c.ms,
-            "fb": "up" if "有幫助" in fb else "down" if "沒幫助" in fb else "", "copied": any(k.startswith("複製") for k in fb)}
+            "fb": "up" if "有幫助" in fb else "down" if "沒幫助" in fb else "", "copied": any(k.startswith("複製") for k in fb),
+            "corrected": c.corrected_doc_id is not None}
 
 
 def _feedback(s: Session, bot_id, keys: list[tuple[str, int]] | None = None) -> dict[tuple[str, int], list[str]]:
@@ -489,10 +491,60 @@ def log_detail(log_id: int, u: User = Me, s: Session = DB):
     c = s.get(Conversation, log_id)
     if c is None:
         raise not_found()
-    admin_bot(s, u, str(c.bot_id), {"analyst"})
+    b = admin_bot(s, u, str(c.bot_id), {"analyst"})
     fb = _feedback(s, c.bot_id, [(c.session, c.turn)]).get((c.session, c.turn))
+    doc = s.get(Document, c.corrected_doc_id) if c.corrected_doc_id else None
     return {**log_row(c, fb), "message": c.user_text, "triage": c.triage, "answer": c.answer, "sources": c.sources, "checks": c.checks, "trace": c.trace,
-            "stability": c.stability, "quality": c.quality, "referral": c.referral}
+            "stability": c.stability, "quality": c.quality, "referral": c.referral,
+            "corrected_doc": {"id": str(doc.id), "kb_id": str(doc.kb_id), "title": doc.title, "status": doc.status} if doc else None,
+            "kb_targets": correction_targets(s, u, b)}
+
+
+def correction_targets(s: Session, u: User, b: Bot) -> list[dict]:
+    """可以把修正後的問答存進去的知識庫：這個機器人掛的庫，而且自己有文件管理權限（工作區的 admin／reviewer）"""
+    if not (set(ws_roles(s, u, b.workspace_id)) & {"owner", "admin", "reviewer"}):
+        return []
+    rows = s.execute(select(KnowledgeBase, BotKnowledge.label).join(BotKnowledge, BotKnowledge.kb_id == KnowledgeBase.id)
+                     .where(BotKnowledge.bot_id == b.id).order_by(BotKnowledge.sort, KnowledgeBase.name)).all()
+    return [{"id": str(k.id), "name": k.name, "label": label, "chunk_size": k.chunk_size} for k, label in rows]
+
+
+@router.post("/logs/{log_id}/to-kb", status_code=202)
+async def log_to_kb(log_id: int, request: Request, tasks: BackgroundTasks, u: User = Me, s: Session = DB,
+                    llm: LLMClient = Depends(get_llm), factory=Depends(get_session_factory)):
+    """專家修正這一輪的問與答，存成知識庫的一份新文件（照一般文件流程：切段、分類、算向量）。
+    approve=true：處理完直接核可上線；否則留在「待審核」"""
+    c = s.get(Conversation, log_id)
+    if c is None:
+        raise not_found()
+    b = admin_bot(s, u, str(c.bot_id), {"analyst"})
+    d = await body(request)
+    targets = {t["id"]: t for t in correction_targets(s, u, b)}
+    kb_id = str(d.get("kb_id") or "")
+    if kb_id not in targets:
+        raise ApiError(403 if not targets else 422, "kb_not_allowed", "只能存進這個機器人掛的知識庫，而且要有文件管理權限（工作區的 admin 或 reviewer）", {"kb_id": "不能選這個知識庫"})
+    q, a = str(d.get("question") or "").strip(), str(d.get("answer") or "").strip()
+    errs = {k: "必填" for k, v in (("question", q), ("answer", a)) if not v}
+    if errs:
+        raise ApiError(422, "invalid", "問題與回答都要填", errs)
+    k = s.get(KnowledgeBase, uuid.UUID(kb_id))
+    title = str(d.get("title") or "").strip() or "專家修正：" + q.replace("\n", " ")[:40]
+    try:
+        doc = ingest.create_document(s, k, text=f"問：{q}\n\n答：{a}", filename=f"expert-qa-{c.id}.txt", title=title, user_id=u.id,
+                                     source_note=f"對話紀錄 #{c.id}（{b.slug}）專家修正", evidence="專家修正的問答")
+    except ParseError as e:
+        raise ApiError(422, "bad_file", str(e))
+    except ingest.Duplicate as e:
+        raise ApiError(409, "duplicate", "知識庫裡已經有一模一樣的問答", {"existing": {"id": str(e.doc.id), "title": e.doc.title, "status": e.doc.status}})
+    approve = bool(d.get("approve"))
+    job = Job(workspace_id=k.workspace_id, kb_id=k.id, kind="ingest", target=str(doc.id), created_by=u.id,
+              result={"auto_approve_by": str(u.id)} if approve else None)
+    s.add(job)
+    c.corrected_doc_id = doc.id
+    audit(s, k.workspace_id, u, "log.to_kb", doc.title, {"log_id": c.id, "doc_id": str(doc.id), "approve": approve}, kb_id=k.id, bot_id=b.id)
+    s.commit()
+    tasks.add_task(jobs.run, factory, job.id, ingest.run_ingest_job, factory, llm, job.id)
+    return {"doc_id": str(doc.id), "kb_id": kb_id, "job_id": str(job.id), "status": "processing", "approve": approve}
 
 
 def _pct(a, b):

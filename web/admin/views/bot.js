@@ -223,7 +223,7 @@ A.views.bot = async function (botId, tab) {
       if (!reset && next) q.set("cursor", next);
       const d = await A.api("GET", `/bots/${botId}/logs?` + q);
       next = d.next;
-      const html = d.items.map((r) => `<tr class="click" data-id="${r.id}"><td>${A.fmtTime(r.at)}</td><td>${A.esc(r.unit)}</td><td>${A.esc(r.message)}</td><td>${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</td>
+      const html = d.items.map((r) => `<tr class="click" data-id="${r.id}"><td>${A.fmtTime(r.at)}</td><td>${A.esc(r.unit)}</td><td>${A.esc(r.message)}${r.corrected ? ` ${A.pill("approved", "已修正")}` : ""}</td><td>${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</td>
         <td>${r.retrieved}</td><td>${r.cited}</td><td>${r.rewritten ? "是" : ""}</td><td>${r.fb === "up" ? "👍" : r.fb === "down" ? "👎" : ""}${r.copied ? " 📋" : ""}</td><td>${(r.ms / 1000).toFixed(1)}s</td></tr>`).join("");
       A.$("#lb").innerHTML = reset ? html || '<tr><td colspan="9" class="note">沒有紀錄</td></tr>' : A.$("#lb").innerHTML + html;
       A.$("#lm").hidden = !next;
@@ -231,8 +231,43 @@ A.views.bot = async function (botId, tab) {
     }
     async function detail(id) {
       const r = await A.api("GET", `/logs/${id}`);
-      A.side.open("紀錄 #" + id, `<div class="msg me">${A.esc(r.message)}</div><div class="note">${A.fmtTime(r.at)}｜${A.esc(r.unit)}｜第 ${r.turn} 輪｜${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</div>
+      const side = A.side.open("紀錄 #" + id, `<div class="msg me">${A.esc(r.message)}</div><div class="note">${A.fmtTime(r.at)}｜${A.esc(r.unit)}｜第 ${r.turn} 輪｜${A.esc((TraceView.TYPE[r.type] || [r.type])[0])}</div>
+        <div id="fix"></div>
         <h4 style="margin-top:12px">流程紀錄</h4>${r.trace == null ? '<p class="note">流程紀錄已超過保留天數而清除（對話內容與統計仍保留）</p>' : ""}${TraceView.render({ ...r, trace: r.trace, metrics: { retrieved: r.retrieved, top: r.top, cited: r.cited, skills: r.skills }, rewritten: r.rewritten })}`);
+      fixPanel(A.$("#fix", side), r);
+    }
+
+    /** 專家修正：改好問與答，存成知識庫的一份新文件（需要工作區的 admin／reviewer 權限，且是這個機器人掛的知識庫） */
+    function fixPanel(box, r) {
+      const done = r.corrected_doc ? `<div class="box" style="margin-top:10px">已修正並存入知識庫：<a href="#/kb/${r.corrected_doc.kb_id}/docs">${A.esc(r.corrected_doc.title)}</a> ${A.st(r.corrected_doc.status)}</div>` : "";
+      if (!r.kb_targets.length) { box.innerHTML = done; return; }
+      const plain = (html) => { const d = document.createElement("div"); d.innerHTML = html; return d.textContent.replace(/\s*\[[\d,\s]*\]/g, "").trim(); };
+      const ans = r.answer ? plain(AnswerView.text(r)) : "";
+      box.innerHTML = done + `<div class="row" style="margin-top:10px"><button class="btn" id="fxOpen" type="button">${r.corrected_doc ? "再修正一次" : "修正並加入知識庫"}</button></div>
+        <div class="box" id="fxForm" style="margin-top:10px;display:none">
+          <p class="note">改好這一輪的問題與回答，會在知識庫新增一份文件（格式「問：…／答：…」），之後機器人就能檢索到。不會改動原本的紀錄。</p>
+          <label for="fxQ">問題</label><textarea id="fxQ" rows="3">${A.esc(r.message)}</textarea>
+          <label for="fxA" style="margin-top:8px">回答（專家修正後）</label><textarea id="fxA" rows="10">${A.esc(ans)}</textarea>
+          <p class="note" id="fxLen"></p>
+          <div class="grid2"><div><label for="fxK">存到知識庫</label><select id="fxK">${r.kb_targets.map((k) => `<option value="${k.id}">${A.esc(k.name)}${k.label && k.label !== k.name ? `（${A.esc(k.label)}）` : ""}</option>`).join("")}</select></div>
+            <div><label for="fxT">文件標題（選填）</label><input type="text" id="fxT" placeholder="預設「專家修正：問題開頭」"></div></div>
+          <label class="inline" style="margin-top:8px"><input type="checkbox" id="fxAp" checked> 處理完直接核可上線（取消勾選則留在「待審核」，到知識庫核可後才會被檢索）</label>
+          <div class="row end" style="margin-top:10px"><button class="btn pri" id="fxGo" type="button">存入知識庫</button></div><p id="fxMsg" class="ok"></p>
+        </div>`;
+      const len = () => {
+        const k = r.kb_targets.find((x) => x.id === A.$("#fxK", box).value) || {}, n = ("問：" + A.$("#fxQ", box).value + "\n\n答：" + A.$("#fxA", box).value).length;
+        A.$("#fxLen", box).innerHTML = k.chunk_size && n > k.chunk_size ? `<span class="warn">共 ${n} 字，超過這個知識庫的段落長度（${k.chunk_size} 字），會被切成多段，後面的段落可能看不到問題；建議精簡。</span>` : `共 ${n} 字`;
+      };
+      ["#fxQ", "#fxA"].forEach((sel) => (A.$(sel, box).oninput = len));
+      A.$("#fxK", box).onchange = len;
+      len();
+      A.$("#fxOpen", box).onclick = () => { const f = A.$("#fxForm", box); f.style.display = f.style.display === "none" ? "" : "none"; };
+      A.$("#fxGo", box).onclick = (e) => A.act(e.target, async () => {
+        const out = await A.api("POST", `/logs/${r.id}/to-kb`, { kb_id: A.$("#fxK", box).value, question: A.$("#fxQ", box).value, answer: A.$("#fxA", box).value,
+          title: A.$("#fxT", box).value, approve: A.$("#fxAp", box).checked });
+        A.$("#fxMsg", box).innerHTML = `已送出，正在切段與計算向量（約幾十秒）${out.approve ? "，完成後直接上線" : "，完成後請到知識庫核可"}。<a href="#/kb/${out.kb_id}/docs">到知識庫查看</a>`;
+        e.target.disabled = true;
+      }, "已存入知識庫");
     }
     A.$("#lg").onclick = () => load(true);
     A.$("#lm").onclick = () => load(false);

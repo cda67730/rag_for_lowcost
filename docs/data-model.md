@@ -457,6 +457,7 @@ CREATE TABLE conversations (
   trace         jsonb,                              -- 流程紀錄（與 Apps Script 同格式）
   stability     jsonb,
   quality       jsonb,
+  corrected_doc_id uuid REFERENCES documents(id) ON DELETE SET NULL,   -- 專家從這筆紀錄修正問答後存進知識庫的文件
   created_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (bot_id, session, turn)
 );

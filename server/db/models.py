@@ -454,6 +454,8 @@ class Conversation(Base):
     tokens: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=sql("'{}'::jsonb"))
     trace: Mapped[list | None] = mapped_column(JSONB)
     stability: Mapped[dict | None] = mapped_column(JSONB)
+    # 專家從這筆紀錄修正後存進知識庫的文件（最近一次）
+    corrected_doc_id: Mapped[uuid.UUID | None] = fk("documents.id", "SET NULL", nullable=True)
     quality: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created()
 

@@ -252,6 +252,7 @@ async def run_ingest_job(session_factory, llm: LLMClient, job_id: uuid.UUID) -> 
                 _fail(s, doc, "處理已取消，可重新處理")
                 s.commit()
             return
+        auto_by = (job.result or {}).get("auto_approve_by")       # 建立工作時指定「處理完自動核可」的人
         job.status = "running"
         s.commit()
 
@@ -269,7 +270,12 @@ async def run_ingest_job(session_factory, llm: LLMClient, job_id: uuid.UUID) -> 
                 s.commit()
                 return
             job.status = "done" if r.status == "pending" else "failed"
-            job.result = {"status": r.status, "chunks": r.chunks, "missingVectors": r.missing_vectors, "error": r.error}
+            approved = False
+            if r.status == "pending" and auto_by:     # 專家修正的問答：處理完直接核可上線
+                doc = s.get(Document, uuid.UUID(job.target))
+                doc.status, doc.reviewed_by, doc.reviewed_at = "approved", uuid.UUID(auto_by), datetime.now(timezone.utc)
+                approved = True
+            job.result = {"status": "approved" if approved else r.status, "chunks": r.chunks, "missingVectors": r.missing_vectors, "error": r.error}
             job.message = r.error or f"完成，{r.chunks} 段"
         except Cancelled:
             s.rollback()

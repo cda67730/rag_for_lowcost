@@ -181,11 +181,14 @@
 | POST | `/bots/{bot}/flow-trial` | A | 流程控制台「試跑」：同上但只回走過的節點與耗時 | `adminFlowStats` |
 | GET | `/bots/{bot}/flow-stats` | A、N | 流程控制台疊在節點上的運作數據（近 N 天） | `adminFlowStats` |
 | GET | `/bots/{bot}/logs` | A、N | 篩選：期間、單位、回應類型、轉介、是否重寫、關鍵字；不回 trace | `adminLogs` |
-| GET | `/logs/{id}` | A、N | 單筆完整紀錄含 trace | `adminLogDetail` |
+| GET | `/logs/{id}` | A、N | 單筆完整紀錄含 trace；另回 `kb_targets`（自己能存入的知識庫）與 `corrected_doc` | `adminLogDetail` |
+| POST | `/logs/{id}/to-kb` | A、N＋工作區 R | 專家修正：`{kb_id, question, answer, title?, approve?}` → 在這個機器人掛的知識庫新增「問：…／答：…」文件，照一般流程切段、分類、算向量；`approve=true` 處理完直接核可。同樣內容已存在回 409 `duplicate` | 新功能 |
 | GET | `/bots/{bot}/stats` | A、N | 指標、知識缺口、常被引用文件、格式穩定度、L5 問題分類、回饋 | `adminLoad` 的統計部分 |
 | GET | `/bots/{bot}/logs/export.csv` | A、N | | 問題統計 CSV |
 
 reviewer 看不到紀錄原文（對話內容可能含敏感資訊）；analyst 看得到去識別化後的文字。
+
+**專家修正**要同時看得到紀錄、又能管知識庫的文件：工作區 admin／owner，或「工作區 reviewer＋這個機器人的 analyst」（成員頁可以替同一個人加兩筆角色）。
 
 ## 11. 評測
 
