@@ -9,6 +9,10 @@
     [/^#\/account$/, () => A.views.account()],
   ];
   async function route() {
+    await route1();
+    if (A.nav) A.nav.render().catch(() => {});
+  }
+  async function route1() {
     A.side.close();
     const h = location.hash || "#/";
     if (h !== "#/login" && !A.token.get()) return A.go("#/login");
