@@ -128,3 +128,30 @@ body.hasnav .top .brand,body.hasnav .top .me{display:none}
 .nav a.on .ndot::before,.nitem.open .ndot::before{background:linear-gradient(135deg,var(--accent2),var(--accent));box-shadow:0 0 6px rgba(37,99,235,.5)}
 .nsub{margin-left:18px}
 body.hasnav .setwrap{grid-template-columns:190px 1fr}
+
+/* ── 改版：不用大圓角卡片與左側色條，改用直角邊框 ── */
+:root{--bd:#d3deea;--bd2:#9db7d8;--glow:none}
+.card,.box,.sec,.kpi,.st,.tier,.login,.tablewrap,.setnav,.msg,.chunk,.empty,.drop,.pv,.pvscr{border-radius:3px}
+.btn,input[type=text],input[type=password],input[type=number],input[type=search],input[type=url],input[type=date],select,textarea,.pill,.chip,.nav a,.tabs a{border-radius:3px}
+.card,.box,.sec,.kpi,.st,.tier,.login,.tablewrap,.setnav{border:1px solid var(--bd);box-shadow:none}
+a.card::before,.kpi::after,h3::before,h4::before,.nav a.on::before,.top::after{content:none;display:none}
+.top{border-bottom:1px solid var(--bd)}
+a.card{transform:none!important}
+a.card:hover,.kpi:hover{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2)}
+.kpi{padding:14px 16px}
+.kpi b{background:none;color:var(--accent2);-webkit-text-fill-color:currentColor}
+h2{background:none;color:var(--ink);-webkit-text-fill-color:currentColor}
+th{background:#f5f8fc;border-bottom:1px solid var(--bd)}
+.btn.pri{background:var(--accent2);box-shadow:none}.btn.pri:hover{background:#1d4ed8;box-shadow:none}
+.btn:hover{box-shadow:none}
+.tabs a.on{background:none}
+.tier.on{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2);background:#f5f9ff}
+.login{box-shadow:none}
+/* 選單：目前項目用邊框標示 */
+body.hasnav .nav{background:#fff;box-shadow:none;border-right:1px solid var(--bd)}
+.nav a{border:1px solid transparent}
+.nav a:hover{background:#f5f9ff;border-color:var(--bd)}
+.nav a.on{background:#f5f9ff;border-color:var(--accent2);color:var(--accent2)}
+.nsub{border-left-color:var(--bd)}
+.nfoot{border-top-color:var(--bd)}
+.nbrand i{border-radius:2px;box-shadow:none}
