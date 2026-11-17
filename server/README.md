@@ -47,6 +47,9 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90；0＝不清。伺服器啟動時和之後每天清一次，只清流程紀錄，對話內容與統計保留。也可手動跑 `python -m app.cli purge-traces` |
 | `LOG_LEVEL` | 否 | 伺服器 log 詳細程度：`debug`／`info`／`warning`／`error`，預設 `info`。uvicorn 本身的存取紀錄另用 `--log-level` 控制 |
 | `APP_TIMEZONE` | 否 | 每日、每小時用量上限以哪個時區換日，預設 `Asia/Taipei` |
+| `EXTERNAL_ALLOWED_HOSTS` | 用外部連線時要 | 機器人「外部連線」可以連的主機，逗號分隔，例如 `api.example.com,*.corp.example`。沒設＝外部連線一律不執行。後台改不了這份名單 |
+| `EXT_SECRET_*` | 否 | 外部連線用的密碼，例如 `EXT_SECRET_CRM=...`；後台只填變數名稱。名稱一定要以 `EXT_SECRET_` 開頭，其他環境變數（模型金鑰、`JWT_SECRET`）不能被外部連線使用 |
+| `EXTERNAL_ALLOW_HTTP` `EXTERNAL_ALLOW_PRIVATE` | 否 | 設成 `1` 才允許 http、才允許連內網位址。預設只允許 https、會拒絕內網與本機位址；只在測試時打開 |
 
 ### API 金鑰放哪裡
 
@@ -188,6 +191,25 @@ pytest -m live                                 # 需要真金鑰的整合測試�
 9. 聊天頁：`web/chat/config.js` 設 `BACKEND: "server"`、`API_URL` 填 API 網址；使用者開 `https://<聊天頁網址>/?bot=<slug>`。
 
 再開一個機器人：重複 4–8，可以掛同一個知識庫。
+
+## API 與外部資料
+
+讓其他系統呼叫機器人，或在回答前帶入其他系統的資料（會員、背景資料）。在後台機器人的「API 與外部資料」分頁設定。
+
+- **API 金鑰**：每個機器人可以產生多把，明碼只在產生時顯示一次，資料庫只存雜湊。呼叫 `POST /api/v1/ask`，Header 帶 `Authorization: Bearer <金鑰>`，Body 帶 `message`、`session`、`history`（格式同聊天頁），以及可選的 `context`。
+- **可帶入的欄位**：`context` 只收後台列出的欄位，其他欄位直接丟掉、不送給模型。
+- **外部連線**：回答前即時呼叫其他系統（GET／POST，網址與參數可用 `{欄位}` 帶入呼叫端的值），取回 JSON 裡指定的欄位。主機要在 `EXTERNAL_ALLOWED_HOSTS` 裡；密碼放 `EXT_SECRET_*` 環境變數。
+- **不保存外部資料**：帶入的欄位和外部連線查到的內容只在那一回合的記憶體裡組進提示詞，不寫資料庫、不寫日誌、不快取。對話紀錄的流程紀錄只記欄位名稱與連線狀態；回答照常存進對話紀錄。
+- 紀錄的「單位」欄顯示「API：金鑰用途」；次數上限沿用每小時、每日上限。
+
+| 回應 | 意思 |
+| --- | --- |
+| 200 | `{"ok": true, "type": ..., "answer": ..., "sources": ...}`，結構同聊天頁 |
+| 401 | 金鑰無效或已停用 |
+| 403 | 機器人已停用 |
+| 422 | `message` 或 `session` 沒填、太長 |
+| 429 | 超過次數上限 |
+| 503 | 模型暫時無法使用 |
 
 ## 權限
 

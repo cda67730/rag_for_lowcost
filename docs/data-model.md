@@ -208,6 +208,28 @@ CREATE TABLE invite_codes (
 
 邀請碼存明碼（管理者要能看到再發給別人），但不寫進對話紀錄；紀錄只存 `invite_code_id` 與 `unit`。
 
+```sql
+CREATE TABLE api_keys (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bot_id        uuid NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  name          text NOT NULL DEFAULT '',           -- 用途，寫進紀錄的單位欄（「API：名稱」）
+  prefix        text NOT NULL DEFAULT '',           -- 明碼前 10 碼，後台辨識用
+  key_hash      text NOT NULL UNIQUE,               -- SHA-256；明碼只在建立時回傳一次
+  enabled       boolean NOT NULL DEFAULT true,
+  last_used_at  timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE bot_integrations (
+  bot_id          uuid PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
+  context_fields  jsonb NOT NULL DEFAULT '[]'::jsonb, -- 呼叫端可帶入的欄位 [{key,label,hint}]
+  sources         jsonb NOT NULL DEFAULT '[]'::jsonb, -- 外部連線設定（網址、參數、密碼的環境變數名稱、要取的欄位）
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+```
+
+外部資料只存**設定**，不存資料本身：呼叫端帶入的欄位與外部連線查到的內容只在那一回合的記憶體裡組進提示詞，不寫資料庫、不寫日誌；對話紀錄的流程紀錄只記欄位名稱與連線狀態。回答照常存進對話紀錄。
+
 ---
 
 ## 3. 知識庫

@@ -20,11 +20,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from db.models import Conversation, Referral, Skill
+from db.models import BotIntegration, Conversation, Referral, Skill
 from db.session import release
 from graph import prompts as P
 from graph.check import clean_answer, load_forbidden, run_checks, validate_answer
 from services import deid as D
+from services import external as EXT
 from services.kg import kg_match
 from services.llm import LLMClient
 from services.retrieval import SearchResult, expand_query, load_synonyms, mounts, rerank_select, search
@@ -90,6 +91,7 @@ class ChatState(TypedDict, total=False):
     intent_key: str
     is_new: bool
     case_text: str
+    ext_text: str                      # 外部背景資料：只在這一回合的記憶體裡，不寫紀錄
     answered: int
     fu_done: int
     metrics: dict
@@ -134,6 +136,11 @@ def load_referrals(session: Session, bot_id: uuid.UUID) -> dict[str, dict]:
     return {r.category: {"who": r.who, "contact": r.contact, "now": r.now_action} for r in rows}
 
 
+def load_integration(session: Session, bot_id: uuid.UUID) -> dict:
+    row = session.get(BotIntegration, bot_id)
+    return {"fields": list(row.context_fields or []), "sources": list(row.sources or [])} if row else {"fields": [], "sources": []}
+
+
 # ───────── 節點 ─────────
 
 def n_load_config(st: ChatState, config) -> dict:
@@ -141,12 +148,31 @@ def n_load_config(st: ChatState, config) -> dict:
     with tn.lock:
         cfg = load_config(d.session, d.bot_id, d.flow_id, d.override)
         data = {"mounts": mounts(d.session, d.bot_id), "skills": load_skills(d.session, d.bot_id), "refs": load_referrals(d.session, d.bot_id),
-                "synonyms": load_synonyms(d.session, d.bot_id), "forbidden": load_forbidden(d.session, d.bot_id)}
+                "synonyms": load_synonyms(d.session, d.bot_id), "forbidden": load_forbidden(d.session, d.bot_id), "integ": load_integration(d.session, d.bot_id)}
         release(d.session)
     tn.cfg, tn.refs = cfg, data["refs"]
     for k, m in cfg.notes:      # 設定讀取時發現的問題也記進穩定度
         st["turn"].note(k, m)
     return {"cfg": cfg, "data": data, "metrics": {"retrieved": None, "top": None, "cited": None, "skills": []}, "quality": {"gap": None, "l5": []}}
+
+
+async def n_external(st: ChatState, config) -> dict:
+    """呼叫端帶入的欄位＋外部連線。內容只放在 ext_text（記憶體）；流程紀錄只有欄位名稱與連線狀態"""
+    integ = st["data"]["integ"]
+    raw = st["req"].get("context")
+    if not integ["sources"] and not (integ["fields"] and raw):
+        return {"ext_text": ""}
+    ctx = EXT.accept_context(integ["fields"], raw)
+    st["turn"].stage = "外部資料"
+    text, summ = await EXT.gather(integ["fields"], integ["sources"], ctx)
+    for g in summ["sources"]:
+        if not g["ok"]:
+            st["turn"].note("外部連線", g["name"] + "：" + g["status"])
+    return {"ext_text": text, "trace": [T(st, "外部資料", {"summary": summ["summary"], "fields": summ["fields"], "sources": summ["sources"]}, "json")]}
+
+
+def _with_ext(st: ChatState, text: str) -> str:
+    return text + "\n\n" + st["ext_text"] if st.get("ext_text") else text
 
 
 async def n_deid(st: ChatState, config) -> dict:
@@ -202,7 +228,7 @@ async def n_triage_and_embed(st: ChatState, config) -> dict:
         return await d.llm.embed(spec[0], [st["exp_all"]["text"], st["exp_new"]["text"]], dim=spec[1], task="query")
 
     if cfg.flag("enable_triage"):
-        prompt = P.triage_prompt(cfg, st["prev"], st["deid"]["text"], topics, list(st["data"]["refs"]), list(st["deid"]["map"]) if st["merge_deid"] else None)
+        prompt = _with_ext(st, P.triage_prompt(cfg, st["prev"], st["deid"]["text"], topics, list(st["data"]["refs"]), list(st["deid"]["map"]) if st["merge_deid"] else None))
         tn.stage = "L4"
         (tri, _), vecs = await asyncio.gather(d.llm.generate_json(cfg.str("model_triage"), prompt, temperature=0, no_think=True, notes=tn.note), embed())
         _validate_triage(cfg, tri, tn.note)
@@ -329,7 +355,7 @@ async def n_followup(st: ChatState, config) -> dict:
     pick = _pick_skills(st)
     st["metrics"]["skills"] = [s["name"] for s in pick]
     missing = st["tri"].get("missing")
-    prompt = P.followup_prompt(cfg, cfg.str("system_prompt"), P.skill_text(cfg, pick), [js_str(m) for m in missing] if isinstance(missing, list) else [], st["case_text"])
+    prompt = P.followup_prompt(cfg, _with_ext(st, cfg.str("system_prompt")), P.skill_text(cfg, pick), [js_str(m) for m in missing] if isinstance(missing, list) else [], st["case_text"])
     fu, _ = await deps_of(config).llm.generate_json(cfg.str("model_answer"), prompt, temperature=0.4, no_think=True, notes=st["turn"].note)
     fu = fu if isinstance(fu, dict) else {}
     qs = fu.get("questions") if isinstance(fu.get("questions"), list) else []
@@ -429,7 +455,7 @@ def route_judge(st: ChatState) -> str:
 
 def n_assemble(st: ChatState, config) -> dict:
     cfg, ref, data = st["cfg"], st["ref"], st["data"]
-    sys_p = cfg.str("system_prompt")
+    sys_p = _with_ext(st, cfg.str("system_prompt"))
     ref_who = (data["refs"].get(ref.get("category")) or {}).get("who", "") if ref else ""
     words = [f["rule"] for f in data["forbidden"] if not f["regex"]]
     ctx_hist = [] if st["is_new"] else st["history"]
@@ -611,14 +637,14 @@ def save_conversation(session: Session, row: dict) -> None:
 
 def build_graph():
     g = StateGraph(ChatState)
-    for name, fn in [("load_config", n_load_config), ("deid", n_deid), ("expand_query", n_expand_query), ("triage_and_embed", n_triage_and_embed),
+    for name, fn in [("load_config", n_load_config), ("external", n_external), ("deid", n_deid), ("expand_query", n_expand_query), ("triage_and_embed", n_triage_and_embed),
                      ("apply_deid_result", n_apply_deid_result), ("finish_referral", n_finish_referral), ("finish_out_of_scope", n_finish_out_of_scope),
                      ("followup", n_followup), ("load_skills", n_load_skills), ("kg_match", n_kg_match), ("retrieve", n_retrieve),
                      ("judge_knowledge", n_judge_knowledge), ("assemble", n_assemble), ("generate", n_generate), ("check", n_check),
                      ("next_attempt", n_next_attempt), ("finish_answer", n_finish_answer), ("finish", n_finish)]:
         g.add_node(name, fn)
     g.add_edge(START, "load_config")
-    for a, b in [("load_config", "deid"), ("deid", "expand_query"), ("expand_query", "triage_and_embed"), ("triage_and_embed", "apply_deid_result"),
+    for a, b in [("load_config", "external"), ("external", "deid"), ("deid", "expand_query"), ("expand_query", "triage_and_embed"), ("triage_and_embed", "apply_deid_result"),
                  ("finish_referral", "finish"), ("finish_out_of_scope", "finish"), ("followup", "finish"), ("load_skills", "kg_match"),
                  ("kg_match", "retrieve"), ("retrieve", "judge_knowledge"), ("assemble", "generate"), ("finish_answer", "finish"), ("finish", END)]:
         g.add_edge(a, b)

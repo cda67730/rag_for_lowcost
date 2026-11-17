@@ -19,6 +19,7 @@ from app.routes.admin_kg import router as admin_kg_router
 from app.routes.admin_eval import router as admin_eval_router
 from app.routes.admin_system import router as admin_system_router
 from app.routes.chat import router as chat_router
+from app.routes.api_v1 import router as api_v1_router
 from db.session import engine, session
 from services import jobs, retention
 
@@ -54,6 +55,7 @@ setup_logging()
 app = FastAPI(title="RAG 知識問答", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.add_exception_handler(ApiError, handler)
 app.include_router(chat_router)
+app.include_router(api_v1_router)
 app.include_router(admin_router)
 app.include_router(admin_bot_router)
 app.include_router(admin_ops_router)

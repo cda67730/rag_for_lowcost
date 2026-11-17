@@ -1,10 +1,10 @@
-/* 機器人：設定、知識庫掛載、Skill、對照表、邀請碼、流程、測試對話、紀錄、統計、流程控制台、評測 */
+/* 機器人：設定、知識庫掛載、Skill、對照表、邀請碼、API 與外部資料、流程、測試對話、紀錄、統計、流程控制台、評測 */
 A.views.bot = async function (botId, tab) {
   const b = await A.api("GET", `/bots/${botId}`);
   const ws = A.me.workspaces.find((w) => w.id === b.workspace_id) || {};
   const admin = A.can(b.workspace_id, ["admin"], botId);
   A.crumbs([[ws.name || "工作區", "#/ws/" + b.workspace_id], [b.name, "#/bot/" + botId]]);
-  const T = admin ? [["settings", "設定"], ["knowledge", "知識庫"], ["skills", "Skill"], ["lists", "對照表"], ["invites", "邀請碼"], ["flows", "流程"], ["test", "測試對話"],
+  const T = admin ? [["settings", "設定"], ["knowledge", "知識庫"], ["skills", "Skill"], ["lists", "對照表"], ["invites", "邀請碼"], ["api", "API 與外部資料"], ["flows", "流程"], ["test", "測試對話"],
     ["logs", "紀錄"], ["stats", "統計"], ["console", "流程控制台"], ["eval", "評測"]]
     : (A.can(b.workspace_id, ["analyst"], botId) ? [["logs", "紀錄"], ["stats", "統計"]] : []).concat([["eval", "評測"]]);   // reviewer 看不到對話原文
   if (!T.find((x) => x[0] === tab)) tab = T[0][0];
@@ -21,7 +21,7 @@ A.views.bot = async function (botId, tab) {
     A.$("#bToggle").onclick = () => confirm(b.disabled ? "啟用後聊天頁可以使用，確定？" : "停用後聊天頁會顯示「服務暫停」，確定？") &&
       A.act(null, () => A.api("PATCH", `/bots/${botId}`, { disabled: !b.disabled }), "已更新").then(() => A.go(location.hash));
   }
-  const V = { settings, knowledge, skills, lists, invites, flows, test, logs, stats, console: flowConsole, eval: () => A.evalView(p, b) };
+  const V = { settings, knowledge, skills, lists, invites, api: () => A.apiView(p, b), flows, test, logs, stats, console: flowConsole, eval: () => A.evalView(p, b) };
   await V[tab]();
 
   async function settings() { await A.settingsEditor(p, botId, b.workspace_id); }

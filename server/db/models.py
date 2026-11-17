@@ -243,6 +243,28 @@ class InviteCode(Base):
     created_at: Mapped[datetime] = created()
 
 
+class ApiKey(Base):
+    """給其他系統呼叫 /api/v1 用的金鑰；只存雜湊（明碼只在建立時回傳一次）"""
+    __tablename__ = "api_keys"
+    id: Mapped[uuid.UUID] = uid()
+    bot_id: Mapped[uuid.UUID] = fk("bots.id", "CASCADE")
+    name: Mapped[str] = s()
+    prefix: Mapped[str] = s()                 # 明碼前幾碼，後台辨識用
+    key_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql("true"))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created()
+
+
+class BotIntegration(Base):
+    """外部資料設定：呼叫端可帶入哪些欄位、回答前要查哪些外部連線。只存設定，不存任何外部資料"""
+    __tablename__ = "bot_integrations"
+    bot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bots.id", ondelete="CASCADE"), primary_key=True)
+    context_fields: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sql("'[]'::jsonb"))
+    sources: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sql("'[]'::jsonb"))
+    updated_at: Mapped[datetime] = created()
+
+
 # ───────────────────────── 3. 知識庫 ─────────────────────────
 
 class KnowledgeBase(Base):

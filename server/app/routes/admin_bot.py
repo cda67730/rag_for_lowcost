@@ -1,6 +1,7 @@
 """後台 API 第二批（docs/admin-api.md §3 流程、§4 流程設定、§5 範本、§6 Skill 與對照表、邀請碼）。權限都是該 Bot 的 admin（owner 一律可以）。"""
 from __future__ import annotations
 
+import os
 import re
 import secrets
 from datetime import datetime, timezone
@@ -13,7 +14,9 @@ from sqlalchemy.orm import Session
 from app.errors import ApiError, not_found
 from app.perms import require
 from app.routes.admin import DB, Me, audit, body, get_bot, uid
-from db.models import Bot, FlowSetting, ForbiddenRule, Flow, InviteCode, Referral, Skill, SkillVersion, Synonym, User
+from db.models import ApiKey, Bot, BotIntegration, FlowSetting, ForbiddenRule, Flow, InviteCode, Referral, Skill, SkillVersion, Synonym, User
+from services import apikeys
+from services import external as EXT
 from services.templates import apply_template, export_template
 from settings.loader import FLOW_OVERRIDABLE
 from settings.store import SettingsError, save_flow_settings
@@ -412,3 +415,106 @@ def delete_code(cid: str, u: User = Me, s: Session = DB):
     s.delete(c)
     s.commit()
     return {"ok": True}
+
+
+# ───────── API 金鑰與外部資料（只存設定，不存外部資料） ─────────
+
+def key_out(k: ApiKey) -> dict:
+    return {"id": str(k.id), "name": k.name, "prefix": k.prefix, "enabled": k.enabled, "created_at": k.created_at.isoformat() if k.created_at else None,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None}
+
+
+@router.get("/bots/{bot}/api-keys")
+def list_keys(bot: str, u: User = Me, s: Session = DB):
+    b = admin_bot(s, u, bot)
+    return {"items": [key_out(k) for k in s.scalars(select(ApiKey).where(ApiKey.bot_id == b.id).order_by(ApiKey.created_at))]}
+
+
+@router.post("/bots/{bot}/api-keys", status_code=201)
+async def create_key(bot: str, request: Request, u: User = Me, s: Session = DB):
+    b = admin_bot(s, u, bot)
+    d = await body(request)
+    name = str(d.get("name") or "").strip()
+    if not name:
+        raise ApiError(422, "invalid", "欄位有誤", {"name": "請填用途，例如「會員系統」"})
+    k, token = apikeys.create(s, b.id, name)
+    audit(s, b.workspace_id, u, "apikey.create", k.name, {"prefix": k.prefix}, bot_id=b.id)    # 金鑰明碼不寫進稽核
+    s.commit()
+    return {**key_out(k), "token": token}
+
+
+def get_key(s: Session, u: User, kid: str) -> tuple[ApiKey, Bot]:
+    k = s.get(ApiKey, uid(kid))
+    if k is None:
+        raise not_found()
+    return k, admin_bot(s, u, str(k.bot_id))
+
+
+@router.patch("/api-keys/{kid}")
+async def patch_key(kid: str, request: Request, u: User = Me, s: Session = DB):
+    k, b = get_key(s, u, kid)
+    d = await body(request)
+    if "enabled" in d:
+        k.enabled = bool(d["enabled"])
+    if "name" in d and str(d["name"] or "").strip():
+        k.name = str(d["name"]).strip()[:60]
+    audit(s, b.workspace_id, u, "apikey.update", k.name, {"enabled": k.enabled}, bot_id=b.id)
+    s.commit()
+    return key_out(k)
+
+
+@router.delete("/api-keys/{kid}")
+def delete_key(kid: str, u: User = Me, s: Session = DB):
+    k, b = get_key(s, u, kid)
+    audit(s, b.workspace_id, u, "apikey.delete", k.name, bot_id=b.id)
+    s.delete(k)
+    s.commit()
+    return {"ok": True}
+
+
+def integ_out(row: BotIntegration | None) -> dict:
+    hosts = EXT._allowed_hosts()
+    srcs = list(row.sources or []) if row else []
+    env = {x["secret_env"]: bool(os.environ.get(x["secret_env"])) for x in srcs if x.get("secret_env")}
+    return {"context_fields": list(row.context_fields or []) if row else [], "sources": srcs,
+            "server": {"allowed_hosts": hosts, "secret_env_set": env, "allow_http": os.environ.get("EXTERNAL_ALLOW_HTTP") == "1"}}
+
+
+@router.get("/bots/{bot}/integration")
+def get_integration(bot: str, u: User = Me, s: Session = DB):
+    b = admin_bot(s, u, bot)
+    return integ_out(s.get(BotIntegration, b.id))
+
+
+@router.put("/bots/{bot}/integration")
+async def put_integration(bot: str, request: Request, u: User = Me, s: Session = DB):
+    b = admin_bot(s, u, bot)
+    d = await body(request)
+    try:
+        fields = EXT.clean_fields(d.get("context_fields") or [])
+        sources = EXT.clean_sources(d.get("sources") or [])
+    except EXT.ConfigError as e:
+        raise ApiError(422, "invalid", "設定有誤", e.fields)
+    row = s.get(BotIntegration, b.id) or BotIntegration(bot_id=b.id)
+    row.context_fields, row.sources, row.updated_at = fields, sources, now()
+    s.add(row)
+    audit(s, b.workspace_id, u, "integration.update", "", {"fields": [f["key"] for f in fields], "sources": [{"key": x["key"], "url": x["url"]} for x in sources]}, bot_id=b.id)
+    s.commit()
+    return integ_out(row)
+
+
+@router.post("/bots/{bot}/integration/test")
+async def test_integration(bot: str, request: Request, u: User = Me, s: Session = DB):
+    """用後台填的測試值查一次外部連線；結果只回給畫面，不寫資料庫"""
+    b = admin_bot(s, u, bot)
+    d = await body(request)
+    try:
+        fields = EXT.clean_fields(d.get("context_fields") or [])
+        sources = EXT.clean_sources(d.get("sources") or [])
+    except EXT.ConfigError as e:
+        raise ApiError(422, "invalid", "設定有誤", e.fields)
+    s.commit()
+    ctx = EXT.accept_context(fields, d.get("context"))
+    got = [await EXT.fetch(x, ctx) for x in sources if x["enabled"]]
+    return {"results": [{"name": g["name"], "ok": g["ok"], "status": g["status"], "ms": g["ms"], "items": [{"label": a, "value": v} for a, v in g["items"]]} for g in got],
+            "context_used": list(ctx)}

@@ -89,7 +89,7 @@ Flow 的開關覆蓋 Bot 設定：讀設定時先 Bot、再 Flow，Flow 有值�
 | 組 | 表 |
 | --- | --- |
 | 租戶與帳號 | `workspaces`、`users`、`memberships`、`audit_log` |
-| 機器人 | `bots`、`flows`、`bot_settings`、`flow_settings`、`skills`、`skill_versions`、`synonyms`、`forbidden_rules`、`referrals`、`invite_codes` |
+| 機器人 | `bots`、`flows`、`bot_settings`、`flow_settings`、`skills`、`skill_versions`、`synonyms`、`forbidden_rules`、`referrals`、`invite_codes`、`api_keys`、`bot_integrations` |
 | 知識庫 | `knowledge_bases`、`kb_allowed_bots`、`bot_knowledge`、`documents`、`document_files`、`chunks` |
 | 知識圖譜 | `kg_defs`、`kg_sources`、`kg_nodes`、`kg_edges`、`kg_links`、`kg_candidates`（皆帶 `kb_id`） |
 | 紀錄與用量 | `conversations`、`feedback`、`usage_counters` |
