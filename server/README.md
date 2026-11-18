@@ -276,7 +276,7 @@ docker compose exec app python -m app.cli import-apps-script \
 - 對話紀錄只存去識別化後的文字（`enable_deid` 開啟時）；原名對照表只在使用者瀏覽器。
 - CORS 只允許 `CORS_ORIGINS` 列出的網址；伺服器自己提供的 `/chat/`、`/admin/` 是同一個網址，不經過 CORS。
 - 伺服器提供的頁面加了 `X-Content-Type-Options: nosniff` 與內容安全政策（CSP：只執行自己網址的程式、不允許行內 script 與 eval、只連線到自己）；HTTPS 時加 HSTS；後台另加 `X-Frame-Options: DENY`（不讓別的網站嵌入），聊天頁可以嵌進其他網站。
-- 上傳檔案依檔頭判斷類型、限制大小；Office 檔先檢查解壓後的大小與壓縮比（擋解壓炸彈）；解析在背景任務中執行，不執行檔案內的巨集或程式。
+- 上傳檔案依檔頭判斷類型、限制大小；**不接受壓縮檔**（zip、rar、7z、gz、tar 等，看副檔名或檔頭就拒絕，完全不打開）；Word／Excel／PPT 本身是 zip 格式，解析前先檢查解壓後的大小與壓縮比（擋解壓炸彈）；解析在背景任務中執行，不執行檔案內的巨集或程式。
 
 ## 目錄
 

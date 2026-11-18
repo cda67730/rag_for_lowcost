@@ -17,6 +17,11 @@ MAX_UNZIPPED = 300 * 1024 * 1024    # Office 檔解壓後的總大小上限
 MAX_ZIP_ENTRIES = 20000
 MAX_RATIO = 500                      # 單一檔案壓縮比超過這個就當成解壓炸彈
 MSG_ZIP_BOMB = "檔案解壓後太大或結構異常，無法處理。請另存新檔或轉成 PDF 再上傳。"
+MSG_ARCHIVE = "不接受壓縮檔（zip、rar、7z 等），請解壓縮後逐一上傳檔案"
+# 一般壓縮檔：看副檔名或檔頭就拒絕，完全不打開
+ARCHIVE_EXT = {"zip", "rar", "7z", "gz", "tgz", "tar", "bz2", "tbz", "tbz2", "xz", "txz", "zst", "lz", "lzma", "z", "cab", "arj", "lzh", "iso", "jar", "war", "apk", "dmg"}
+ARCHIVE_MAGIC = (b"Rar!\x1a\x07", b"7z\xbc\xaf\x27\x1c", b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00", b"\x28\xb5\x2f\xfd", b"MSCF", b"\x1f\x9d", b"\x1f\xa0", b"ustar")
+OFFICE = ("docx", "xlsx", "pptx")
 MAX_PASTE = 200_000
 MAX_ROWS = 5000
 
@@ -44,6 +49,8 @@ def detect(filename: str, data: bytes) -> str:
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if len(data) > MAX_BYTES:
         raise ParseError(MSG_TOO_BIG)
+    if ext in ARCHIVE_EXT or data.startswith(ARCHIVE_MAGIC) or data[257:262] == b"ustar":
+        raise ParseError(MSG_ARCHIVE)
     if data[:4] == b"\xd0\xcf\x11\xe0":           # OLE：舊版 Office，或加了密碼的新版 Office
         if ext in MSG_OLD:
             raise ParseError(MSG_OLD[ext])
@@ -52,7 +59,9 @@ def detect(filename: str, data: bytes) -> str:
         raise ParseError(MSG_UNSUPPORTED)
     if data[:5] == b"%PDF-":
         return "pdf"
-    if data[:4] == b"PK\x03\x04":
+    if data[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        if ext not in OFFICE:                       # zip 格式但不是 Office 檔：當成壓縮檔，不打開
+            raise ParseError(MSG_ARCHIVE)
         try:
             infos = zipfile.ZipFile(io.BytesIO(data)).infolist()
         except zipfile.BadZipFile:

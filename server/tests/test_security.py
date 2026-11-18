@@ -132,3 +132,19 @@ def test_csp_headers():
     ch = c.get("/chat/").headers["content-security-policy"]
     assert "script-src 'self'" in a and "frame-ancestors 'none'" in a and "unsafe-eval" not in a
     assert "frame-ancestors" not in ch and "connect-src 'self'" in ch
+
+
+def test_archives_rejected_without_opening(monkeypatch):
+    z = _zip([("word/document.xml", "<w/>")])
+    opened = []
+    real = zipfile.ZipFile
+    monkeypatch.setattr(parsers.zipfile, "ZipFile", lambda *a, **kw: opened.append(1) or real(*a, **kw))
+    for name, data in [("a.zip", z), ("a.docx.zip", z), ("文件.pdf.zip", b"%PDF-1.4"), ("a.txt", z), ("a.pdf", z), ("a", z),
+                       ("a.rar", b"Rar!\x1a\x07\x01\x00"), ("x.bin", b"Rar!\x1a\x07\x00"), ("x.txt", b"7z\xbc\xaf\x27\x1c\x00\x04"),
+                       ("x.txt", b"\x1f\x8b\x08\x00" + b"\0" * 20), ("a.tar", b"x"), ("a.tar.gz", b"x"), ("x.txt", b"\0" * 257 + b"ustar\x0000"),
+                       ("x.md", b"BZh91AY"), ("x.csv", b"\xfd7zXZ\x00\x00"), ("a.7z", b"x"), ("a.iso", b"x")]:
+        with pytest.raises(parsers.ParseError, match="不接受壓縮檔"):
+            parsers.detect(name, data)
+    assert opened == []                                   # 上面這些一個都沒有被打開
+    assert parsers.detect("a.docx", z) == "docx" and opened == [1]
+    assert parsers.detect("a.txt", "一般文字".encode()) == "txt" and parsers.detect("a.pdf", b"%PDF-1.7 x") == "pdf"
