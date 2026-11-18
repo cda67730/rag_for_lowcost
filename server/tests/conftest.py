@@ -54,3 +54,12 @@ def db(engine):
     s.close()
     trans.rollback()
     conn.close()
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_ip_limit():
+    """登入的 IP 錯誤計數存在程式記憶體，每個測試重新開始"""
+    from app import auth
+    auth._ip_fails.clear()
+    yield
+    auth._ip_fails.clear()

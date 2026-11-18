@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app import limits
-from app.routes.chat import body, get_llm
+from app.routes.chat import MAX_HISTORY, MAX_MESSAGE, body, get_llm
 from db.models import Bot, Flow
 from db.session import get_session
 from graph.chat_graph import Deps, run_chat
@@ -26,8 +26,6 @@ from sqlalchemy import select
 
 log = logging.getLogger("api_v1")
 router = APIRouter(prefix="/api/v1")
-MAX_MESSAGE = 4000
-MAX_HISTORY = 40
 
 
 def err(status: int, msg: str) -> JSONResponse:

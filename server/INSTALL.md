@@ -130,7 +130,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 ## 五、正式給別人用之前
 
 - 前面放 Caddy 或 nginx 處理 HTTPS，反向代理到 `127.0.0.1:8000`。
-- `.env` 設 `FORWARDED_ALLOW_IPS` 為反向代理的 IP。沒設的話，系統會把所有人當成同一個 IP，邀請碼錯誤鎖定、次數限制都會失準。
+- `.env` 設 `FORWARDED_ALLOW_IPS` 為反向代理的 IP（反向代理和伺服器在同一台就是 `127.0.0.1`，預設值就是這個）。設錯的話，系統會把所有人當成同一個 IP，邀請碼錯誤鎖定、次數限制、登入限制都會失準。
 - 前端用伺服器自己的 `/chat/`、`/admin/` 時，`CORS_ORIGINS` 留空；前端另外放在別的網址時，只留那些正式網址。
 - `WEB_CONCURRENCY` 設成 CPU 核心數（2～4）。程式數 ×（`DB_POOL_SIZE`＋`DB_MAX_OVERFLOW`）要小於 PostgreSQL 的 `max_connections`（預設 100）。
 - 定期備份資料庫，見 README 的「備份與更新」。

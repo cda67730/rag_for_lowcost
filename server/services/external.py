@@ -151,7 +151,7 @@ async def _public_ip_only(host: str, port: int) -> bool:
         return False
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        if not ip.is_global or ip.is_multicast:     # 內網、本機、電信共用位址（100.64/10）、保留位址都拒絕
             return False
     return bool(infos)
 

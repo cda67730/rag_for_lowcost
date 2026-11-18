@@ -42,6 +42,10 @@ async def body(request: Request) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+MAX_MESSAGE = 4000    # 一則訊息最多幾個字（避免超長內容燒模型費用）
+MAX_HISTORY = 40
+
+
 def fail(msg: str) -> dict:
     return {"ok": False, "error": msg}
 
@@ -134,6 +138,10 @@ async def handle(action: str, request: Request, session: Session, llm: LLMClient
         return fail("未知的操作")
     if action == "chat" and not js_str(req.get("message")).strip():
         return fail("請輸入內容")
+    if action == "chat" and len(js_str(req.get("message"))) > MAX_MESSAGE:
+        return fail(f"內容太長，請精簡到 {MAX_MESSAGE} 字以內")
+    if action == "chat" and isinstance(req.get("history"), list):
+        req["history"] = req["history"][-MAX_HISTORY:]
     g = await asyncio.to_thread(gate, action, req, client_ip(request), session)
     if "error" in g:
         if g.get("slow"):

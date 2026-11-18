@@ -118,7 +118,15 @@ def doc_out(d: Document) -> dict:
 @router.post("/auth/login")
 async def login(request: Request, s: Session = DB):
     d = await body(request)
-    u = auth.login(s, str(d.get("login") or ""), str(d.get("password") or ""))
+    ip = request.client.host if request.client else "?"
+    if auth.ip_blocked(ip):
+        raise ApiError(429, "ip_locked", f"這個網路錯誤次數過多，請 {auth.IP_WINDOW // 60} 分鐘後再試")
+    try:   # argon2 驗證很吃 CPU，放到執行緒，不卡住其他請求
+        u = await asyncio.to_thread(auth.login, s, str(d.get("login") or ""), str(d.get("password") or ""))
+    except ApiError as e:
+        if e.status in (401, 429):
+            auth.ip_failed(ip)
+        raise
     return {"token": auth.make_token(u), "user": {"id": str(u.id), "login": u.login, "display_name": u.display_name}}
 
 

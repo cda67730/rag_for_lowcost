@@ -13,6 +13,10 @@ from dataclasses import dataclass, field
 from services.chunking import Unit
 
 MAX_BYTES = 50 * 1024 * 1024
+MAX_UNZIPPED = 300 * 1024 * 1024    # Office 檔解壓後的總大小上限
+MAX_ZIP_ENTRIES = 20000
+MAX_RATIO = 500                      # 單一檔案壓縮比超過這個就當成解壓炸彈
+MSG_ZIP_BOMB = "檔案解壓後太大或結構異常，無法處理。請另存新檔或轉成 PDF 再上傳。"
 MAX_PASTE = 200_000
 MAX_ROWS = 5000
 
@@ -50,9 +54,14 @@ def detect(filename: str, data: bytes) -> str:
         return "pdf"
     if data[:4] == b"PK\x03\x04":
         try:
-            names = zipfile.ZipFile(io.BytesIO(data)).namelist()
+            infos = zipfile.ZipFile(io.BytesIO(data)).infolist()
         except zipfile.BadZipFile:
             raise ParseError(MSG_UNSUPPORTED)
+        names = [i.filename for i in infos]
+        # 解壓炸彈：Office 檔其實是 zip，小檔案可以解出幾 GB 把記憶體吃光
+        total = sum(i.file_size for i in infos)
+        if len(infos) > MAX_ZIP_ENTRIES or total > MAX_UNZIPPED or any(i.compress_size and i.file_size / i.compress_size > MAX_RATIO for i in infos if i.file_size > 1024 * 1024):
+            raise ParseError(MSG_ZIP_BOMB)
         for kind, prefix in (("docx", "word/"), ("pptx", "ppt/"), ("xlsx", "xl/")):
             if any(n.startswith(prefix) for n in names) and ext == kind:
                 return kind

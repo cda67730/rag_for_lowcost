@@ -31,7 +31,7 @@ A.views.kb = async function (kbId, tab) {
       <div class="grid2" style="margin-top:8px"><div><label for="usrc">出處（套用到這次上傳的檔案或貼上的文字）</label><input type="text" id="usrc" placeholder="例如：出版單位、年份"></div>
         <div><label for="uev">證據等級 <span class="note">可空</span></label><input type="text" id="uev"></div></div>
       <div id="up"></div>
-      <div class="row" style="margin:14px 0 8px"><div class="tabs" style="margin:0;border:0">${[["", "全部"], ["processing", "處理中"], ["pending", "待審核"], ["approved", "已核可"], ["disabled", "停用"], ["failed", "失敗"]].map(([s, t]) => `<a href="javascript:void 0" data-s="${s}" class="${s === "" ? "on" : ""}">${t}</a>`).join("")}</div>
+      <div class="row" style="margin:14px 0 8px"><div class="tabs" style="margin:0;border:0">${[["", "全部"], ["processing", "處理中"], ["pending", "待審核"], ["approved", "已核可"], ["disabled", "停用"], ["failed", "失敗"]].map(([s, t]) => `<a href="#" role="button" data-s="${s}" class="${s === "" ? "on" : ""}">${t}</a>`).join("")}</div>
         <span style="flex:1"></span>${admin ? '<button class="btn" id="rep" type="button">補算缺少的向量</button>' : ""}</div>
       <div class="tablewrap"><table><thead><tr><th>標題</th><th>檔案</th><th>狀態</th><th>段落</th><th>上傳時間</th></tr></thead><tbody id="db"></tbody></table></div>
       <div class="row end" style="margin-top:8px"><button class="btn" id="dm" type="button" hidden>載入更多</button></div>`;
@@ -51,7 +51,7 @@ A.views.kb = async function (kbId, tab) {
         track(title || "貼上的文字", r.job_id);
       });
     };
-    A.$$("[data-s]", p).forEach((a) => (a.onclick = () => { status = a.dataset.s; A.$$("[data-s]", p).forEach((x) => x.classList.toggle("on", x === a)); load(true); }));
+    A.$$("[data-s]", p).forEach((a) => (a.onclick = (e) => { e.preventDefault(); status = a.dataset.s; A.$$("[data-s]", p).forEach((x) => x.classList.toggle("on", x === a)); load(true); }));
     const rep = A.$("#rep");
     if (rep) rep.onclick = () => A.act(rep, async () => { const r = await A.api("POST", `/kbs/${kbId}/repair`); A.toast(r.fixed ? `已補上 ${r.fixed} 段的向量` : "沒有缺向量的段落"); });
     A.$("#dm").onclick = () => load(false);

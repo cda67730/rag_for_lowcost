@@ -19,7 +19,7 @@ A.evalView = async function (p, b) {
     <h3>歷次評測 <span class="note">勾兩次可以比較</span></h3>
     <div class="tablewrap"><table><thead><tr><th></th><th>開始</th><th>狀態</th><th>題數</th><th>命中</th><th>對題</th><th>依據</th><th>安全通過</th><th>題庫</th><th>覆蓋設定</th></tr></thead><tbody>${runs.items.map((r) => {
       const a = r.summary || {};
-      return `<tr class="click" data-run="${r.id}"><td><input type="checkbox" data-cmp="${r.id}" onclick="event.stopPropagation()"></td><td>${A.fmtTime(r.started_at)}</td><td>${A.st(r.status)}</td><td>${r.results}</td>
+      return `<tr class="click" data-run="${r.id}"><td><input type="checkbox" data-cmp="${r.id}"></td><td>${A.fmtTime(r.started_at)}</td><td>${A.st(r.status)}</td><td>${r.results}</td>
         <td>${A.pct(a.retrieval && a.retrieval.hit)}</td><td>${A.pct(a.relevance && a.relevance.score)}</td><td>${a.grounded && a.grounded.score != null ? a.grounded.score : "—"}</td><td>${A.pct(a.safety && a.safety.pass)}</td>
         <td>v${r.bank_version}</td><td class="mono">${Object.keys(r.settings_override || {}).length ? A.esc(JSON.stringify(r.settings_override)) : ""}</td></tr>`;
     }).join("") || '<tr><td colspan="10" class="note">還沒有評測</td></tr>'}</tbody></table></div>
@@ -53,7 +53,7 @@ A.evalView = async function (p, b) {
   const xa = A.$("#eXa");
   if (xa) xa.onclick = () => A.act(xa, async () => { const r = await A.api("POST", `/bots/${botId}/eval/questions`, { text: A.$("#eX").value }); A.toast(`加入 ${r.added} 題`); reload(); });
   A.$$("[data-qs]", p).forEach((x) => (x.onclick = () => A.act(x, () => A.api("PATCH", `/eval/questions/${x.dataset.qs}`, { status: x.dataset.to })).then(reload)));
-  A.$$("tr[data-run]", p).forEach((tr) => (tr.onclick = () => detail(tr.dataset.run)));
+  A.$$("tr[data-run]", p).forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest("[data-cmp]")) detail(tr.dataset.run); }));
   A.$("#cmp").onclick = (e) => A.act(e.target, async () => {
     const ids = A.$$("[data-cmp]", p).filter((x) => x.checked).map((x) => x.dataset.cmp);
     if (ids.length !== 2) throw new Error("請勾選剛好兩次評測");

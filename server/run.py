@@ -83,7 +83,7 @@ def main(argv=None) -> None:
     host, port = os.environ.get("HOST") or "127.0.0.1", env_int("PORT", 8000)
     workers = 1 if a.dev else max(1, env_int("WEB_CONCURRENCY", 1))
     print(f"啟動：http://{host}:{port}（{'開發模式' if a.dev else f'{workers} 個程式'}）", flush=True)
-    uvicorn.run("app.main:app", host=host, port=port, workers=None if a.dev else workers, reload=a.dev, proxy_headers=True,
+    uvicorn.run("app.main:app", host=host, port=port, workers=None if a.dev else workers, reload=a.dev, proxy_headers=False,
                 reload_dirs=[str(HERE)] if a.dev else None)
 
 

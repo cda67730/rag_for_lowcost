@@ -19,6 +19,10 @@ OVERRIDE = {
     "admin": "\n// 由伺服器提供時：API 在同一個網址\nwindow.ADMIN_CONFIG.API_URL = location.origin;\n",
 }
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin"}
+# 內容安全政策：只執行自己網址的程式（不允許行內 script、eval、外部 script），連線只到自己
+_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+CSP = {"admin": _CSP + "; frame-ancestors 'none'", "chat": _CSP}      # 聊天頁可以嵌進其他網站
 
 
 def web_dir() -> Path | None:
@@ -60,7 +64,11 @@ def mount_web(app: FastAPI) -> Path | None:
             for k, v in SECURITY_HEADERS.items():
                 resp.headers.setdefault(k, v)
             resp.headers.setdefault("Cache-Control", "no-cache")      # 更新後馬上看到新版（仍會用 ETag 省流量）
-            if p.startswith("/admin/"):
+            part = "admin" if p.startswith("/admin/") else "chat"
+            resp.headers.setdefault("Content-Security-Policy", CSP[part])
+            if request.url.scheme == "https":
+                resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+            if part == "admin":
                 resp.headers.setdefault("X-Frame-Options", "DENY")   # 後台不讓別的網站嵌入；聊天頁可以嵌進其他網站
         return resp
     return d

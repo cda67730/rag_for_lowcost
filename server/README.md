@@ -47,6 +47,8 @@ LangGraph + FastAPI + PostgreSQL/pgvector。一台伺服器服務多個機器人
 | `TRACE_RETENTION_DAYS` | 否 | 流程紀錄保留天數，預設 90；0＝不清。伺服器啟動時和之後每天清一次，只清流程紀錄，對話內容與統計保留。也可手動跑 `python -m app.cli purge-traces` |
 | `LOG_LEVEL` | 否 | 伺服器 log 詳細程度：`debug`／`info`／`warning`／`error`，預設 `info`。uvicorn 本身的存取紀錄另用 `--log-level` 控制 |
 | `APP_TIMEZONE` | 否 | 每日、每小時用量上限以哪個時區換日，預設 `Asia/Taipei` |
+| `FORWARDED_ALLOW_IPS` | 有反向代理時要 | 反向代理的位址（可用 CIDR，逗號分隔），預設 `127.0.0.1`；雲端平台填 `*`。使用者 IP 從 `X-Forwarded-For` 的**右邊**往左找：跳過這些代理（`*` 時跳過內網位址），取第一個——使用者自己在標頭填的部分不會被採用 |
+| `MAX_BODY_MB` `MAX_CHAT_BODY_MB` `MAX_UPLOAD_MB` | 否 | 請求大小上限，預設 10／0.5／55 MB（一般後台請求／聊天與 `/api/v1`／上傳文件），超過回 413 |
 | `EXTERNAL_ALLOWED_HOSTS` | 用外部連線時要 | 機器人「外部連線」可以連的主機，逗號分隔，例如 `api.example.com,*.corp.example`。沒設＝外部連線一律不執行。後台改不了這份名單 |
 | `EXT_SECRET_*` | 否 | 外部連線用的密碼，例如 `EXT_SECRET_CRM=...`；後台只填變數名稱。名稱一定要以 `EXT_SECRET_` 開頭，其他環境變數（模型金鑰、`JWT_SECRET`）不能被外部連線使用 |
 | `EXTERNAL_ALLOW_HTTP` `EXTERNAL_ALLOW_PRIVATE` | 否 | 設成 `1` 才允許 http、才允許連內網位址。預設只允許 https、會拒絕內網與本機位址；只在測試時打開 |
@@ -79,7 +81,7 @@ docker compose exec app python -m app.cli create-workspace --slug main --name "�
 # 會提示輸入 owner 的密碼
 ```
 
-API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS，並在 `.env` 設 `FORWARDED_ALLOW_IPS=<代理的 IP>`（映像檔已開 `--proxy-headers`），邀請碼錯誤次數才會依使用者的真實 IP 計算。
+API 在 `http://localhost:8000`，健康檢查 `GET /healthz`：資料庫連得上、pgvector 已安裝、遷移已跑過才回 200（遷移前回 503 是正常的）。資料庫埠不對外開放。對外服務時在前面放反向代理（Caddy／nginx）處理 HTTPS，並在 `.env` 設 `FORWARDED_ALLOW_IPS=<代理的 IP>`，邀請碼錯誤次數、每小時上限、登入錯誤才會依使用者的真實 IP 計算。
 
 ### 不用 Docker 安裝（正式環境也可以）
 
@@ -143,7 +145,7 @@ repo 不用改就能部署。照下面設定：
    | `DATABASE_URL` | 引用資料庫服務的內部連線字串，例如 `${{pgvector.DATABASE_URL}}`（依你的資料庫服務名稱）。`postgresql://` 開頭也可以，程式會自動轉換 |
    | `JWT_SECRET` | 自己產生的 32 字元以上隨機字串 |
    | `GEMINI_API_KEY` 或 `OPENAI_API_KEY` | 模型金鑰 |
-   | `FORWARDED_ALLOW_IPS` | `*`（只有 Railway 的代理連得到伺服器，這樣才拿得到使用者真正的 IP，邀請碼錯誤鎖定與次數限制才準） |
+   | `FORWARDED_ALLOW_IPS` | `*`（只有 Railway 的代理連得到伺服器，這樣才拿得到使用者真正的 IP，邀請碼錯誤鎖定與次數限制才準。程式只採用 Railway 加上的那一段，使用者自己在標頭填的假 IP 不會被採用） |
    | `WEB_CONCURRENCY` | 依方案的 CPU，通常 2 |
 
 4. **建第一個管理員**：部署完成後，在本機裝好 Railway CLI 並 `railway link` 到這個專案，再執行（`-s` 後面是伺服器服務的名稱；會提示輸入 admin 的密碼）：
@@ -266,12 +268,15 @@ docker compose exec app python -m app.cli import-apps-script \
 ## 安全
 
 - 聊天端點不需登入，但每個請求都要帶有效的 `bot_id`（＋邀請碼，若開啟）；有每日與每小時上限、邀請碼錯誤次數限制。
-- 後台全部需要 JWT，依角色檢查；密碼用 argon2id；連續錯 5 次鎖 15 分鐘。
+- 後台全部需要 JWT，依角色檢查；密碼用 argon2id（驗證放在執行緒，不卡住其他請求）；同一帳號連續錯 5 次鎖 15 分鐘，同一 IP 15 分鐘內錯 20 次暫停登入（擋拿常見密碼輪流試很多帳號）。
+- 資料庫查詢一律用參數綁定或 ORM，使用者輸入不會拼進 SQL。
+- 使用者 IP 只採用反向代理加上的那一段（見 `FORWARDED_ALLOW_IPS`），換假的 `X-Forwarded-For` 繞不過按 IP 的限制。
+- 請求有大小上限（超過回 413）；聊天訊息最多 4000 字、只帶最近 40 筆歷史。
 - 所有寫入寫稽核紀錄（誰、何時、改了什麼），不記金鑰與對話原文。
 - 對話紀錄只存去識別化後的文字（`enable_deid` 開啟時）；原名對照表只在使用者瀏覽器。
 - CORS 只允許 `CORS_ORIGINS` 列出的網址；伺服器自己提供的 `/chat/`、`/admin/` 是同一個網址，不經過 CORS。
-- 伺服器提供的頁面加了 `X-Content-Type-Options: nosniff`；後台另加 `X-Frame-Options: DENY`（不讓別的網站嵌入），聊天頁可以嵌進其他網站。
-- 上傳檔案依檔頭判斷類型、限制大小，解析在背景任務中執行，不執行檔案內的巨集或程式。
+- 伺服器提供的頁面加了 `X-Content-Type-Options: nosniff` 與內容安全政策（CSP：只執行自己網址的程式、不允許行內 script 與 eval、只連線到自己）；HTTPS 時加 HSTS；後台另加 `X-Frame-Options: DENY`（不讓別的網站嵌入），聊天頁可以嵌進其他網站。
+- 上傳檔案依檔頭判斷類型、限制大小；Office 檔先檢查解壓後的大小與壓縮比（擋解壓炸彈）；解析在背景任務中執行，不執行檔案內的巨集或程式。
 
 ## 目錄
 

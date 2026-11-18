@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.netguard import BodyLimit, ProxyHeaders
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -67,6 +69,8 @@ origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
+app.add_middleware(BodyLimit)          # 請求大小上限
+app.add_middleware(ProxyHeaders)       # 最外層：先算出真正的使用者 IP（取代 uvicorn 的 --proxy-headers）
 
 
 @app.get("/healthz")
